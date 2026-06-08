@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { TEAM_COLORS } from './Menu.js';
 
 // Couleurs fixes : allié = vert, ennemi = rouge
 const ALLY_COLOR = 0x33cc66;

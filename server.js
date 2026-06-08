@@ -58,7 +58,7 @@ wss.on('connection', (ws) => {
         const code = payload.config?.code || generateCode();
         if (rooms.has(code)) { rooms.delete(code); } // remplace si déjà existant
         const room = new Room(code, payload.config || {}, clientId);
-        room.players.set(clientId, { ws, info: { id: clientId, name: payload.config?.name || 'HOST', team: payload.config?.team || 'red', isHost: true, isReady: false }});
+        room.players.set(clientId, { ws, info: { id: clientId, name: payload.config?.name || 'HOST', team: payload.config?.team || 'jaune', isHost: true, isReady: false }});
         rooms.set(code, room);
         ws._room = code;
         send(ws, 'create_room', { code, config: room.config });
@@ -74,7 +74,7 @@ wss.on('connection', (ws) => {
         if (room.started) { send(ws, 'error', { message: 'Partie déjà commencée' }); return; }
         if (room.players.size >= (room.config.maxPlayers || 16)) { send(ws, 'error', { message: 'Salle pleine' }); return; }
 
-        const info = { id: clientId, name: playerInfo?.name || 'JOUEUR', team: playerInfo?.team || 'blue', isHost: false, isReady: false };
+        const info = { id: clientId, name: playerInfo?.name || 'JOUEUR', team: playerInfo?.team || 'jaune', isHost: false, isReady: false };
         room.players.set(clientId, { ws, info });
         ws._room = code;
 
@@ -150,6 +150,35 @@ wss.on('connection', (ws) => {
         const p = room.players.get(clientId);
         if (p) p.info.isReady = payload.ready;
         room.broadcast('player_ready', { id: clientId, ready: payload.ready }, clientId);
+        break;
+      }
+
+      // ── Couleur d'avion (lobby) ───────────────────────────────────────────
+      case 'player_plane': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        const p = room.players.get(clientId);
+        if (p) p.info.team = payload.plane;
+        room.broadcast('player_plane', { id: clientId, plane: payload.plane }, clientId);
+        break;
+      }
+
+      // ── Équipe TDM (lobby) ────────────────────────────────────────────────
+      case 'player_team': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        const p = room.players.get(clientId);
+        if (p) p.info.playerTeam = payload.playerTeam;
+        room.broadcast('player_team', { id: clientId, playerTeam: payload.playerTeam }, clientId);
+        break;
+      }
+
+      // ── Mise à jour config par l'hôte ────────────────────────────────────
+      case 'config_update': {
+        const room = rooms.get(ws._room);
+        if (!room || room.hostId !== clientId) return;
+        Object.assign(room.config, payload);
+        room.broadcast('config_update', payload, clientId);
         break;
       }
 

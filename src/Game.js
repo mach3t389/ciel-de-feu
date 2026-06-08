@@ -13,6 +13,7 @@ import { CretesMap } from './CretesMap.js';
 import { GroundDefense } from './GroundDefense.js';
 import { PracticeMode } from './PracticeMode.js';
 import { AudioManager } from './AudioManager.js';
+import { MultiplayerManager } from './MultiplayerManager.js';
 
 const PLANE_PATHS = {
   blanc: '/Avions/SK_Veh_Plane_Stunt_01_AvionBlanc.glb',
@@ -251,9 +252,12 @@ export class Game {
 
   // ── Démarrage → retourne une Promise qui se résout quand l'utilisateur quitte ──
   start() {
-    return new Promise(async (resolve) => {
+    return new Promise((resolve, reject) => {
       this._quitResolve = resolve;
-      await this._startGame();
+      this._startGame().catch(err => {
+        console.error('[Game] _startGame failed:', err);
+        reject(err);
+      });
     });
   }
 
@@ -279,6 +283,7 @@ export class Game {
     this._audio.init();
     this._audio.startEngine();
     this.ui._audioRef = this._audio;
+    this.ui._gfxRef   = (level) => this._setLowGraphics(level);
     this.ui.setAudio(this._audio);
     this._netSyncTimer = 0;
 
@@ -417,7 +422,6 @@ export class Game {
 
     // Mode multijoueur : initialiser le gestionnaire de joueurs distants
     if (isMulti && this._config.networkManager) {
-      const { MultiplayerManager } = await import('./MultiplayerManager.js');
       this._multiplayerManager = new MultiplayerManager(
         this.scene, this._config.networkManager,
         { mode, playerTeam: this._config.playerTeam, friendlyFire: this._config.friendlyFire }
@@ -1272,6 +1276,13 @@ export class Game {
       return;
     }
 
+    // Fin de partie (victoire / temps écoulé) : geler la simulation derrière
+    // l'écran de résultats — le jeu ne doit pas continuer en arrière-plan.
+    if (this._missionComplete) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
     const _t0 = performance.now();
     try {
     // Réinitialiser les compteurs per-frame avant toute mise à jour
@@ -1287,6 +1298,7 @@ export class Game {
       if (this._timeRemaining <= 0) {
         this._timeRemaining = 0;
         this._missionComplete = true;
+        this._audio?.pauseEngine(true);
         document.exitPointerLock();
         if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
         this._updateFFARecord(this.stats.kills);
@@ -1432,13 +1444,16 @@ export class Game {
                 setTimeout(() => { if (this._practiceMode) this._spawnPracticeEnemy(); }, 5000);
               } else {
                 this._missionKilled++;
-                while (this._missionKilled >= this._waveKillThreshold &&
-                       this._missionSpawned < this._missionTotal) {
-                  const alive     = this.enemies.filter(e => !e.isDead).length;
-                  const canSpawn  = Math.min(this._waveSize, this._missionTotal - this._missionSpawned,
-                                             this._maxActive - alive);
+                // Renforts : maintenir l'arène pleine tant qu'il reste des avions à
+                // faire apparaître. Chaque mort libère un slot → on le comble aussitôt.
+                // (l'ancien système de seuil perdait les vagues quand l'arène était
+                //  pleine, bloquant _missionSpawned < _missionTotal et donc la victoire)
+                if (this._missionSpawned < this._missionTotal) {
+                  const alive    = this.enemies.filter(e => !e.isDead).length;
+                  const canSpawn = Math.min(this._waveSize,
+                                            this._missionTotal - this._missionSpawned,
+                                            this._maxActive - alive);
                   if (canSpawn > 0) this._spawnWave(canSpawn);
-                  this._waveKillThreshold += this._waveSize;
                 }
               }
             }
@@ -1496,6 +1511,7 @@ export class Game {
       const allGroundDead = !this._groundDefense || this._groundDefense.allEnemiesDead();
       if (allAirDead && allGroundDead) {
         this._missionComplete = true;
+        this._audio?.pauseEngine(true);
         document.exitPointerLock();
         if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
         this._updateMissionRecord();

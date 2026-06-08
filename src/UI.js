@@ -244,12 +244,10 @@ export class UI {
   }
 
   _showPauseSettings() {
-    // Reconstruction à chaque ouverture si la langue a changé
+    // Toujours reconstruire pour refléter l'état courant (lang, gfx, ctrl)
     if (this._pauseSettingsOverlay) {
-      if (this._pauseSettingsLang !== getLang()) {
-        this._pauseSettingsOverlay.remove();
-        this._pauseSettingsOverlay = null;
-      }
+      this._pauseSettingsOverlay.remove();
+      this._pauseSettingsOverlay = null;
     }
 
     if (!this._pauseSettingsOverlay) {
@@ -334,6 +332,46 @@ export class UI {
       const sep = document.createElement('div');
       sep.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
       wrap.appendChild(sep);
+
+      // ── Qualité graphique ─────────────────────────────────────────────────
+      wrap.appendChild(secLabel(t('graphicsQuality')));
+
+      const gfxModes = [
+        { value: 0, label: t('gfxHigh'), desc: t('gfxHighDesc') },
+        { value: 1, label: t('gfxMed'),  desc: t('gfxMedDesc')  },
+        { value: 2, label: t('gfxLow'),  desc: t('gfxLowDesc')  },
+      ];
+      const curGfx = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
+      const gfxDesc = document.createElement('div');
+      gfxDesc.style.cssText = `font-size:9px;letter-spacing:1px;color:${C.dimCream};line-height:1.6;
+        max-width:320px;text-align:center;margin-top:6px;margin-bottom:18px;min-height:14px;`;
+      gfxDesc.textContent = gfxModes.find(m => m.value === curGfx)?.desc ?? '';
+
+      const gfxRow = document.createElement('div');
+      gfxRow.style.cssText = 'display:flex;gap:8px;width:300px;margin-bottom:4px;';
+      gfxModes.forEach(({ value, label, desc }) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.className = 'choice-btn';
+        b.style.setProperty('--cb-color',  C.cream);
+        b.style.setProperty('--cb-border', C.dimCream);
+        b.style.setProperty('--cb-fill',   C.cream);
+        b.style.setProperty('--cb-hover',  `${C.cream}22`);
+        b.setAttribute('data-active', value === curGfx ? '1' : '0');
+        b.addEventListener('click', () => {
+          gfxRow.querySelectorAll('.choice-btn').forEach(btn => btn.setAttribute('data-active', '0'));
+          b.setAttribute('data-active', '1');
+          gfxDesc.textContent = desc;
+          this._gfxRef?.(value);
+        });
+        gfxRow.appendChild(b);
+      });
+      wrap.appendChild(gfxRow);
+      wrap.appendChild(gfxDesc);
+
+      const sep1b = document.createElement('div');
+      sep1b.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
+      wrap.appendChild(sep1b);
 
       // ── Mode de contrôle ──────────────────────────────────────────────────
       wrap.appendChild(secLabel(t('ctrlMode')));
@@ -1275,8 +1313,9 @@ export class UI {
       const isAlly    = e.isEnemy === false; // RemotePlayer allié
       const isClosest = i === 0 && !isAlly;
 
-      // Projeter légèrement au-dessus de la cible
-      const above = e.position.clone(); above.y += 6;
+      // Marqueur centré sur l'avion lui-même : la pointe basse du losange
+      // tombe exactement sur le point d'impact → viser le marqueur = toucher.
+      const above = e.position.clone();
       const ndc = above.clone().project(camera);
       const sx = ( ndc.x * 0.5 + 0.5) * W;
       const sy = (-ndc.y * 0.5 + 0.5) * H;
@@ -1339,25 +1378,6 @@ export class UI {
           ctx.fillRect(sx - tw/2 - 3, sy - dh*2 - 18, tw + 6, 14);
           ctx.fillStyle = col;
           ctx.fillText(distStr, sx, sy - dh*2 - 6);
-        }
-
-        // ── Indicateur de visée balistique (ennemi à portée de tir) ──
-        if (dist < 750) {
-          const lead = this._leadPoint(player.position, e, this._leadSpeed);
-          const lndc = lead.clone().project(camera);
-          if (lndc.z < 1.0) {
-            const lx = ( lndc.x * 0.5 + 0.5) * W;
-            const ly = (-lndc.y * 0.5 + 0.5) * H;
-            const lr = 6;
-            ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI*2);
-            ctx.strokeStyle = '#ff4433'; ctx.lineWidth = 1.8; ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(lx - lr - 3, ly); ctx.lineTo(lx - lr + 3, ly);
-            ctx.moveTo(lx + lr - 3, ly); ctx.lineTo(lx + lr + 3, ly);
-            ctx.moveTo(lx, ly - lr - 3); ctx.lineTo(lx, ly - lr + 3);
-            ctx.moveTo(lx, ly + lr - 3); ctx.lineTo(lx, ly + lr + 3);
-            ctx.stroke();
-          }
         }
 
       } else {
@@ -2024,28 +2044,39 @@ export class UI {
     if (this._victoryOverlay) return;
     // Cacher le menu pause s'il est visible
     if (this._pauseOverlay) this._pauseOverlay.style.display = 'none';
+
     const overlay = document.createElement('div');
     this._victoryOverlay = overlay;
     Object.assign(overlay.style, {
-      position     : 'fixed', inset: '0',
-      background   : 'rgba(4,14,4,0.90)',
-      display      : 'flex', flexDirection: 'column',
-      alignItems   : 'center', justifyContent: 'center',
-      fontFamily   : '"Courier New",monospace',
-      color        : C.cream, pointerEvents: 'none',
-      zIndex       : '800',
+      position:'fixed', inset:'0',
+      background:'radial-gradient(ellipse at center, rgba(6,22,6,0) 0%, rgba(8,28,8,0.14) 55%, rgba(10,38,10,0.30) 100%)',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      fontFamily:'"Courier New",monospace',
+      color:C.cream, pointerEvents:'none',
+      zIndex:'800',
     });
 
-    const title = document.createElement('div');
-    title.textContent = t('victoryTitle');
-    title.style.cssText = 'font-size:40px;font-weight:bold;letter-spacing:8px;color:#7ae830;text-shadow:0 0 28px #40a810;margin-bottom:12px;';
+    // Même carte opaque que l'écran de mort — uniformité visuelle
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background: rgba(11,10,9,0.95);
+      border: 1px solid rgba(122,232,48,0.45);
+      border-radius: 6px;
+      padding: 38px 64px 34px;
+      display: flex; flex-direction: column; align-items: center;
+      box-shadow: 0 14px 70px rgba(0,0,0,0.82);
+    `;
+
+    const titleEl = document.createElement('div');
+    titleEl.textContent = t('victoryTitle');
+    titleEl.style.cssText = 'font-size:52px;font-weight:bold;letter-spacing:10px;color:#9ef060;text-shadow:0 0 22px rgba(80,200,40,0.55);margin-bottom:10px;';
 
     const sub = document.createElement('div');
     sub.textContent = t('victoryZone');
-    sub.style.cssText = 'font-size:10px;opacity:0.50;letter-spacing:5px;margin-bottom:30px;';
+    sub.style.cssText = 'font-size:12px;color:#9bbf86;letter-spacing:4px;margin-bottom:22px;';
 
     const statsEl = document.createElement('div');
-    statsEl.style.cssText = 'margin-bottom:30px;text-align:center;';
+    statsEl.style.cssText = 'margin-bottom:26px;text-align:center;';
     statsEl.innerHTML = `
       <div style="font-size:9px;letter-spacing:3px;color:#5a7040;margin-bottom:6px;">${t('missionResults')}</div>
       <div style="font-size:20px;letter-spacing:2px;">
@@ -2054,38 +2085,47 @@ export class UI {
         <span style="color:#c04040;">✖ ${stats?.deaths ?? 0} ${t('morts')}</span>
       </div>`;
 
-    const mkVBtn = (label, bc, tc) => {
+    card.appendChild(titleEl);
+    card.appendChild(sub);
+    card.appendChild(statsEl);
+
+    // Boutons identiques à l'écran de mort
+    const mkBtn = (label, borderColor, textColor) => {
       const b = document.createElement('button');
       b.textContent = label;
       Object.assign(b.style, {
-        pointerEvents: 'auto', background: 'transparent',
-        border: `1.5px solid ${bc}`, color: tc,
-        fontFamily: '"Courier New",monospace', fontSize: '15px',
-        letterSpacing: '3px', padding: '12px 32px',
-        cursor: 'pointer', transition: 'background 0.2s, color 0.2s',
+        pointerEvents: 'auto',
+        background   : 'transparent',
+        border       : `1.5px solid ${borderColor}`,
+        color        : textColor,
+        fontFamily   : '"Courier New",monospace',
+        fontSize     : '15px',
+        letterSpacing: '3px',
+        padding      : '12px 32px',
+        cursor       : 'pointer',
+        marginBottom : '12px',
+        minWidth     : '220px',
+        transition   : 'background 0.2s, color 0.2s',
       });
-      b.addEventListener('mouseenter', () => { b.style.background = bc; b.style.color = '#080806'; });
-      b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; b.style.color = tc; });
+      b.addEventListener('mouseenter', () => { b.style.background = borderColor; b.style.color = '#0a0a06'; });
+      b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; b.style.color = textColor; });
       return b;
     };
 
-    overlay.appendChild(title);
-    overlay.appendChild(sub);
-    overlay.appendChild(statsEl);
-
     if (onReplay) {
-      const btnReplay = mkVBtn(t('retry'), '#7ae830', '#7ae830');
-      btnReplay.style.marginBottom = '14px';
+      const btnReplay = mkBtn(t('retry'), '#7a9050', '#a8c878');
       btnReplay.addEventListener('click', () => { overlay.remove(); this._victoryOverlay = null; onReplay(); });
-      overlay.appendChild(btnReplay);
+      card.appendChild(btnReplay);
     }
 
-    const btnMenu = mkVBtn(t('mainMenu'), '#6a5040', '#8a7060');
+    const btnMenu = mkBtn(t('mainMenu'), '#6a5040', '#a88a78');
     btnMenu.style.fontSize = '12px';
     btnMenu.style.padding  = '9px 24px';
+    btnMenu.style.marginBottom = '0';
     btnMenu.addEventListener('click', () => { if (onMenu) onMenu(); });
-    overlay.appendChild(btnMenu);
+    card.appendChild(btnMenu);
 
+    overlay.appendChild(card);
     document.body.appendChild(overlay);
   }
 

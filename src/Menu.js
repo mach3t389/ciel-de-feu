@@ -4,6 +4,19 @@ import { CursorFX } from './CursorFX.js';
 import { AudioManager } from './AudioManager.js';
 import { t, tTips, tModeInfo, getLang, setLang } from './i18n.js';
 
+// ── Scrollbar cockpit — injectée une seule fois ───────────────────────────────
+(() => {
+  const s = document.createElement('style');
+  s.textContent = `
+    .menu-panel::-webkit-scrollbar { width: 4px; }
+    .menu-panel::-webkit-scrollbar-track { background: #0a0a06; border-left: 1px solid #2a2418; }
+    .menu-panel::-webkit-scrollbar-thumb { background: #4a4030; border-radius: 2px; }
+    .menu-panel::-webkit-scrollbar-thumb:hover { background: #7a6848; }
+    .menu-panel { scrollbar-width: thin; scrollbar-color: #4a4030 #0a0a06; }
+  `;
+  document.head.appendChild(s);
+})();
+
 // ── Palette menu aviation militaire ──────────────────────────────────────────
 const M = {
   bg      : '#080806',
@@ -179,7 +192,7 @@ function mkPanel(width = '400px') {
 
 // Panel ancré à gauche — pour les écrans multijoueur
 function mkPanelLeft(width = '400px') {
-  return el('div', { style: {
+  const d = el('div', { style: {
     position     : 'absolute', left: '5%', top: '50%',
     transform    : 'translateY(-50%)',
     display      : 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px',
@@ -191,6 +204,8 @@ function mkPanelLeft(width = '400px') {
     padding      : '28px 32px',
     boxShadow    : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
   }});
+  d.classList.add('menu-panel');
+  return d;
 }
 
 // En-tête de section avec lignes décoratives
@@ -1584,13 +1599,18 @@ export class Menu {
   _showSettings() {
     this._clear();
     this._showPreview('close');
-    const wrap = mkPanelLeft('360px');
+    const wrap = mkPanelLeft('640px');
     wrap.appendChild(mkSectionTitle(t('settings')));
     wrap.appendChild(mkDivider());
 
-    wrap.appendChild(mkLabel(t('stats')));
+    // ── 2 colonnes ────────────────────────────────────────────────────────────
+    const cols = el('div', { style: { display: 'flex', gap: '32px', alignItems: 'flex-start' }});
+    const colL = el('div', { style: { flex: '1', minWidth: '0' }});
+    const colR = el('div', { style: { flex: '1', minWidth: '0' }});
 
-    // ── Section stats par mode ────────────────────────────────────────────────
+    // ── Colonne gauche : Stats + Audio ────────────────────────────────────────
+    colL.appendChild(mkLabel(t('stats')));
+
     const statKeys = [
       { key: t('eliminations'), ls: 'stats_kills'   },
       { key: t('morts'),        ls: 'stats_deaths'  },
@@ -1606,10 +1626,9 @@ export class Menu {
       const vEl = el('span', { text: localStorage.getItem(ls) || '0', style: { color: M.cream, fontSize: '13px', letterSpacing: '2px', fontWeight: 'bold' }});
       row.appendChild(vEl);
       valueEls.push({ el: vEl, ls });
-      wrap.appendChild(row);
+      colL.appendChild(row);
     });
 
-    // ── Survie — meilleure vague ──────────────────────────────────────────────
     const survRow = el('div', { style: {
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       padding: '6px 0', borderBottom: `1px solid ${M.border}`,
@@ -1617,7 +1636,7 @@ export class Menu {
     survRow.appendChild(el('span', { text: `${t('statsSurvival')} — ${t('bestWave')}`, style: { color: M.dimCream, fontSize: '10px', letterSpacing: '2px' }}));
     const bestWaveEl = el('span', { text: localStorage.getItem('stats_bestWave') || '0', style: { color: '#cc9933', fontSize: '13px', letterSpacing: '2px', fontWeight: 'bold' }});
     survRow.appendChild(bestWaveEl);
-    wrap.appendChild(survRow);
+    colL.appendChild(survRow);
 
     const btnReset = mkBtn(t('resetStats'), M.red);
     btnReset.style.marginTop = '6px';
@@ -1628,18 +1647,12 @@ export class Menu {
       btnReset.textContent = '✓';
       setTimeout(() => { btnReset.textContent = t('resetStats'); }, 1500);
     });
-    wrap.appendChild(btnReset);
+    colL.appendChild(btnReset);
+    colL.appendChild(mkDivider());
+    colL.appendChild(mkLabel(t('audio')));
+    colL.appendChild(this._mkAudioSection(this._audio ?? null));
 
-    wrap.appendChild(mkDivider());
-
-    // ── Audio ────────────────────────────────────────────────────────────────
-    wrap.appendChild(mkLabel(t('audio')));
-    wrap.appendChild(this._mkAudioSection(this._audio ?? null));
-    wrap.appendChild(mkDivider());
-
-    // ── Qualité graphique ─────────────────────────────────────────────────────
-    wrap.appendChild(mkLabel(t('graphicsQuality')));
-
+    // ── Colonne droite : Qualité graphique + Mode de contrôle ─────────────────
     const GFX_MODES = [
       { value: 0, label: t('gfxHigh'), color: M.cream,    desc: t('gfxHighDesc') },
       { value: 1, label: t('gfxMed'),  color: '#ccaa33',  desc: t('gfxMedDesc')  },
@@ -1648,11 +1661,12 @@ export class Menu {
     const curGfx = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
     const gfxDesc = el('div', { style: {
       fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6',
-      marginTop: '4px', minHeight: '14px',
+      marginTop: '4px', minHeight: '28px',
     }});
     gfxDesc.textContent = GFX_MODES.find(m => m.value === curGfx)?.desc ?? '';
 
-    wrap.appendChild(mkChoiceGroup(
+    colR.appendChild(mkLabel(t('graphicsQuality')));
+    colR.appendChild(mkChoiceGroup(
       GFX_MODES.map(({ value, label, color }) => ({ value, label, color })),
       curGfx,
       v => {
@@ -1660,25 +1674,22 @@ export class Menu {
         gfxDesc.textContent = GFX_MODES.find(m => m.value === v)?.desc ?? '';
       }
     ));
-    wrap.appendChild(gfxDesc);
-    wrap.appendChild(mkDivider());
-
-    // ── Mode de contrôle ─────────────────────────────────────────────────────
-    wrap.appendChild(mkLabel(t('ctrlMode')));
+    colR.appendChild(gfxDesc);
+    colR.appendChild(mkDivider());
 
     const CTRL_MODES = [
       { value: 'standard',  label: t('ctrlStd'), color: M.cream,    desc: t('ctrlStdDesc') },
       { value: 'simulator', label: t('ctrlSim'), color: '#88aacc',  desc: t('ctrlSimDesc') },
     ];
-
     const curCtrl = localStorage.getItem('ctrlMode') || 'standard';
     const ctrlDesc = el('div', { style: {
       fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6',
-      marginTop: '4px', minHeight: '14px',
+      marginTop: '4px', minHeight: '28px',
     }});
     ctrlDesc.textContent = CTRL_MODES.find(m => m.value === curCtrl)?.desc ?? '';
 
-    wrap.appendChild(mkChoiceGroup(
+    colR.appendChild(mkLabel(t('ctrlMode')));
+    colR.appendChild(mkChoiceGroup(
       CTRL_MODES.map(({ value, label, color, disabled }) => ({ value, label, color, disabled })),
       curCtrl,
       v => {
@@ -1686,12 +1697,15 @@ export class Menu {
         ctrlDesc.textContent = CTRL_MODES.find(m => m.value === v)?.desc ?? '';
       }
     ));
-    wrap.appendChild(ctrlDesc);
+    colR.appendChild(ctrlDesc);
+
+    cols.appendChild(colL);
+    cols.appendChild(colR);
+    wrap.appendChild(cols);
     wrap.appendChild(mkDivider());
 
     const btnBack = mkBtn(t('back'), M.dimCream);
     btnBack.addEventListener('click', () => this._showMain());
-
     wrap.appendChild(btnBack);
     this._root.appendChild(wrap);
   }

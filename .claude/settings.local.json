@@ -41,7 +41,18 @@
       "Bash(Get-ChildItem \"D:\\\\Vibe Coding\\\\Jeu Avion\\\\sfx\\\\Exportations\" -Recurse)",
       "Bash(Select-Object FullName, Name)",
       "PowerShell(Copy-Item \"D:\\\\Vibe Coding\\\\Jeu Avion\\\\sfx\\\\Exportations\\\\Balles_manquantes.wav\" \"D:\\\\Vibe Coding\\\\Jeu Avion\\\\public\\\\sfx\\\\\")",
-      "Bash(Test-Path \"D:\\\\Vibe Coding\\\\Jeu Avion\\\\server.js\")"
+      "Bash(Test-Path \"D:\\\\Vibe Coding\\\\Jeu Avion\\\\server.js\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(grep -v \"//\\\\|isEnemy\\\\|_enemy\\\\|enemyBullet\\\\|remoteEnemy\\\\|friendEnemy\")",
+      "Bash(grep -v \"//\\\\|isEnemy\\\\|_enemy\\\\|enemyBase\\\\|marker\\\\|style\\\\|addColor\\\\|stopColor\\\\|label\\\\|letter\")",
+      "Bash(Get-ChildItem -Path \"D:\\\\Vibe Coding\\\\Jeu Avion\\\\src\" -Filter \"*.js\" -File)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(grep -v \"//\\\\|fuel\\\\|health\")",
+      "Bash(grep -v \"//\\\\|player\\\\.ammo\\\\|p\\\\.ammo\\\\|this\\\\.ammo\")",
+      "Bash(node --check src/MultiplayerManager.js)",
+      "Bash(node --check server.js)"
     ]
   }
 }

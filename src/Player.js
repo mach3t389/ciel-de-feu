@@ -643,10 +643,13 @@ export class Player {
     if (!btnA) this.keys.space = false;
     this._gpBtnA_prev = btnA;
 
-    // ── B (btn 1) → changer de caméra ───────────────────────────────────
+    // ── B (btn 1) ou Y (btn 3) → changer de caméra ──────────────────────
     const btnB = gp.buttons[1]?.pressed ?? false;
-    if (btnB && !this._gpBtnB_prev && this.onCameraChange) this.onCameraChange();
+    const btnY = gp.buttons[3]?.pressed ?? false;
+    const camChange = (btnB && !this._gpBtnB_prev) || (btnY && !this._gpBtnY_prev);
+    if (camChange && this.onCameraChange) this.onCameraChange();
     this._gpBtnB_prev = btnB;
+    this._gpBtnY_prev = btnY;
 
     // ── Menu (btn 9) → pause ─────────────────────────────────────────────
     const btnMenu = gp.buttons[9]?.pressed ?? false;
