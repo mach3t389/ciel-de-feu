@@ -5,6 +5,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const ALLY_COLOR = 0x33cc66;
 const ENEMY_COLOR = 0xcc2222;
 
+// Interpolation par snapshots : on affiche les joueurs distants ~100 ms dans le
+// passé et on interpole entre les deux derniers paquets reçus. Ça absorbe la gigue
+// réseau (Railway gratuit) et supprime le rubber-banding de l'extrapolation pure.
+const INTERP_DELAY = 0.10;
+
 // Représente un joueur distant (lecture seule — données reçues du réseau)
 class RemotePlayer {
   // isEnemy : true si ce joueur est dans l'équipe adverse (TDM) ou en FFA
@@ -26,8 +31,9 @@ class RemotePlayer {
     this._loaded     = false;
     this._deathTimer = 0;
 
-    this._targetPos  = null;
-    this._targetQuat = new THREE.Quaternion();
+    this._buffer      = [];    // snapshots { t, pos, quat, speed } pour interpolation
+    this._initialized = false; // true dès le premier paquet (téléportation initiale)
+    this._velocity    = new THREE.Vector3();
 
     this._markerColor = isEnemy ? '#cc2222' : '#33cc66';
     this._emissiveHex = isEnemy ? ENEMY_COLOR : ALLY_COLOR;
@@ -99,28 +105,30 @@ class RemotePlayer {
     this.pivot.add(this._marker);
   }
 
-  // Applique l'état reçu du réseau (stocke les cibles pour interpolation + extrapolation)
+  // Applique l'état reçu du réseau → empile un snapshot horodaté pour l'interpolation
   applyState(state) {
-    if (state.position) {
-      const p = state.position;
-      if (!this._targetPos) {
-        // Premier paquet : téléporter directement pour éviter un glissement depuis l'origine
-        this.pivot.position.set(p.x, p.y, p.z);
-        this._targetPos = new THREE.Vector3(p.x, p.y, p.z);
-      } else {
-        this._targetPos.set(p.x, p.y, p.z);
-      }
-      this._sinceUpdate = 0;
-    }
-    if (state.quaternion) {
-      const q = state.quaternion;
-      this._targetQuat.set(q.x, q.y, q.z, q.w);
-    }
     if (state.speed !== undefined) this.speed = state.speed;
-    // Dead reckoning : vitesse monde = avant × vitesse (la physique avance pivot de
-    // speed×delta unités/s, donc on extrapole exactement entre deux paquets réseau)
-    this._velocity = new THREE.Vector3(0, 0, -1)
-      .applyQuaternion(this._targetQuat).multiplyScalar(this.speed);
+    if (state.position && state.quaternion) {
+      const now = performance.now() / 1000;
+      const p = state.position, q = state.quaternion;
+      const entry = {
+        t   : now,
+        pos : new THREE.Vector3(p.x, p.y, p.z),
+        quat: new THREE.Quaternion(q.x, q.y, q.z, q.w),
+      };
+      this._buffer.push(entry);
+      // Conserver ~1 s d'historique (au moins 2 snapshots pour interpoler)
+      while (this._buffer.length > 2 && now - this._buffer[0].t > 1.0) this._buffer.shift();
+      if (!this._initialized) {
+        // Premier paquet : téléporter pour éviter un glissement depuis l'origine
+        this.pivot.position.copy(entry.pos);
+        this.pivot.quaternion.copy(entry.quat);
+        this._initialized = true;
+      }
+      // Vélocité monde courante (nez × vitesse) — sert à la visée balistique et à
+      // l'extrapolation si le réseau décroche
+      this._velocity.set(0, 0, -1).applyQuaternion(entry.quat).multiplyScalar(this.speed);
+    }
     if (state.hp !== undefined) {
       // La cible est autoritaire, mais on a pu appliquer des dégâts optimistes
       // (réactivité). On accepte une baisse de PV (plus de dégâts) ou un plein
@@ -154,6 +162,8 @@ class RemotePlayer {
   respawn(pos) {
     this.isDead = false;
     this.hp = 100;
+    this._buffer.length = 0;
+    this._initialized = false;
     if (pos) this.pivot.position.set(pos.x, pos.y, pos.z);
     if (this.mesh) this.mesh.visible = true;
     if (this._marker) this._marker.visible = true;
@@ -162,22 +172,50 @@ class RemotePlayer {
   get position() { return this.pivot.position; }
   get quaternion() { return this.pivot.quaternion; }
   // Vélocité monde (pour l'indicateur de visée balistique du joueur)
-  get velocity() { return this._velocity || new THREE.Vector3(); }
+  get velocity() { return this._velocity; }
+
+  // Position prédite à l'instant présent (la mire de visée doit anticiper, pas
+  // afficher la position retardée de 100 ms utilisée pour le rendu fluide)
+  get aimPosition() {
+    const buf = this._buffer;
+    if (buf.length === 0) return this.pivot.position;
+    const last  = buf[buf.length - 1];
+    const ahead = Math.min(performance.now() / 1000 - last.t, 0.3);
+    return last.pos.clone().addScaledVector(this._velocity, ahead);
+  }
 
   update(delta) {
     if (this.isDead) {
       this._deathTimer -= delta;
       return;
     }
-    // Extrapolation : on prolonge la cible le long du vecteur vitesse entre deux
-    // paquets (plafonné à 0.5s pour éviter la dérive si le réseau décroche).
-    this._sinceUpdate = (this._sinceUpdate ?? 0) + delta;
-    if (this._targetPos && this._velocity && this._sinceUpdate < 0.5) {
-      this._targetPos.addScaledVector(this._velocity, delta);
+    const buf = this._buffer;
+    if (buf.length === 0) return;
+
+    const now     = performance.now() / 1000;
+    const renderT = now - INTERP_DELAY;
+    const last    = buf[buf.length - 1];
+
+    if (buf.length === 1 || renderT <= buf[0].t) {
+      // Pas assez d'historique : suivre le plus ancien snapshot en douceur
+      this.pivot.position.lerp(buf[0].pos, 1 - Math.exp(-18 * delta));
+      this.pivot.quaternion.slerp(buf[0].quat, 1 - Math.exp(-16 * delta));
+    } else if (renderT >= last.t) {
+      // Réseau en retard : extrapoler depuis le dernier snapshot (plafonné 0.3 s)
+      const ahead     = Math.min(renderT - last.t, 0.3);
+      const predicted = last.pos.clone().addScaledVector(this._velocity, ahead);
+      this.pivot.position.lerp(predicted, 1 - Math.exp(-18 * delta));
+      this.pivot.quaternion.slerp(last.quat, 1 - Math.exp(-16 * delta));
+    } else {
+      // Cas nominal : interpoler entre les deux snapshots encadrant renderT
+      let i = 0;
+      while (i < buf.length - 1 && buf[i + 1].t < renderT) i++;
+      const a = buf[i], b = buf[i + 1];
+      const span = b.t - a.t;
+      const f = span > 1e-4 ? (renderT - a.t) / span : 0;
+      this.pivot.position.lerpVectors(a.pos, b.pos, f);
+      this.pivot.quaternion.copy(a.quat).slerp(b.quat, f);
     }
-    // Convergence exponentielle rapide → suivi quasi instantané, sans à-coups
-    if (this._targetPos) this.pivot.position.lerp(this._targetPos, 1 - Math.exp(-18 * delta));
-    this.pivot.quaternion.slerp(this._targetQuat, 1 - Math.exp(-16 * delta));
 
     // Flash de touche (retour visuel immédiat quand on tire dessus)
     if (this._flashTimer > 0) {

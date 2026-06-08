@@ -1561,6 +1561,11 @@ export class Menu {
         nm.on('config_update',  applyConfigPatch);
         nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));
         nm.on('return_lobby',   ()                     => this._showLobby());
+        // L'hôte a quitté pendant qu'on est dans le lobby → retour à l'accueil.
+        // (En partie, c'est Game.js qui gère ; le menu est alors masqué.)
+        nm.on('host_left',      ()                     => {
+          if (this._root && this._root.isConnected) { nm.disconnect(); this._showMain(); }
+        });
 
         this._config.networkManager = nm;
       } catch {

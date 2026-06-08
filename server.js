@@ -214,18 +214,20 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     const room = rooms.get(ws._room);
     if (room) {
+      const wasHost = room.hostId === clientId;
       room.players.delete(clientId);
-      room.broadcast('player_left', { id: clientId });
-      // Supprimer la salle si vide
-      if (room.players.size === 0) {
+      if (wasHost && room.players.size > 0) {
+        // L'hôte est parti : on renvoie tous les invités à l'accueil et on ferme
+        // la salle (pas de transfert de rôle — la partie de l'hôte est terminée).
+        room.broadcastAll('host_left', {});
         rooms.delete(ws._room);
-        console.log(`[R] Salle supprimée: ${ws._room}`);
-      } else if (room.hostId === clientId) {
-        // Transférer le rôle d'hôte au premier joueur restant
-        const [newHostId, newHostEntry] = room.players.entries().next().value;
-        room.hostId = newHostId;
-        newHostEntry.info.isHost = true;
-        room.broadcastAll('host_changed', { newHostId });
+        console.log(`[R] Hôte parti → salle fermée: ${ws._room}`);
+      } else {
+        room.broadcast('player_left', { id: clientId });
+        if (room.players.size === 0) {
+          rooms.delete(ws._room);
+          console.log(`[R] Salle supprimée: ${ws._room}`);
+        }
       }
     }
     console.log(`[-] ${clientId} déconnecté`);

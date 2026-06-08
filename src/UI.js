@@ -1191,7 +1191,9 @@ export class UI {
   // Point d'interception balistique : où viser pour toucher une cible mobile
   _leadPoint(playerPos, enemy, bulletSpeed) {
     const v = enemy.velocity || { x: 0, y: 0, z: 0 };
-    const ep = enemy.position;
+    // Position prédite à l'instant présent si dispo (joueur distant interpolé),
+    // sinon position courante (IA locale) → la mire vise où la cible SERA
+    const ep = enemy.aimPosition || enemy.position;
     let t = ep.distanceTo(playerPos) / bulletSpeed;
     for (let k = 0; k < 4; k++) {
       const fx = ep.x + v.x * t, fy = ep.y + v.y * t, fz = ep.z + v.z * t;

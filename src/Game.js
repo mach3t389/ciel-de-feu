@@ -456,6 +456,14 @@ export class Game {
         this.ui.showPlayerNotice(`${name || '?'} ${t('playerLeftSuffix')}`, '#cc7744');
       });
 
+      // L'hôte a quitté → la salle est fermée côté serveur : retour à l'accueil
+      this._config.networkManager.on('host_left', () => {
+        if (this._hostLeftHandled) return;
+        this._hostLeftHandled = true;
+        this.ui.showPlayerNotice(t('hostLeftNotice'), '#cc7744');
+        this._quit('menu');
+      });
+
       // Tirs des joueurs distants → traceurs visuels (les dégâts sont gérés par le
       // tireur via player_hit, donc ces balles sont purement cosmétiques)
       this._multiplayerManager.on('remoteBullet', ({ position, quaternion }) => {
