@@ -263,6 +263,8 @@ function mkChoiceGroup(options, defaultVal, onChange) {
     }
     container.appendChild(b);
   });
+  // API programmatique : permet de synchroniser l'état actif depuis l'extérieur
+  container.setValue = (v) => { active = v; btns.forEach(x => x.setActive()); };
   return container;
 }
 
@@ -1464,14 +1466,23 @@ export class Menu {
         await nm.connect();
 
         if (isHost) {
-          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName });
+          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team });
           statusEl.textContent = 'En attente de joueurs...';
           statusEl.style.color = M.green;
         } else {
           const res = await nm.joinRoom(code, { name: self.name, team: self.team });
           statusEl.textContent = `Connecté — ${code}`;
           statusEl.style.color = M.green;
-          if (res.config) Object.assign(this._config, res.config);
+          if (res.config) {
+            Object.assign(this._config, res.config);
+            const cfg = res.config;
+            if (cfg.mode         !== undefined) { modeGroup.setValue(cfg.mode); renderModeDesc(cfg.mode); teamSection.style.display = cfg.mode === 'tdm' ? '' : 'none'; diffSection.style.display = ['coop','survival'].includes(cfg.mode) ? '' : 'none'; enemyCountSection.style.display = cfg.mode === 'coop' ? '' : 'none'; timeLimitSection.style.display = isCompetitive(cfg.mode) ? '' : 'none'; refreshLobbyStats(); }
+            if (cfg.difficulty   !== undefined) diffChoices.setValue(cfg.difficulty);
+            if (cfg.totalEnemies !== undefined) enemyCountChoices.setValue(cfg.totalEnemies);
+            if (cfg.ffaTimeLimit !== undefined) timeGroup.setValue(cfg.ffaTimeLimit);
+            if (cfg.friendlyFire !== undefined) ffGroup.setValue(cfg.friendlyFire);
+            if (cfg.map          !== undefined) { mapGroup.setValue(cfg.map); refreshLobbyStats(); }
+          }
           if (res.players) {
             res.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
             renderPlayers();
@@ -1486,6 +1497,7 @@ export class Menu {
         nm.on('config_update',  (patch) => {
           Object.assign(this._config, patch);
           if (patch.mode !== undefined) {
+            modeGroup.setValue(patch.mode);
             renderModeDesc(patch.mode);
             teamSection.style.display       = patch.mode === 'tdm' ? '' : 'none';
             diffSection.style.display       = ['coop','survival'].includes(patch.mode) ? '' : 'none';
@@ -1493,7 +1505,11 @@ export class Menu {
             timeLimitSection.style.display  = isCompetitive(patch.mode) ? '' : 'none';
             refreshLobbyStats();
           }
-          if (patch.map !== undefined) refreshLobbyStats();
+          if (patch.difficulty   !== undefined) diffChoices.setValue(patch.difficulty);
+          if (patch.totalEnemies !== undefined) enemyCountChoices.setValue(patch.totalEnemies);
+          if (patch.ffaTimeLimit !== undefined) timeGroup.setValue(patch.ffaTimeLimit);
+          if (patch.friendlyFire !== undefined) ffGroup.setValue(patch.friendlyFire);
+          if (patch.map          !== undefined) { mapGroup.setValue(patch.map); refreshLobbyStats(); }
           renderPlayers();
         });
         nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));
