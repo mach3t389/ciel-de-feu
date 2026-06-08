@@ -23,8 +23,29 @@ while (true) {
 
   if (config.networkManager) {
     loading.setStatus(t('waitingForPlayers'));
-    config.networkManager.send('player_loaded', {});
-    await new Promise(resolve => config.networkManager.once('all_players_loaded', resolve));
+    await new Promise(resolve => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+
+      config.networkManager.once('all_players_loaded', finish);
+
+      // Secondary trigger: progress message shows all ready
+      const onProgress = ({ loaded, total }) => {
+        if (loaded >= total) {
+          config.networkManager.off('player_load_progress', onProgress);
+          finish();
+        }
+      };
+      config.networkManager.on('player_load_progress', onProgress);
+
+      // Safety fallback: never block forever
+      setTimeout(() => {
+        config.networkManager.off('player_load_progress', onProgress);
+        finish();
+      }, 12000);
+
+      config.networkManager.send('player_loaded', {});
+    });
   }
 
   loading.hide();
