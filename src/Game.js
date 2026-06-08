@@ -477,6 +477,7 @@ export class Game {
     this._keydownHandler = (e) => {
       if (e.key === 'F3') { e.preventDefault(); this._togglePerfDebug(); return; }
       if (e.key === 'F4') { e.preventDefault(); this._setLowGraphics(!this._lowGraphics); return; }
+      if (e.key === 'F5') { e.preventDefault(); this._toggleTop20(); return; }
       if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
       if (isPvP) {
@@ -790,6 +791,62 @@ export class Game {
     }
   }
 
+  _toggleTop20() {
+    this._top20Visible = !this._top20Visible;
+    if (!this._top20Visible && this._top20Canvas) {
+      this._top20Canvas.remove(); this._top20Canvas = null;
+    }
+  }
+
+  _renderTop20Debug() {
+    const entries = [];
+    this.scene.traverse(o => {
+      if (!o.isInstancedMesh || o.count === 0) return;
+      const tris = o.geometry.index
+        ? o.geometry.index.count / 3
+        : (o.geometry.attributes?.position?.count ?? 0) / 3;
+      const cat = o.userData.category ?? '';
+      const lod = o.userData.lodLevel !== undefined ? `L${o.userData.lodLevel}` : '';
+      entries.push({ name: `${cat}${lod ? ' ' + lod : ''}`, triPer: Math.round(tris), count: o.count, total: Math.round(tris * o.count) });
+    });
+    entries.sort((a, b) => b.total - a.total);
+    const top = entries.slice(0, 20);
+
+    const W = 340, lh = 14, pad = 7;
+    const rows = [
+      '[F5] TOP 20 MESHES (instances)',
+      '─────────────────────────────────',
+      'Catégorie       tri/inst  inst   total',
+      '─────────────────────────────────',
+      ...top.map(e => `${(e.name).padEnd(14)} ${String(e.triPer).padStart(7)}  ${String(e.count).padStart(4)}  ${(e.total/1000).toFixed(1)}k`),
+    ];
+
+    const h = rows.length * lh + pad * 2;
+    if (!this._top20Canvas) {
+      this._top20Canvas = document.createElement('canvas');
+      Object.assign(this._top20Canvas.style, {
+        position: 'fixed', top: '10px', right: '320px',
+        background: 'rgba(0,0,0,0.86)', border: '1px solid #3a3020',
+        pointerEvents: 'none', zIndex: '500',
+        width: W + 'px',
+      });
+      document.body.appendChild(this._top20Canvas);
+    }
+    this._top20Canvas.width  = W * 2;
+    this._top20Canvas.height = h * 2;
+    this._top20Canvas.style.height = h + 'px';
+    const ctx = this._top20Canvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, W, h);
+    ctx.font = '10px "Courier New",monospace';
+    rows.forEach((r, i) => {
+      const isSep = r.startsWith('─');
+      ctx.fillStyle = i === 0 ? '#d4c88a' : isSep ? '#2a2818' : '#aabb88';
+      if (!isSep) ctx.fillText(r, pad, pad + i * lh + lh - 3);
+      else { ctx.fillStyle = '#2a2818'; ctx.fillRect(0, pad + i * lh, W, 1); }
+    });
+  }
+
   _renderPerfDebug(delta) {
     // Rolling 60-frame FPS average
     this._fpsBuffer.push(1 / Math.max(delta, 0.001));
@@ -822,6 +879,7 @@ export class Game {
     // Stats carte et défense sol
     const ms = this._villageMap?.debugStats ?? {};
     const gs = this._groundDefense?.debugStats ?? {};
+    const triK2 = n => ((n ?? 0) / 1000).toFixed(1) + 'k';
 
     const sep = '─────────────────────────────────';
     const rows = [
@@ -839,13 +897,15 @@ export class Game {
       `AI Updates/frame ${this._frameAIUpdates}`,
       `Collision checks ${this._frameCollisionChecks}`,
       sep,
-      `Arbres           ${ms.trees    ?? '—'}`,
-      `Roches           ${ms.rocks    ?? '—'}`,
-      `Buissons         ${ms.bushes   ?? '—'}`,
-      `Bâtiments        ${ms.buildings ?? '—'}`,
+      `Arbres           ${ms.trees    ?? '—'} (${triK2(ms.triTrees)})`,
+      `Roches           ${ms.rocks    ?? '—'} (${triK2(ms.triRocks)})`,
+      `Buissons         ${ms.bushes   ?? '—'} (${triK2(ms.triBushes)})`,
+      `Bâtiments        ${ms.buildings ?? '—'} (${triK2(ms.triBuildings)})`,
       `Tourelles        ${gs.turrets  ?? '—'}`,
       `Tanks            ${gs.tanks    ?? '—'}`,
       `Véhicules        ${gs.vehicles ?? '—'}`,
+      sep,
+      `[F5] Top 20 meshes`,
       sep,
       `Mémoire JS       ${mem}`,
       sep,
@@ -896,7 +956,7 @@ export class Game {
     if (save) localStorage.setItem('lowGraphics', enabled ? '1' : '0');
 
     // Nuages
-    this._cloudMeshes?.forEach(m => { m.visible = !enabled; });
+    this._cloudMeshes?.forEach(m => { m.mesh.visible = !enabled; });
 
     // Brouillard — réduit la distance de rendu pour masquer les objets lointains
     if (this.scene.fog) {
@@ -1328,8 +1388,17 @@ export class Game {
       }
     }
 
-    // Mise à jour carte Village (ballons, etc.)
-    if (this._villageMap) this._villageMap.update(delta);
+    // Mise à jour carte Village (ballons, etc.) + LOD tous les 4 frames
+    if (this._villageMap) {
+      this._villageMap.update(delta);
+      if (this._villageMap.updateLOD) {
+        this._lodUpdateTimer = (this._lodUpdateTimer ?? 0) + 1;
+        if (this._lodUpdateTimer >= 4) {
+          this._lodUpdateTimer = 0;
+          this._villageMap.updateLOD(this.camera.position);
+        }
+      }
+    }
 
     // ── Audio : moteur joueur + moteurs ennemis ───────────────────────────────
     if (this._audio?.ready) {
@@ -1510,7 +1579,9 @@ export class Game {
     // La sphère de ciel suit la caméra pour éviter la bulle noire
     this.skyMesh.position.copy(this.camera.position);
 
-    // Rendu scène principale
+    } catch(e) { console.error('[loop]', e); }
+
+    // Rendu scène principale — hors du try pour toujours afficher quelque chose
     this.renderer.render(this.scene, this.camera);
 
     // Mire par-dessus tout (pass orthographique, pas de clear)
@@ -1527,7 +1598,7 @@ export class Game {
     }
 
     if (this._perfDebugVisible) this._renderPerfDebug(delta);
-    } catch(e) { console.error('[loop]', e); }
+    if (this._top20Visible)    this._renderTop20Debug();
   }
 
   // ── Ciel ─────────────────────────────────────────────────────────────────

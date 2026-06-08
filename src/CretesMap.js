@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { InstancedLOD } from './LODManager.js';
 
 const _loader = new GLTFLoader();
 const loadGLB = (path) => new Promise((res, rej) => _loader.load(path, res, null, rej));
@@ -377,7 +378,7 @@ export class CretesMap {
 
     const groups = {};
     for (const [key, scene] of Object.entries(glbs)) {
-      const g = this._createInstancedGroup(scene, MAX_PER_TYPE);
+      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building');
       if (g) {
         const bbox = new THREE.Box3().setFromObject(scene);
         g.naturalHeight = bbox.max.y - bbox.min.y;
@@ -414,20 +415,35 @@ export class CretesMap {
           if (idx + 1 > inst.count) inst.count = idx + 1;
         }
         counts[type]++;
+        g.recordInstance(wx, wz, dummy.matrix);
       }
     }
     for (const g of Object.values(groups))
       if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    this._bldgLODGroups = Object.values(groups).filter(Boolean);
     return Object.values(counts).reduce((a, b) => a + b, 0);
   }
 
   get debugStats() {
+    const tri = gs => (gs ?? []).reduce((s, g) => s + (g?.visibleTriCount() ?? 0), 0);
     return {
-      trees    : this._statsTreeCount     ?? 0,
-      rocks    : this._statsRockCount     ?? 0,
-      bushes   : this._statsBushCount     ?? 0,
-      buildings: this._statsBuildingCount ?? 0,
+      trees       : this._statsTreeCount     ?? 0,
+      rocks       : this._statsRockCount     ?? 0,
+      bushes      : this._statsBushCount     ?? 0,
+      buildings   : this._statsBuildingCount ?? 0,
+      triTrees    : tri(this._treeLODGroups),
+      triRocks    : tri(this._rockLODGroups),
+      triBushes   : tri(this._bushLODGroups),
+      triBuildings: tri(this._bldgLODGroups),
     };
+  }
+
+  updateLOD(camPos) {
+    const x = camPos.x, z = camPos.z;
+    this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 3000));
+    this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500, 1000, 2000));
+    this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  800, 1500));
+    this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 800, 2000, 4000));
   }
 
   _makeVillageLayout() {
@@ -458,7 +474,7 @@ export class CretesMap {
     ];
     const MAX   = 1000;
     const gltfs = await Promise.all(paths.map(p => loadGLB(p).catch(() => null)));
-    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX) : null);
+    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX, 'tree') : null);
     if (groups.every(g => !g)) return null;
 
     const dummy  = new THREE.Object3D();
@@ -497,8 +513,10 @@ export class CretesMap {
         if (placed[ti] + 1 > inst.count) inst.count = placed[ti] + 1;
       }
       placed[ti]++;
+      group.recordInstance(wx, wz, dummy.matrix);
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    this._treeLODGroups = groups.filter(Boolean);
     return { groups, placed, MAX };
   }
 
@@ -535,6 +553,7 @@ export class CretesMap {
             if (placed[ti] + 1 > inst.count) inst.count = placed[ti] + 1;
           }
           placed[ti]++;
+          g.recordInstance(wx, wz, dummy.matrix);
           placed_layer++;
         }
       }
@@ -551,7 +570,7 @@ export class CretesMap {
     ];
     const MAX   = 80;
     const gltfs = await Promise.all(paths.map(p => loadGLB(p).catch(() => null)));
-    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX) : null);
+    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX, 'rock') : null);
     if (groups.every(g => !g)) return;
 
     const dummy  = new THREE.Object3D();
@@ -586,8 +605,10 @@ export class CretesMap {
         if (placed[ti] + 1 > inst.count) inst.count = placed[ti] + 1;
       }
       placed[ti]++;
+      group.recordInstance(wx, wz, dummy.matrix);
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    this._rockLODGroups = groups.filter(Boolean);
     return placed.reduce((a, b) => a + b, 0);
   }
 
@@ -595,7 +616,7 @@ export class CretesMap {
     const paths = ['/Buissons/SM_Tree_Bush_A.glb', '/Buissons/SM_Tree_Bush_B.glb'];
     const MAX   = 220;
     const gltfs = await Promise.all(paths.map(p => loadGLB(p).catch(() => null)));
-    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX) : null);
+    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX, 'bush') : null);
     if (groups.every(g => !g)) return;
 
     const dummy  = new THREE.Object3D();
@@ -625,26 +646,16 @@ export class CretesMap {
         if (placed[ti] + 1 > inst.count) inst.count = placed[ti] + 1;
       }
       placed[ti]++;
+      group.recordInstance(wx, wz, dummy.matrix);
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    this._bushLODGroups = groups.filter(Boolean);
     return placed[0] + placed[1];
   }
 
-  _createInstancedGroup(modelScene, maxCount) {
-    modelScene.updateWorldMatrix(true, true);
-    const bbox       = new THREE.Box3().setFromObject(modelScene);
-    const baseOffset = -bbox.min.y;
-    const instances  = [];
-    modelScene.traverse(n => {
-      if (!n.isMesh) return;
-      const geoCopy = n.geometry.clone();
-      geoCopy.applyMatrix4(n.matrixWorld);
-      const inst = new THREE.InstancedMesh(geoCopy, n.material, maxCount);
-      inst.count = 0;
-      this.scene.add(inst);
-      instances.push(inst);
-    });
-    return instances.length > 0 ? { instances, baseOffset } : null;
+  _createInstancedGroup(modelScene, maxCount, category = '') {
+    const lod = new InstancedLOD(this.scene, modelScene, maxCount, category);
+    return lod.instances.length > 0 ? lod : null;
   }
 
   _nearVillageOrAirport(wx, wz, airportBuffer, villageBuffer = -1) {

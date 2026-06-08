@@ -713,7 +713,7 @@ export class UI {
     this._drawHeadingStrip(0);
     this._drawFuelDial(100);
     this._drawDamageDial(100);
-    this._drawAmmo(100);
+    this._drawAmmo(200);
 
     return root;
   }

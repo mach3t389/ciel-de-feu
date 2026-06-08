@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { InstancedLOD } from './LODManager.js';
 
 const _loader = new GLTFLoader();
 const loadGLB = (path) => new Promise((res, rej) => _loader.load(path, res, null, rej));
@@ -440,7 +441,7 @@ export class VillageMap {
     // Créer un groupe instancié par type de bâtiment
     const groups = {};
     for (const [key, scene] of Object.entries(glbs)) {
-      const g = this._createInstancedGroup(scene, MAX_PER_TYPE);
+      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building');
       if (g) {
         const bbox = new THREE.Box3().setFromObject(scene);
         g.naturalHeight = bbox.max.y - bbox.min.y;
@@ -477,21 +478,28 @@ export class VillageMap {
           if (idx + 1 > inst.count) inst.count = idx + 1;
         }
         counts[type]++;
+        g.recordInstance(wx, wz, dummy.matrix);
       }
     }
 
     for (const g of Object.values(groups)) {
       if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
     }
+    this._bldgLODGroups = Object.values(groups).filter(Boolean);
     return Object.values(counts).reduce((a, b) => a + b, 0);
   }
 
   get debugStats() {
+    const tri = gs => (gs ?? []).reduce((s, g) => s + (g?.visibleTriCount() ?? 0), 0);
     return {
-      trees    : this._statsTreeCount     ?? 0,
-      rocks    : this._statsRockCount     ?? 0,
-      bushes   : this._statsBushCount     ?? 0,
-      buildings: this._statsBuildingCount ?? 0,
+      trees       : this._statsTreeCount     ?? 0,
+      rocks       : this._statsRockCount     ?? 0,
+      bushes      : this._statsBushCount     ?? 0,
+      triTrees    : tri(this._treeLODGroups),
+      triRocks    : tri(this._rockLODGroups),
+      triBushes   : tri(this._bushLODGroups),
+      buildings   : this._statsBuildingCount ?? 0,
+      triBuildings: tri(this._bldgLODGroups),
     };
   }
 
@@ -550,7 +558,7 @@ export class VillageMap {
     ];
     const MAX = 1250;
     const gltfs = await Promise.all(paths.map(p => loadGLB(p).catch(() => null)));
-    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX) : null);
+    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX, 'tree') : null);
     if (groups.every(g => !g)) return null;
 
     const dummy = new THREE.Object3D();
@@ -565,7 +573,6 @@ export class VillageMap {
       const h  = this.getTerrainHeight(wx, wz);
 
       if (h < 5 || h > 900) continue;
-      // Pas d'arbres sur les pentes à pic
       const hRt = this.getTerrainHeight(wx + 14, wz);
       const hUt = this.getTerrainHeight(wx, wz + 14);
       const steepT = Math.sqrt(((hRt-h)/14)**2 + ((hUt-h)/14)**2);
@@ -583,7 +590,6 @@ export class VillageMap {
       if (!group || placed[ti] >= MAX) continue;
 
       const scale = rng(0.9, 2.2);
-      // Position précise : base du modèle posée exactement sur le terrain
       dummy.position.set(wx, h + group.baseOffset * scale, wz);
       dummy.rotation.y = rng(0, Math.PI * 2);
       dummy.scale.setScalar(scale);
@@ -595,8 +601,10 @@ export class VillageMap {
         if (idx + 1 > inst.count) inst.count = idx + 1;
       }
       placed[ti]++;
+      group.recordInstance(wx, wz, dummy.matrix);
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    this._treeLODGroups = groups.filter(Boolean);
     return { groups, placed, dummy: new THREE.Object3D(), MAX };
   }
 
@@ -640,6 +648,7 @@ export class VillageMap {
             if (placed[ti] + 1 > inst.count) inst.count = placed[ti] + 1;
           }
           placed[ti]++;
+          g.recordInstance(wx, wz, dummy.matrix);
           placed_layer++;
         }
       }
@@ -657,7 +666,7 @@ export class VillageMap {
     ];
     const MAX = 55;
     const gltfs = await Promise.all(paths.map(p => loadGLB(p).catch(() => null)));
-    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX) : null);
+    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX, 'rock') : null);
     if (groups.every(g => !g)) return;
 
     const dummy = new THREE.Object3D();
@@ -698,8 +707,10 @@ export class VillageMap {
         if (idx + 1 > inst.count) inst.count = idx + 1;
       }
       placed[ti]++;
+      group.recordInstance(wx, wz, dummy.matrix);
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    this._rockLODGroups = groups.filter(Boolean);
     return placed.reduce((a, b) => a + b, 0);
   }
 
@@ -708,7 +719,7 @@ export class VillageMap {
     const paths = ['/Buissons/SM_Tree_Bush_A.glb', '/Buissons/SM_Tree_Bush_B.glb'];
     const MAX = 220;
     const gltfs = await Promise.all(paths.map(p => loadGLB(p).catch(() => null)));
-    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX) : null);
+    const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX, 'bush') : null);
     if (groups.every(g => !g)) return;
 
     const dummy = new THREE.Object3D();
@@ -741,9 +752,19 @@ export class VillageMap {
         if (idx + 1 > inst.count) inst.count = idx + 1;
       }
       placed[ti]++;
+      group.recordInstance(wx, wz, dummy.matrix);
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    this._bushLODGroups = groups.filter(Boolean);
     return placed[0] + placed[1];
+  }
+
+  updateLOD(camPos) {
+    const x = camPos.x, z = camPos.z;
+    this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 3000));
+    this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500, 1000, 2000));
+    this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  800, 1500));
+    this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 800, 2000, 4000));
   }
 
   // ── Montgolfières — au-dessus des villages ─────────────────────────────────
@@ -777,27 +798,9 @@ export class VillageMap {
 
   // ── Utilitaires ────────────────────────────────────────────────────────────
 
-  // Bake les world transforms de chaque mesh dans la géométrie
-  // → les instances sont placées avec baseOffset pour que la base touche le sol
-  _createInstancedGroup(modelScene, maxCount) {
-    modelScene.updateWorldMatrix(true, true);
-    const bbox = new THREE.Box3().setFromObject(modelScene);
-    const baseOffset = -bbox.min.y; // décalage pour poser la base à y=0
-
-    const instances = [];
-    modelScene.traverse(n => {
-      if (!n.isMesh) return;
-      const geoCopy = n.geometry.clone();
-      // Bake la transform monde dans les vertices → position correcte en mode instancié
-      geoCopy.applyMatrix4(n.matrixWorld);
-      geoCopy.computeBoundingSphere();
-      const inst = new THREE.InstancedMesh(geoCopy, n.material, maxCount);
-      inst.count = 0;
-      inst.frustumCulled = false; // spread sur toute la carte → pas de culling global
-      this.scene.add(inst);
-      instances.push(inst);
-    });
-    return instances.length > 0 ? { instances, baseOffset } : null;
+  _createInstancedGroup(modelScene, maxCount, category = '') {
+    const lod = new InstancedLOD(this.scene, modelScene, maxCount, category);
+    return lod.instances.length > 0 ? lod : null;
   }
 
   // villageBuffer : marge au-delà du outerR du village
