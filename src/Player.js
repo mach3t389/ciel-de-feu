@@ -352,6 +352,10 @@ export class Player {
         if (this.onHelpToggle) this.onHelpToggle();
         this.keys.h_prev = true;
       }
+      // R : vue arrière (maintenir)
+      if (e.key === 'r' || e.key === 'R') this.keys.lookBack = true;
+      // V : vue libre souris (maintenir)
+      if (e.key === 'v' || e.key === 'V') this._vKeyActive = true;
       if (e.key === 'Escape') { if (this.onPause) this.onPause(); }
     };
     const up = (e) => {
@@ -366,6 +370,8 @@ export class Player {
       if (e.key === ' ')       this.keys.space  = false;
       if (e.key === 'c' || e.key === 'C') this.keys.c_prev = false;
       if (e.key === 'h' || e.key === 'H') this.keys.h_prev = false;
+      if (e.key === 'r' || e.key === 'R') this.keys.lookBack = false;
+      if (e.key === 'v' || e.key === 'V') this._vKeyActive = false;
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup',   up);
@@ -425,6 +431,22 @@ export class Player {
   // ── Traitement des inputs ────────────────────────────────────────────────
   _handleInput(delta) {
     this._readGamepad(delta);
+
+    // Vue libre clavier (V) : actif pendant la pression + fondu au relâchement
+    if (this._vKeyActive) {
+      this.freeView = true;
+      this._vKeyWasActive = true;
+    } else if (this._vKeyWasActive && !this._rsActive) {
+      const decay = 1 - Math.exp(-5 * delta);
+      this._fvYaw   *= (1 - decay);
+      this._fvPitch *= (1 - decay);
+      if (Math.abs(this._fvYaw) < 0.008 && Math.abs(this._fvPitch) < 0.008) {
+        this._fvYaw   = 0;
+        this._fvPitch = 0;
+        this.freeView = false;
+        this._vKeyWasActive = false;
+      }
+    }
 
     // ── Gaz directs style GTA V ──────────────────────────────────────────
     const thrust = this.keys.shift ? 1 : this._gpThrottleUp;
