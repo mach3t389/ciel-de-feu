@@ -1522,9 +1522,25 @@ export class Menu {
         nm = new NetworkManager();
         await nm.connect();
 
-        // Les handlers sont enregistrés AVANT join/create pour ne rater aucun
-        // message arrivant pendant la négociation (ex. config_update envoyé par
-        // l'hôte dès qu'il reçoit player_joined, avant que joinRoom soit résolu).
+        if (isHost) {
+          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, tdmAiCount: this._config.tdmAiCount ?? 0 });
+          statusEl.textContent = 'En attente de joueurs...';
+          statusEl.style.color = M.green;
+        } else {
+          const res = await nm.joinRoom(code, { name: self.name, team: self.team });
+          statusEl.textContent = `Connecté — ${code}`;
+          statusEl.style.color = M.green;
+          // Appliquer la config initiale reçue dans la réponse join_room
+          if (res.config) applyConfigPatch(res.config);
+          if (res.players) {
+            res.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
+            renderPlayers();
+          }
+        }
+
+        // Handlers enregistrés APRÈS join/create+res.players, comme avant.
+        // Les messages arrivés pendant l'attente (ex. config_update de la race)
+        // sont maintenant bufférisés par NetworkManager et rejoués ici.
         nm.on('player_joined',  ({ player })           => {
           players.push({ ...player, isReady: false }); renderPlayers();
           if (isHost && nm) {
@@ -1544,22 +1560,6 @@ export class Menu {
         nm.on('config_update',  applyConfigPatch);
         nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));
         nm.on('return_lobby',   ()                     => this._showLobby());
-
-        if (isHost) {
-          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, tdmAiCount: this._config.tdmAiCount ?? 0 });
-          statusEl.textContent = 'En attente de joueurs...';
-          statusEl.style.color = M.green;
-        } else {
-          const res = await nm.joinRoom(code, { name: self.name, team: self.team });
-          statusEl.textContent = `Connecté — ${code}`;
-          statusEl.style.color = M.green;
-          // Appliquer la config initiale reçue dans la réponse join_room
-          if (res.config) applyConfigPatch(res.config);
-          if (res.players) {
-            res.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
-            renderPlayers();
-          }
-        }
 
         this._config.networkManager = nm;
       } catch {
