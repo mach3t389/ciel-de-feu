@@ -305,6 +305,10 @@ export class Game {
     // Bouton Start/Menu manette → pause (sauf en multijoueur PvP)
     if (!this._config.networkManager) this.player.onPause = () => { if (!this.isPaused) this._setPause(true); };
 
+    // C : cycle caméra — 0=poursuite, 1=cockpit, 2=cinématique lointaine
+    this._camMode = 0;
+    this.player.onCameraChange = () => { this._camMode = (this._camMode + 1) % 3; };
+
     // ── Bases : joueur = airports[0] (Alpha), ennemis = airports[1] (Gamma) ──
     const playerBase = this._villageMap?.airports?.[0]?.center ?? new THREE.Vector3(0,   200, 0);
     const enemyBase  = this._villageMap?.airports?.[1]?.center ?? new THREE.Vector3(800, 200, 800);
@@ -1561,6 +1565,26 @@ export class Game {
         .addScaledVector(ccRight, this.cameraController._laR ?? 0);
       this.camera.up.copy(ccUp);
       this.camera.lookAt(lookTarget);
+    }
+
+    // Modes caméra (C) — priorité inférieure à R et V
+    if (!this.player.keys.lookBack && !this.player.freeView && this._camMode > 0) {
+      const q   = this.player.quaternion;
+      const pos = this.player.position;
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+      const up  = new THREE.Vector3(0, 1,  0).applyQuaternion(q);
+
+      if (this._camMode === 1) {
+        // Cockpit : caméra dans le poste de pilotage, vue vers l'avant
+        this.camera.position.copy(pos).addScaledVector(fwd, -0.3).addScaledVector(up, 0.4);
+        this.camera.up.copy(up);
+        this.camera.lookAt(pos.clone().addScaledVector(fwd, 30));
+      } else if (this._camMode === 2) {
+        // Vue cinématique : 2.5× plus loin que la caméra de poursuite normale
+        const offset = this.camera.position.clone().sub(pos);
+        this.camera.position.copy(pos).add(offset.multiplyScalar(2.5));
+        this.camera.lookAt(pos);
+      }
     }
 
     // Positionner la mire sur l'écran au point visé par l'avion
