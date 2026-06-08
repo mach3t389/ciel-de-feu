@@ -450,7 +450,7 @@ export class CretesMap {
       this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 2500, fwdX, fwdZ));
       this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500,  800, 1200, fwdX, fwdZ));
       this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  600,  800, fwdX, fwdZ));
-      this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 800, 2000, 4000, fwdX, fwdZ));
+      this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 1000, 2500, 4500, fwdX, fwdZ));
     }
   }
 

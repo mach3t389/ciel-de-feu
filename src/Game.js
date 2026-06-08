@@ -483,6 +483,7 @@ export class Game {
       if (e.key === 'F3') { e.preventDefault(); this._togglePerfDebug(); return; }
       if (e.key === 'F4') { e.preventDefault(); this._setLowGraphics((this._lowGraphics + 1) % 3); return; }
       if (e.key === 'F5') { e.preventDefault(); this._toggleTop20(); return; }
+      if (e.key === 'F6') { e.preventDefault(); this._toggleTextureDebug(); return; }
       if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
       if (isPvP) {
@@ -803,6 +804,84 @@ export class Game {
     }
   }
 
+  _toggleTextureDebug() {
+    this._texDebugVisible = !this._texDebugVisible;
+    this._texDebugDirty   = true; // recalcule à la prochaine frame
+    if (!this._texDebugVisible && this._texDebugCanvas) {
+      this._texDebugCanvas.remove(); this._texDebugCanvas = null;
+    }
+  }
+
+  _renderTextureDebug() {
+    // Rebuild uniquement quand on ouvre le panel (dirty flag)
+    if (!this._texDebugDirty && this._texDebugCanvas) return;
+    this._texDebugDirty = false;
+
+    const texMap = new Map(); // uuid → entry
+    this.scene.traverse(o => {
+      const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+      for (const mat of mats) {
+        for (const key of ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap','alphaMap','bumpMap']) {
+          const tex = mat[key];
+          if (!tex?.isTexture) continue;
+          if (texMap.has(tex.uuid)) {
+            texMap.get(tex.uuid).uses++;
+          } else {
+            const w = tex.image?.width  ?? 0;
+            const h = tex.image?.height ?? 0;
+            const mips  = tex.generateMipmaps !== false ? 4 / 3 : 1;
+            const mem   = w * h * 4 * mips;
+            const label = tex.name
+              || tex.image?.src?.split('/').pop()?.replace(/\.[^.]+$/, '').slice(0, 18)
+              || tex.uuid.slice(0, 8);
+            texMap.set(tex.uuid, { label, w, h, mem: Math.round(mem), uses: 1 });
+          }
+        }
+      }
+    });
+
+    const all     = [...texMap.values()].sort((a, b) => b.mem - a.mem);
+    const top     = all.slice(0, 20);
+    const total   = all.reduce((s, t) => s + t.mem, 0);
+
+    const W = 400, lh = 14, pad = 7;
+    const rows = [
+      `[F6] TEXTURES  ${texMap.size} uniques · ~${(total / 1048576).toFixed(1)} MB estimé`,
+      '──────────────────────────────────────────',
+      'Nom                 Résol      Mém(KB) ×',
+      '──────────────────────────────────────────',
+      ...top.map(e =>
+        `${e.label.padEnd(19)} ${(e.w + '×' + e.h).padEnd(10)} ${String(Math.round(e.mem / 1024)).padStart(6)} ×${e.uses}`
+      ),
+    ];
+
+    const h = rows.length * lh + pad * 2;
+    if (!this._texDebugCanvas) {
+      this._texDebugCanvas = document.createElement('canvas');
+      Object.assign(this._texDebugCanvas.style, {
+        position: 'fixed', top: '10px', right: '720px',
+        background: 'rgba(0,0,0,0.86)', border: '1px solid #3a3020',
+        pointerEvents: 'none', zIndex: '500',
+        width: W + 'px',
+      });
+      document.body.appendChild(this._texDebugCanvas);
+    }
+    this._texDebugCanvas.width  = W * 2;
+    this._texDebugCanvas.height = h * 2;
+    this._texDebugCanvas.style.height = h + 'px';
+    this._texDebugCanvas.style.display = 'block';
+    const ctx = this._texDebugCanvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, W, h);
+    ctx.font = '10px "Courier New",monospace';
+    rows.forEach((r, i) => {
+      const isSep = r.startsWith('─');
+      ctx.fillStyle = i === 0 ? '#d4c88a' : isSep ? '#2a2818' : '#aabb88';
+      if (!isSep) ctx.fillText(r, pad, pad + i * lh + lh - 3);
+      else { ctx.fillStyle = '#2a2818'; ctx.fillRect(0, pad + i * lh, W, 1); }
+    });
+  }
+
   _renderTop20Debug() {
     const entries = [];
     this.scene.traverse(o => {
@@ -910,14 +989,34 @@ export class Game {
     const visibleClouds = this._cloudMeshes?.filter(c => c.mesh.visible).length ?? '—';
     const gfxLabels = ['OFF [F4 LOW]', 'LOW [F4 ULTRA]', 'ULTRA [F4 désact.]'];
     const gfx = gfxLabels[this._lowGraphics] ?? '—';
+
+    // Helpers triangles
+    const _triGeo = g => g ? (g.index ? g.index.count / 3 : (g.attributes?.position?.count ?? 0) / 3) : 0;
+    const cloudTris   = this._cloudMeshes?.filter(c => c.mesh.visible)
+                          .reduce((s, c) => s + _triGeo(c.mesh.geometry), 0) ?? 0;
+    const terrainTris = _triGeo(this._terrainMesh?.geometry);
+    const dcKnown = (dc.dcTerrain ?? 0) + (dc.dcCloud ?? 0) + (dc.dcTree ?? 0) +
+                    (dc.dcRock ?? 0) + (dc.dcBush ?? 0) + (dc.dcBldg ?? 0);
+    const dcOther = Math.max(0, info.calls - dcKnown);
+
     const sep = '─────────────────────────────────';
     const rows = [
       '[F3] PERFORMANCE DEBUG',
       sep,
       `FPS              ${fps.toFixed(1)}`,
       `Frame Time       ${(delta * 1000).toFixed(1)} ms`,
+      `CPU logique      ${(this._logicMs ?? 0).toFixed(1)} ms`,
+      `CPU rendu        ${(this._renderMs ?? 0).toFixed(1)} ms`,
       sep,
       `Draw Calls       ${info.calls}`,
+      `  Terrain        ${dc.dcTerrain ?? '—'}  (${triK2(terrainTris)})`,
+      `  Nuages         ${visibleClouds}×  DC:${dc.dcCloud ?? '—'}  (${triK2(cloudTris)})`,
+      `  Arbres         DC:${dc.dcTree ?? '—'}`,
+      `  Roches         DC:${dc.dcRock ?? '—'}`,
+      `  Buissons       DC:${dc.dcBush ?? '—'}`,
+      `  Bâtiments      DC:${dc.dcBldg ?? '—'}`,
+      `  Autres         DC:${dcOther}  (avions/sol/UI)`,
+      sep,
       `Triangles        ${triK}k`,
       `Meshes visibles  ${this._visibleMeshCount}`,
       `Instances totales ${this._instanceTotalCount ?? 0}`,
@@ -926,22 +1025,19 @@ export class Game {
       `LOD1 instances   ${ls.l1 ?? '—'}`,
       `LOD2 instances   ${ls.l2 ?? '—'}`,
       sep,
-      `Terrain DC       ${dc.dcTerrain ?? '—'}`,
-      `Nuages           ${visibleClouds} DC:${dc.dcCloud ?? '—'}`,
-      sep,
       `Avions actifs    ${planes}`,
       `AI Updates/frame ${this._frameAIUpdates}`,
       `Collision checks ${this._frameCollisionChecks}`,
       sep,
-      `Arbres     ${ms.trees    ?? '—'} (${triK2(ms.triTrees)}) DC:${dc.dcTree ?? '—'}`,
-      `Roches     ${ms.rocks    ?? '—'} (${triK2(ms.triRocks)}) DC:${dc.dcRock ?? '—'}`,
-      `Buissons   ${ms.bushes   ?? '—'} (${triK2(ms.triBushes)}) DC:${dc.dcBush ?? '—'}`,
-      `Bâtiments  ${ms.buildings ?? '—'} (${triK2(ms.triBuildings)}) DC:${dc.dcBldg ?? '—'}`,
+      `Arbres     ${ms.trees    ?? '—'} (${triK2(ms.triTrees)})`,
+      `Roches     ${ms.rocks    ?? '—'} (${triK2(ms.triRocks)})`,
+      `Buissons   ${ms.bushes   ?? '—'} (${triK2(ms.triBushes)})`,
+      `Bâtiments  ${ms.buildings ?? '—'} (${triK2(ms.triBuildings)})`,
       `Tourelles        ${gs.turrets  ?? '—'}`,
       `Tanks            ${gs.tanks    ?? '—'}`,
       `Véhicules        ${gs.vehicles ?? '—'}`,
       sep,
-      `[F5] Top 20 meshes`,
+      `[F5] Top 20 meshes   [F6] Textures`,
       sep,
       `Mémoire JS       ${mem}`,
       sep,
@@ -1176,6 +1272,7 @@ export class Game {
       return;
     }
 
+    const _t0 = performance.now();
     try {
     // Réinitialiser les compteurs per-frame avant toute mise à jour
     this.renderer.info.reset();
@@ -1302,13 +1399,13 @@ export class Game {
       ? this._groundDefense.units.filter(u => !u.isDead && u.team === 'ally')
       : [];
     for (const enemy of this.enemies) {
-      // Throttle IA des ennemis vivants lointains : 2000m+ → 1/4 frames, 1000m+ → 1/2 frames
+      // Throttle IA : <1000m=60Hz, 1000-2000m=~20Hz (1/3), 2000m+=~5Hz (1/12)
       let skipAI = false;
       if (!enemy.isDead) {
         const d2 = this.player.position.distanceToSquared(enemy.position);
         const fc = this._frameCount;
-        if      (d2 > 4000000 && (fc & 3) !== 0) skipAI = true;
-        else if (d2 > 1000000 && (fc & 1) !== 0) skipAI = true;
+        if      (d2 > 4000000 && fc % 12 !== 0) skipAI = true;
+        else if (d2 > 1000000 && fc % 3  !== 0) skipAI = true;
       }
       if (!skipAI) enemy.update(delta, this.player.position, allyGroundTargets);
       this._frameAIUpdates++;
@@ -1653,9 +1750,14 @@ export class Game {
     this.skyMesh.position.copy(this.camera.position);
 
     } catch(e) { console.error('[loop]', e); }
+    const _logicMs = performance.now() - _t0;
+    this._logicMs = this._logicMs !== undefined ? this._logicMs * 0.85 + _logicMs * 0.15 : _logicMs;
 
     // Rendu scène principale — hors du try pour toujours afficher quelque chose
+    const _t1 = performance.now();
     this.renderer.render(this.scene, this.camera);
+    const _renderMs = performance.now() - _t1;
+    this._renderMs = this._renderMs !== undefined ? this._renderMs * 0.85 + _renderMs * 0.15 : _renderMs;
 
     // Mire par-dessus tout (pass orthographique, pas de clear)
     this._reticleSprite.position.set(
@@ -1672,6 +1774,7 @@ export class Game {
 
     if (this._perfDebugVisible) this._renderPerfDebug(delta);
     if (this._top20Visible)    this._renderTop20Debug();
+    if (this._texDebugVisible) this._renderTextureDebug();
   }
 
   // ── Ciel ─────────────────────────────────────────────────────────────────
@@ -1963,6 +2066,7 @@ export class Game {
     mesh.receiveShadow = true;
     mesh.userData.category = 'terrain';
     this.scene.add(mesh);
+    this._terrainMesh = mesh;
 
     this.getTerrainHeight = getH;
   }
