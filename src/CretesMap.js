@@ -395,11 +395,14 @@ export class CretesMap {
       square.renderOrder = 1;
       this.scene.add(square);
 
+      const placed = [];
+      const MIN_D2 = 20 * 20;
       for (const [dx, dz, type, targetH, rotY] of this._makeVillageLayout()) {
         const g = groups[type];
         if (!g || counts[type] >= MAX_PER_TYPE || g.naturalHeight <= 0) continue;
-        const scale = targetH / g.naturalHeight;
         const wx = v.x + dx, wz = v.z + dz;
+        if (placed.some(([px, pz]) => (wx-px)**2 + (wz-pz)**2 < MIN_D2)) continue;
+        const scale = targetH / g.naturalHeight;
         const gY  = this.getTerrainHeight(wx, wz);
         dummy.position.set(wx, gY + g.baseOffset * scale, wz);
         dummy.rotation.set(0, rotY, 0);
@@ -412,6 +415,7 @@ export class CretesMap {
         }
         counts[type]++;
         g.recordInstance(wx, wz, dummy.matrix);
+        placed.push([wx, wz]);
       }
     }
     for (const g of Object.values(groups))
