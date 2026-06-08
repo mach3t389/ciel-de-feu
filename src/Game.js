@@ -286,7 +286,7 @@ export class Game {
     this.player.onFire = (pos, quat) => {
       this.bulletManager.fire(pos, quat);
       this._audio.playGunshot();
-      if (this._muzzleSprite) {
+      if (this._muzzleSprite && !this._muzzleLowGfx) {
         const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
         this._muzzleSprite.position.copy(pos).addScaledVector(fwd, -0.5);
         this._muzzleSprite.position.y += 0.0;
@@ -348,6 +348,14 @@ export class Game {
     this._waveSize          = WAVE_SIZE;
     this._missionComplete   = false;
     this._aiDebug           = false;
+
+    // Debug perf overlay (F3) + Low Graphics mode (F4)
+    this._perfDebugVisible  = false;
+    this._fpsBuffer         = [];
+    this._visibleMeshCount  = 0;
+    this._visibleMeshTick   = 0;
+    this._lowGraphics       = localStorage.getItem('lowGraphics') === '1';
+    if (this._lowGraphics) this._setLowGraphics(true, false);
 
     const pickSkill = () => {
       if (isPractice || isFFA) return 'regular';
@@ -466,6 +474,8 @@ export class Game {
     };
 
     this._keydownHandler = (e) => {
+      if (e.key === 'F3') { e.preventDefault(); this._togglePerfDebug(); return; }
+      if (e.key === 'F4') { e.preventDefault(); this._setLowGraphics(!this._lowGraphics); return; }
       if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
       if (isPvP) {
@@ -770,6 +780,106 @@ export class Game {
     if (!this._aiDebug && this._dbgCanvas) {
       this._dbgCanvas.remove(); this._dbgCanvas = null;
     }
+  }
+
+  _togglePerfDebug() {
+    this._perfDebugVisible = !this._perfDebugVisible;
+    if (!this._perfDebugVisible && this._perfCanvas) {
+      this._perfCanvas.remove(); this._perfCanvas = null;
+    }
+  }
+
+  _renderPerfDebug(delta) {
+    // Rolling 60-frame FPS average
+    this._fpsBuffer.push(1 / Math.max(delta, 0.001));
+    if (this._fpsBuffer.length > 60) this._fpsBuffer.shift();
+    const fps = this._fpsBuffer.reduce((a, b) => a + b, 0) / this._fpsBuffer.length;
+
+    // Visible mesh count — recomputed once per second (~60 frames)
+    this._visibleMeshTick++;
+    if (this._visibleMeshTick >= 60) {
+      this._visibleMeshTick = 0;
+      let n = 0;
+      this.scene.traverse(o => { if (o.visible && (o.isMesh || o.isSkinnedMesh)) n++; });
+      this._visibleMeshCount = n;
+    }
+
+    const info   = this.renderer.info.render;
+    const mem    = (typeof performance !== 'undefined' && performance.memory)
+      ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + ' MB'
+      : '—';
+    const planes = this.enemies.filter(e => !e.isDead).length + (this.player.isDead ? 0 : 1);
+    const triK   = (info.triangles / 1000).toFixed(1);
+    const gfx    = this._lowGraphics ? 'ON  [F4 désactiver]' : 'OFF [F4 activer]';
+
+    const rows = [
+      '[F3] DEBUG PERFORMANCE',
+      '',
+      `FPS             ${fps.toFixed(1)}`,
+      `Frame Time      ${(delta * 1000).toFixed(1)} ms`,
+      `Draw Calls      ${info.calls}`,
+      `Triangles       ${triK}k`,
+      `Objets visibles ${this._visibleMeshCount}`,
+      `Avions actifs   ${planes}`,
+      `Mémoire JS      ${mem}`,
+      '',
+      `LOW GRAPHICS    ${gfx}`,
+    ];
+
+    const W = 310, lh = 16, pad = 8;
+    const h = rows.length * lh + pad * 2;
+
+    if (!this._perfCanvas) {
+      this._perfCanvas = document.createElement('canvas');
+      Object.assign(this._perfCanvas.style, {
+        position: 'fixed', top: '10px', right: '10px',
+        background: 'rgba(0,0,0,0.82)', border: '1px solid #3a3020',
+        pointerEvents: 'none', zIndex: '500',
+        width: W + 'px',
+      });
+      document.body.appendChild(this._perfCanvas);
+    }
+    this._perfCanvas.width  = W * 2;
+    this._perfCanvas.height = h * 2;
+    this._perfCanvas.style.height = h + 'px';
+    const ctx = this._perfCanvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, W, h);
+    ctx.font = '11px "Courier New",monospace';
+    rows.forEach((r, i) => {
+      let col = '#aabb88';
+      if (i === 0) col = '#d4c88a';
+      else if (i === 1 || i === 9) col = 'transparent';
+      else if (r.startsWith('LOW')) col = this._lowGraphics ? '#88dd88' : '#d4c88a';
+      else if (r.startsWith('FPS')) {
+        const f = fps;
+        col = f >= 55 ? '#88dd88' : f >= 30 ? '#ddcc66' : '#dd6666';
+      }
+      ctx.fillStyle = col;
+      ctx.fillText(r, pad, pad + i * lh + lh - 3);
+    });
+  }
+
+  // enabled=true : basse qualité ; save=true (défaut) : persiste dans localStorage
+  _setLowGraphics(enabled, save = true) {
+    this._lowGraphics = enabled;
+    if (save) localStorage.setItem('lowGraphics', enabled ? '1' : '0');
+
+    // Nuages
+    this._cloudMeshes?.forEach(m => { m.visible = !enabled; });
+
+    // Brouillard — réduit la distance de rendu pour masquer les objets lointains
+    if (this.scene.fog) {
+      this.scene.fog.near = enabled ? 200 : 300;
+      this.scene.fog.far  = enabled ? 900 : (this._isLowEnd ? 1600 : 2200);
+    }
+
+    // Résolution de rendu
+    this.renderer.setPixelRatio(enabled ? 0.75 : Math.min(window.devicePixelRatio, 1.0));
+
+    // Flash de tir (coûteux en overdraw)
+    if (this._muzzleSprite) this._muzzleSprite.visible = false;
+    this._muzzleLowGfx = enabled;
   }
 
   // action : 'menu' (défaut) ou 'replay' (main.js relance la même config).
@@ -1376,6 +1486,8 @@ export class Game {
       this.renderer.render(this._reticleScene, this._reticleCamera);
       this.renderer.autoClear = true;
     }
+
+    if (this._perfDebugVisible) this._renderPerfDebug(delta);
     } catch(e) { console.error('[loop]', e); }
   }
 
@@ -1855,7 +1967,8 @@ export class Game {
     // Réseau
     if (this._config?.networkManager) this._config.networkManager.disconnect();
 
-    if (this._dbgCanvas) { this._dbgCanvas.remove(); this._dbgCanvas = null; }
+    if (this._dbgCanvas)  { this._dbgCanvas.remove();  this._dbgCanvas  = null; }
+    if (this._perfCanvas) { this._perfCanvas.remove(); this._perfCanvas = null; }
 
     // Balles
     this.bulletManager?.dispose();
