@@ -208,6 +208,15 @@ wss.on('connection', (ws) => {
         room.broadcastAll('score_update', { id: clientId, ...payload });
         break;
       }
+
+      // ── Hôte force la fin de partie (temps illimité) ──────────────────────
+      case 'force_end_game': {
+        const room = rooms.get(ws._room);
+        if (!room || room.hostId !== clientId) return;
+        room.broadcast('force_end_game', {}, clientId);
+        console.log(`[R] Fin de partie forcée par l'hôte: ${ws._room}`);
+        break;
+      }
     }
   });
 

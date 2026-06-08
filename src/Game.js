@@ -464,6 +464,11 @@ export class Game {
         this._quit('menu');
       });
 
+      // L'hôte a forcé la fin de partie → afficher l'écran de fin chez tous les invités
+      this._config.networkManager.on('force_end_game', () => {
+        this._triggerMatchEnd();
+      });
+
       // Tirs des joueurs distants → traceurs visuels (les dégâts sont gérés par le
       // tireur via player_hit, donc ces balles sont purement cosmétiques)
       this._multiplayerManager.on('remoteBullet', ({ position, quaternion }) => {
@@ -546,6 +551,14 @@ export class Game {
 
     // Menu ESC multijoueur — toggle unifié (clavier, manette, perte de pointer lock)
     this._escMenuVisible = false;
+    // Hôte + temps illimité → bouton "Fin de partie" disponible
+    const isHost         = this._config.isHost === true;
+    const isUnlimited    = this._timeRemaining === null;
+    const onEndGame      = (isPvP && isHost && isUnlimited) ? () => {
+      this._toggleEscMenu(false);
+      this._config.networkManager.send('force_end_game', {});
+      this._triggerMatchEnd();
+    } : null;
     this._toggleEscMenu = (forceState) => {
       const visible = forceState !== undefined ? forceState : !this._escMenuVisible;
       if (visible === this._escMenuVisible) return;
@@ -553,7 +566,7 @@ export class Game {
       this.ui.showEscMenu(visible, onQuit, () => {
         this._toggleEscMenu(false);
         this._respawn();
-      }, () => this._toggleEscMenu(false));
+      }, () => this._toggleEscMenu(false), onEndGame);
       if (visible) document.exitPointerLock();
       else {
         this._pauseCooldownUntil = performance.now() + 400; // évite la réouverture immédiate
@@ -1219,6 +1232,23 @@ export class Game {
     this._muzzleLowGfx = isLow;
   }
 
+  // Déclenche la fin de match (timer écoulé OU hôte force la fin).
+  _triggerMatchEnd() {
+    if (this._missionComplete) return;
+    this._missionComplete = true;
+    this._audio?.pauseEngine(true);
+    document.exitPointerLock();
+    if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
+    if (this._escMenuVisible) this.ui.showEscMenu(false);
+    this._updateFFARecord(this.stats.kills);
+    this.ui.showVictory(
+      this.stats,
+      this._config.networkManager ? null : () => this._quit('replay'),
+      () => this._quit(),
+      this._buildScoreboardRows(),
+    );
+  }
+
   // action : 'menu' (défaut) ou 'replay' (main.js relance la même config).
   // La déconnexion réseau est gérée par destroy() après résolution.
   _quit(action = 'menu') {
@@ -1429,17 +1459,7 @@ export class Game {
       this.ui.updateMatchTimer(this._timeRemaining);
       if (this._timeRemaining <= 0) {
         this._timeRemaining = 0;
-        this._missionComplete = true;
-        this._audio?.pauseEngine(true);
-        document.exitPointerLock();
-        if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
-        this._updateFFARecord(this.stats.kills);
-        this.ui.showVictory(
-          this.stats,
-          this._config.networkManager ? null : () => this._quit('replay'),
-          () => this._quit(),
-          this._buildScoreboardRows(),
-        );
+        this._triggerMatchEnd();
       }
     }
 

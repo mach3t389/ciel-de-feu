@@ -460,10 +460,11 @@ export class UI {
 
   // Overlay ESC pour le multijoueur — même présentation que le menu pause solo
   // (le jeu continue derrière : pas de gel, mais réapparition possible)
-  showEscMenu(visible, onQuit = null, onRespawn = null, onResume = null) {
+  showEscMenu(visible, onQuit = null, onRespawn = null, onResume = null, onEndGame = null) {
     if (onQuit    !== null) this._escQuitCb    = onQuit;
     if (onRespawn !== null) this._escRespawnCb = onRespawn;
     if (onResume  !== null) this._escResumeCb  = onResume;
+    if (onEndGame !== null) this._escEndGameCb = onEndGame;
 
     if (!this._escOverlay) {
       const wrap = document.createElement('div');
@@ -531,6 +532,14 @@ export class UI {
       const btnSettings = mkPBtn(t('settingsBtn'), C.dimCream);
       btnSettings.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseSettings(); });
 
+      const btnEndGame = mkPBtn(t('endGameBtn'), '#cc6633');
+      btnEndGame.style.display = 'none';
+      btnEndGame.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this._escEndGameCb) this._escEndGameCb();
+      });
+      this._escBtnEndGame = btnEndGame;
+
       const btnMenu = mkPBtn(t('mainMenu'), C.dimCream);
       btnMenu.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -542,10 +551,15 @@ export class UI {
       wrap.appendChild(divider);
       wrap.appendChild(btnResume);
       wrap.appendChild(btnRespawn);
+      wrap.appendChild(btnEndGame);
       wrap.appendChild(btnSettings);
       wrap.appendChild(btnMenu);
       document.body.appendChild(wrap);
       this._escOverlay = wrap;
+    }
+    // Affiche le bouton "Fin de partie" seulement si un callback a été fourni
+    if (this._escBtnEndGame) {
+      this._escBtnEndGame.style.display = this._escEndGameCb ? 'block' : 'none';
     }
     this._escOverlay.style.display = visible ? 'flex' : 'none';
     if (visible) requestAnimationFrame(() => this._escOverlay?.querySelector('button')?.focus());
