@@ -93,7 +93,8 @@ export class InstancedLOD {
   }
 
   // Called from the game loop to redistribute instances across LOD levels
-  updateLOD(camX, camZ, lod0Dist, lod1Dist, cullDist) {
+  // fwdX/fwdZ: camera forward direction (XZ plane) for frustum culling
+  updateLOD(camX, camZ, lod0Dist, lod1Dist, cullDist, fwdX = 0, fwdZ = -1) {
     const d0sq   = lod0Dist * lod0Dist;
     const d1sq   = lod1Dist * lod1Dist;
     const cullSq = cullDist * cullDist;
@@ -110,6 +111,13 @@ export class InstancedLOD {
       const dz = pos[i * 2 + 1] - camZ;
       const d2 = dx * dx + dz * dz;
       if (d2 >= cullSq) continue;
+
+      // Frustum culling pour les objets hors du champ LOD0 (> 600m)
+      // dot < -0.2 ≈ plus de 100° derrière la caméra → invisible
+      if (d2 > d0sq) {
+        const invLen = 1 / Math.sqrt(d2);
+        if ((dx * fwdX + dz * fwdZ) * invLen < -0.2) continue;
+      }
 
       const lv     = d2 < d0sq ? 0 : d2 < d1sq ? 1 : 2;
       const meshes = this._lods[lv];

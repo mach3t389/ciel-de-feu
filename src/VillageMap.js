@@ -759,12 +759,19 @@ export class VillageMap {
     return placed[0] + placed[1];
   }
 
-  updateLOD(camPos) {
+  updateLOD(camPos, fwdX = 0, fwdZ = -1, ultra = false) {
     const x = camPos.x, z = camPos.z;
-    this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 3000));
-    this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500, 1000, 2000));
-    this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  800, 1500));
-    this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 800, 2000, 4000));
+    if (ultra) {
+      this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 300,  600, 1000, fwdX, fwdZ));
+      this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 200,  400,  600, fwdX, fwdZ));
+      this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 150,  300,  400, fwdX, fwdZ));
+      this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 400,  800, 2000, fwdX, fwdZ));
+    } else {
+      this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 2500, fwdX, fwdZ));
+      this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500,  800, 1200, fwdX, fwdZ));
+      this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  600,  800, fwdX, fwdZ));
+      this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 800, 2000, 4000, fwdX, fwdZ));
+    }
   }
 
   // ── Montgolfières — au-dessus des villages ─────────────────────────────────

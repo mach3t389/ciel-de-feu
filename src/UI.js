@@ -501,24 +501,27 @@ export class UI {
     const groundTargets = extra.groundTargets || [];
     const enemyBase     = extra.enemyBase || null;
     const villages      = extra.villages || [];
+    const skipSlow      = extra.skipSlow ?? false;
     this._leadSpeed     = extra.leadSpeed || 950;
     if (stats && extra.survivalWave != null) stats.survivalWave = extra.survivalWave;
     const active = enemies.filter(e => !e.isDead && e.mesh);
-    if ((active.length || groundTargets.length || enemyBase || villages.length) && camera) {
-      this._drawRadar(active, player, groundTargets, enemyBase, villages);
-    }
-    if (camera && !player.isDead) {
-      if (!hideMarkers) {
-        if (active.length || basePos || groundTargets.length || villages.length) {
-          this._drawWorldMarkers(active, player, camera, basePos, groundTargets, villages);
+    if (!skipSlow) {
+      if ((active.length || groundTargets.length || enemyBase || villages.length) && camera) {
+        this._drawRadar(active, player, groundTargets, enemyBase, villages);
+      }
+      if (camera && !player.isDead) {
+        if (!hideMarkers) {
+          if (active.length || basePos || groundTargets.length || villages.length) {
+            this._drawWorldMarkers(active, player, camera, basePos, groundTargets, villages);
+          } else if (this._worldCanvas) {
+            this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
+          }
         } else if (this._worldCanvas) {
           this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
         }
-      } else if (this._worldCanvas) {
+      } else if (!camera && this._worldCanvas) {
         this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
       }
-    } else if (!camera && this._worldCanvas) {
-      this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
     }
     this._drawHitMarker();
     this._updateEngineStatus(player);

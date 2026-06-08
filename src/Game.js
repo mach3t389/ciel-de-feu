@@ -355,8 +355,9 @@ export class Game {
     this._fpsBuffer         = [];
     this._visibleMeshCount  = 0;
     this._visibleMeshTick   = 0;
-    this._lowGraphics       = localStorage.getItem('lowGraphics') === '1';
-    if (this._lowGraphics) this._setLowGraphics(true, false);
+    this._lowGraphics       = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
+    this._camFwd            = new THREE.Vector3();
+    if (this._lowGraphics > 0) this._setLowGraphics(this._lowGraphics, false);
 
     const pickSkill = () => {
       if (isPractice || isFFA) return 'regular';
@@ -476,7 +477,7 @@ export class Game {
 
     this._keydownHandler = (e) => {
       if (e.key === 'F3') { e.preventDefault(); this._togglePerfDebug(); return; }
-      if (e.key === 'F4') { e.preventDefault(); this._setLowGraphics(!this._lowGraphics); return; }
+      if (e.key === 'F4') { e.preventDefault(); this._setLowGraphics((this._lowGraphics + 1) % 3); return; }
       if (e.key === 'F5') { e.preventDefault(); this._toggleTop20(); return; }
       if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
@@ -860,19 +861,32 @@ export class Game {
     if (this._visibleMeshTick >= 60) {
       this._visibleMeshTick = 0;
       let meshN = 0, instN = 0, l0 = 0, l1 = 0, l2 = 0;
+      let dcTerrain = 0, dcCloud = 0, dcTree = 0, dcRock = 0, dcBush = 0, dcBldg = 0;
       this.scene.traverse(o => {
         if (!o.visible) return;
         if (o.isInstancedMesh) {
+          if (o.count <= 0) return;
           instN += o.count; meshN++;
           const lv = o.userData.lodLevel;
           if      (lv === 0) l0 += o.count;
           else if (lv === 1) l1 += o.count;
           else if (lv === 2) l2 += o.count;
-        } else if (o.isMesh || o.isSkinnedMesh) meshN++;
+          const cat = o.userData.category;
+          if      (cat === 'tree')     dcTree++;
+          else if (cat === 'rock')     dcRock++;
+          else if (cat === 'bush')     dcBush++;
+          else if (cat === 'building') dcBldg++;
+        } else if (o.isMesh || o.isSkinnedMesh) {
+          meshN++;
+          const cat = o.userData.category;
+          if      (cat === 'terrain') dcTerrain++;
+          else if (cat === 'cloud')   dcCloud++;
+        }
       });
       this._visibleMeshCount   = meshN;
       this._instanceTotalCount = instN;
       this._lodStats = { l0, l1, l2 };
+      this._dcStats  = { dcTerrain, dcCloud, dcTree, dcRock, dcBush, dcBldg };
     }
 
     const info  = this.renderer.info.render;
@@ -881,7 +895,6 @@ export class Game {
       : '—';
     const planes = this.enemies.filter(e => !e.isDead).length + (this.player.isDead ? 0 : 1);
     const triK   = (info.triangles / 1000).toFixed(1);
-    const gfx    = this._lowGraphics ? 'ON  [F4 désactiver]' : 'OFF [F4 activer]';
 
     // Stats carte et défense sol
     const ms = this._villageMap?.debugStats ?? {};
@@ -889,6 +902,10 @@ export class Game {
     const triK2 = n => ((n ?? 0) / 1000).toFixed(1) + 'k';
 
     const ls   = this._lodStats ?? {};
+    const dc   = this._dcStats  ?? {};
+    const visibleClouds = this._cloudMeshes?.filter(c => c.mesh.visible).length ?? '—';
+    const gfxLabels = ['OFF [F4 LOW]', 'LOW [F4 ULTRA]', 'ULTRA [F4 désact.]'];
+    const gfx = gfxLabels[this._lowGraphics] ?? '—';
     const sep = '─────────────────────────────────';
     const rows = [
       '[F3] PERFORMANCE DEBUG',
@@ -905,14 +922,17 @@ export class Game {
       `LOD1 instances   ${ls.l1 ?? '—'}`,
       `LOD2 instances   ${ls.l2 ?? '—'}`,
       sep,
+      `Terrain DC       ${dc.dcTerrain ?? '—'}`,
+      `Nuages           ${visibleClouds} DC:${dc.dcCloud ?? '—'}`,
+      sep,
       `Avions actifs    ${planes}`,
       `AI Updates/frame ${this._frameAIUpdates}`,
       `Collision checks ${this._frameCollisionChecks}`,
       sep,
-      `Arbres           ${ms.trees    ?? '—'} (${triK2(ms.triTrees)})`,
-      `Roches           ${ms.rocks    ?? '—'} (${triK2(ms.triRocks)})`,
-      `Buissons         ${ms.bushes   ?? '—'} (${triK2(ms.triBushes)})`,
-      `Bâtiments        ${ms.buildings ?? '—'} (${triK2(ms.triBuildings)})`,
+      `Arbres     ${ms.trees    ?? '—'} (${triK2(ms.triTrees)}) DC:${dc.dcTree ?? '—'}`,
+      `Roches     ${ms.rocks    ?? '—'} (${triK2(ms.triRocks)}) DC:${dc.dcRock ?? '—'}`,
+      `Buissons   ${ms.bushes   ?? '—'} (${triK2(ms.triBushes)}) DC:${dc.dcBush ?? '—'}`,
+      `Bâtiments  ${ms.buildings ?? '—'} (${triK2(ms.triBuildings)}) DC:${dc.dcBldg ?? '—'}`,
       `Tourelles        ${gs.turrets  ?? '—'}`,
       `Tanks            ${gs.tanks    ?? '—'}`,
       `Véhicules        ${gs.vehicles ?? '—'}`,
@@ -952,7 +972,7 @@ export class Game {
       else if (isSep)       col = '#2a2818';
       else if (r.startsWith('FPS')) {
         col = fps >= 55 ? '#88dd88' : fps >= 30 ? '#ddcc66' : '#dd6666';
-      } else if (r.startsWith('LOW')) col = this._lowGraphics ? '#88dd88' : '#d4c88a';
+      } else if (r.startsWith('LOW')) col = this._lowGraphics === 2 ? '#dd8844' : this._lowGraphics === 1 ? '#88dd88' : '#d4c88a';
       ctx.fillStyle = col;
       if (!isSep) ctx.fillText(r, pad, pad + i * lh + lh - 3);
       else {
@@ -962,26 +982,29 @@ export class Game {
     });
   }
 
-  // enabled=true : basse qualité ; save=true (défaut) : persiste dans localStorage
-  _setLowGraphics(enabled, save = true) {
-    this._lowGraphics = enabled;
-    if (save) localStorage.setItem('lowGraphics', enabled ? '1' : '0');
+  // level 0=normal, 1=low, 2=ultra ; save=true (défaut) : persiste dans localStorage
+  _setLowGraphics(level, save = true) {
+    this._lowGraphics = level;
+    if (save) localStorage.setItem('lowGraphics', String(level));
 
-    // Nuages
-    this._cloudMeshes?.forEach(m => { m.mesh.visible = !enabled; });
+    const isLow   = level >= 1;
+    const isUltra = level >= 2;
 
-    // Brouillard — réduit la distance de rendu pour masquer les objets lointains
+    // Nuages (désactivés en low et ultra)
+    this._cloudMeshes?.forEach(m => { m.mesh.visible = !isLow; });
+
+    // Brouillard
     if (this.scene.fog) {
-      this.scene.fog.near = enabled ? 200 : 300;
-      this.scene.fog.far  = enabled ? 900 : (this._isLowEnd ? 1600 : 2200);
+      this.scene.fog.near = isUltra ? 400 : isLow ? 200 : 300;
+      this.scene.fog.far  = isUltra ? 900 : isLow ? 1200 : (this._isLowEnd ? 1600 : 2200);
     }
 
     // Résolution de rendu
-    this.renderer.setPixelRatio(enabled ? 0.75 : Math.min(window.devicePixelRatio, 1.0));
+    this.renderer.setPixelRatio(isUltra ? 0.6 : isLow ? 0.75 : Math.min(window.devicePixelRatio, 1.0));
 
     // Flash de tir (coûteux en overdraw)
     if (this._muzzleSprite) this._muzzleSprite.visible = false;
-    this._muzzleLowGfx = enabled;
+    this._muzzleLowGfx = isLow;
   }
 
   // action : 'menu' (défaut) ou 'replay' (main.js relance la même config).
@@ -1154,6 +1177,7 @@ export class Game {
     this.renderer.info.reset();
     this._frameCollisionChecks = 0;
     this._frameAIUpdates       = 0;
+    this._frameCount           = ((this._frameCount ?? 0) + 1) & 0xFFFF;
 
     // ── Timer de match (Versus / Équipes) ────────────────────────────────────
     if (this._timeRemaining !== null && !this._missionComplete) {
@@ -1274,7 +1298,15 @@ export class Game {
       ? this._groundDefense.units.filter(u => !u.isDead && u.team === 'ally')
       : [];
     for (const enemy of this.enemies) {
-      enemy.update(delta, this.player.position, allyGroundTargets);
+      // Throttle IA des ennemis vivants lointains : 2000m+ → 1/4 frames, 1000m+ → 1/2 frames
+      let skipAI = false;
+      if (!enemy.isDead) {
+        const d2 = this.player.position.distanceToSquared(enemy.position);
+        const fc = this._frameCount;
+        if      (d2 > 4000000 && (fc & 3) !== 0) skipAI = true;
+        else if (d2 > 1000000 && (fc & 1) !== 0) skipAI = true;
+      }
+      if (!skipAI) enemy.update(delta, this.player.position, allyGroundTargets);
       this._frameAIUpdates++;
 
       if (!enemy.isDead) {
@@ -1407,7 +1439,8 @@ export class Game {
         this._lodUpdateTimer = (this._lodUpdateTimer ?? 0) + 1;
         if (this._lodUpdateTimer >= 4) {
           this._lodUpdateTimer = 0;
-          this._villageMap.updateLOD(this.camera.position);
+          this._camFwd.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+          this._villageMap.updateLOD(this.camera.position, this._camFwd.x, this._camFwd.z, this._lowGraphics >= 2);
         }
       }
     }
@@ -1566,6 +1599,9 @@ export class Game {
       basePos   = _aps?.[myApIdx]?.center ?? null;
       enemyBase = _aps?.[myApIdx === 0 ? 1 : 0]?.center ?? null;
     }
+    this._uiSlowTimer = (this._uiSlowTimer ?? 0) + delta;
+    const _doSlowUI = this._uiSlowTimer >= 0.1; // radar + marqueurs à 10 Hz
+    if (_doSlowUI) this._uiSlowTimer -= 0.1;
     this.ui.update(this.player, allTargets, this.camera, this.stats, basePos, {
       groundTargets : this._groundDefense ? this._groundDefense.getEnemyGroundTargets() : [],
       enemyBase,
@@ -1573,6 +1609,7 @@ export class Game {
       leadSpeed     : 950,
       survivalWave  : this._isSurvival ? this._survivalWave : null,
       delta,
+      skipSlow      : !_doSlowUI,
     });
 
     // Debug IA
@@ -1679,6 +1716,7 @@ export class Game {
 
       const mesh = new THREE.Mesh(merged, mat);
       mesh.position.set(cx, cy, cz);
+      mesh.userData.category = 'cloud';
       this.scene.add(mesh);
       this._cloudMeshes.push({ mesh, x: cx, z: cz });
     });
@@ -1899,6 +1937,7 @@ export class Game {
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
+    mesh.userData.category = 'terrain';
     this.scene.add(mesh);
 
     this.getTerrainHeight = getH;
