@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="10" fill="#1a2a4a"/>
+  <text x="32" y="34" font-size="42" text-anchor="middle"
+        dominant-baseline="central" transform="scale(-1,1) translate(-64,0)"
+        fill="#d4c88a" font-family="'Segoe UI Symbol','Apple Color Emoji','Noto Sans Symbols2',sans-serif">✈</text>
+</svg>
