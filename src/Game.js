@@ -1128,6 +1128,7 @@ export class Game {
         }
       } else {
         const aliveCount = this.enemies.filter(e => !e.isDead).length;
+        this.ui.updateSurvivalAlive(aliveCount);
         if (aliveCount === 0) {
           this._survivalBetweenWaves = true;
           this._survivalCountdown    = 10;

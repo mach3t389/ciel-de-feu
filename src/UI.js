@@ -2240,22 +2240,37 @@ export class UI {
         fontFamily: '"Courier New",monospace',
         textAlign: 'center',
         pointerEvents: 'none', zIndex: '600',
+        transition: 'opacity 0.4s',
       });
+      const waveTitle = document.createElement('div');
+      waveTitle.style.cssText = 'font-size:28px;letter-spacing:8px;color:#d4c88a;text-shadow:0 0 20px rgba(212,200,138,0.8);';
+      this._survivalBannerTitle = waveTitle;
+      const waveCount = document.createElement('div');
+      waveCount.style.cssText = 'font-size:13px;letter-spacing:4px;color:#a09050;margin-top:4px;';
+      this._survivalBannerCount = waveCount;
+      this._survivalBanner.appendChild(waveTitle);
+      this._survivalBanner.appendChild(waveCount);
       document.body.appendChild(this._survivalBanner);
     }
-    this._survivalBanner.innerHTML =
-      `<div style="font-size:28px;letter-spacing:8px;color:#d4c88a;text-shadow:0 0 20px rgba(212,200,138,0.8);">` +
-      `${t('waveLabel')} ${wave}</div>` +
-      `<div style="font-size:13px;letter-spacing:4px;color:#a09050;margin-top:4px;">${count} ${t('enemies')}</div>`;
-    this._survivalBanner.style.opacity = '1';
     clearTimeout(this._survivalBannerTimer);
-    this._survivalBannerTimer = setTimeout(() => {
-      if (this._survivalBanner) this._survivalBanner.style.opacity = '0';
-    }, 3000);
+    this._survivalBannerTitle.textContent = `${t('waveLabel')} ${wave}`;
+    this._survivalBannerCount.textContent = `${count} ${t('enemies')}`;
+    this._survivalBanner.style.opacity = '1';
+  }
+
+  updateSurvivalAlive(count) {
+    if (!this._survivalBannerCount) return;
+    this._survivalBannerCount.textContent = `${count} ${count <= 1 ? t('enemy') : t('enemies')}`;
+    if (this._survivalBanner) this._survivalBanner.style.opacity = '1';
   }
 
   // ── Compte à rebours entre vagues ────────────────────────────────────────
   showSurvivalCountdown(secs) {
+    // Masquer le compteur d'ennemis dès que le compte à rebours commence
+    if (secs > 0 && this._survivalBanner) {
+      clearTimeout(this._survivalBannerTimer);
+      this._survivalBanner.style.opacity = '0';
+    }
     if (!this._survivalCdEl) {
       this._survivalCdEl = document.createElement('div');
       Object.assign(this._survivalCdEl.style, {
