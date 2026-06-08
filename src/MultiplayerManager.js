@@ -16,6 +16,8 @@ class RemotePlayer {
     this.isDead   = false;
     this.hp       = 100;
     this.speed    = 40;
+    this.kills    = 0;   // synchronisé via score_update
+    this.deaths   = 0;
 
     this.pivot = new THREE.Object3D();
     scene.add(this.pivot);
@@ -218,6 +220,17 @@ export class MultiplayerManager {
     this._network.on('enemy_killed', ({ netId }) => {
       this._emit('enemy_killed', { netId });
     });
+
+    // Scores des autres joueurs (kills / deaths) pour le tableau des scores
+    this._network.on('score_update', ({ id, kills, deaths, name }) => {
+      const p = this._players.get(id);
+      if (p) {
+        if (kills  !== undefined) p.kills  = kills;
+        if (deaths !== undefined) p.deaths = deaths;
+        if (name) p.name = name;
+        this._emit('scoreboard_changed', {});
+      }
+    });
   }
 
   addRemotePlayer(id, info) {
@@ -245,6 +258,12 @@ export class MultiplayerManager {
         dead      : player.isDead,
       },
     });
+  }
+
+  // Diffuse notre score (kills/deaths) — appelé à chaque changement
+  sendScore(kills, deaths, name) {
+    if (!this._network) return;
+    this._network.send('score_update', { kills, deaths, name });
   }
 
   sendBullet(position, quaternion) {

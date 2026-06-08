@@ -352,6 +352,12 @@ export class Player {
         if (this.onHelpToggle) this.onHelpToggle();
         this.keys.h_prev = true;
       }
+      // Tab : tableau des scores (edge trigger)
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        if (!this.keys.tab_prev && this.onScoreboardToggle) this.onScoreboardToggle();
+        this.keys.tab_prev = true;
+      }
       // R : vue arrière (maintenir)
       if (e.key === 'r' || e.key === 'R') this.keys.lookBack = true;
       // V : vue libre souris (maintenir)
@@ -370,6 +376,7 @@ export class Player {
       if (e.key === ' ')       this.keys.space  = false;
       if (e.key === 'c' || e.key === 'C') this.keys.c_prev = false;
       if (e.key === 'h' || e.key === 'H') this.keys.h_prev = false;
+      if (e.key === 'Tab') this.keys.tab_prev = false;
       if (e.key === 'r' || e.key === 'R') this.keys.lookBack = false;
       if (e.key === 'v' || e.key === 'V') this._vKeyActive = false;
     };
@@ -670,10 +677,15 @@ export class Player {
     this._gpBtnB_prev = btnB;
     this._gpBtnY_prev = btnY;
 
-    // ── Menu (btn 9) → pause ─────────────────────────────────────────────
+    // ── Menu / Start (btn 9) → pause ─────────────────────────────────────
     const btnMenu = gp.buttons[9]?.pressed ?? false;
     if (btnMenu && !this._gpBtnMenu_prev && this.onPause) this.onPause();
     this._gpBtnMenu_prev = btnMenu;
+
+    // ── Select / View (btn 8) → tableau des scores ───────────────────────
+    const btnSelect = gp.buttons[8]?.pressed ?? false;
+    if (btnSelect && !this._gpBtnSelect_prev && this.onScoreboardToggle) this.onScoreboardToggle();
+    this._gpBtnSelect_prev = btnSelect;
   }
 
   // ── Physique ─────────────────────────────────────────────────────────────

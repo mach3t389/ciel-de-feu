@@ -309,8 +309,18 @@ export class Game {
     // Dégâts reçus → son d'alerte
     this.player.onHit = () => this._audio.playPlayerHit();
 
-    // Bouton Start/Menu manette → pause (sauf en multijoueur PvP)
-    if (!this._config.networkManager) this.player.onPause = () => { if (!this.isPaused) this._setPause(true); };
+    // Bouton Start/Menu manette → pause solo ; en multijoueur → menu ESC
+    // (le callback réel est (re)défini plus bas une fois onQuit/onRespawn connus)
+    this.player.onPause = () => {
+      if (this._config.networkManager) { this._toggleEscMenu?.(); }
+      else if (!this.isPaused) this._setPause(true);
+    };
+
+    // Tab / Select → tableau des scores
+    this.player.onScoreboardToggle = () => {
+      this.ui.toggleScoreboard();
+      this.ui.updateScoreboardData(this._buildScoreboardRows());
+    };
 
     // C : cycle caméra — 0=poursuite, 1=cockpit, 2=cinématique lointaine
     this._camMode = 0;
@@ -510,6 +520,23 @@ export class Game {
       }
     };
 
+    // Menu ESC multijoueur — toggle unifié (clavier, manette, perte de pointer lock)
+    this._escMenuVisible = false;
+    this._toggleEscMenu = (forceState) => {
+      const visible = forceState !== undefined ? forceState : !this._escMenuVisible;
+      if (visible === this._escMenuVisible) return;
+      this._escMenuVisible = visible;
+      this.ui.showEscMenu(visible, onQuit, () => {
+        this._toggleEscMenu(false);
+        this._respawn();
+      }, () => this._toggleEscMenu(false));
+      if (visible) document.exitPointerLock();
+      else {
+        this._pauseCooldownUntil = performance.now() + 400; // évite la réouverture immédiate
+        document.body.requestPointerLock();
+      }
+    };
+
     this._keydownHandler = (e) => {
       if (e.key === 'F3') { e.preventDefault(); this._togglePerfDebug(); return; }
       if (e.key === 'F4') { e.preventDefault(); this._setLowGraphics((this._lowGraphics + 1) % 3); return; }
@@ -518,17 +545,8 @@ export class Game {
       if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
       if (isPvP) {
-        // Multijoueur : Echap ouvre l'overlay ESC sans pause
-        if (key === 'Escape' || key === 'p' || key === 'P') {
-          const visible = this._escMenuVisible = !this._escMenuVisible;
-          this.ui.showEscMenu(visible, onQuit, () => {
-            this._escMenuVisible = false;
-            this.ui.showEscMenu(false);
-            this._respawn();
-          });
-          if (visible) document.exitPointerLock();
-          else         document.body.requestPointerLock();
-        }
+        // Multijoueur : Echap / P bascule le menu ESC (le jeu continue derrière)
+        if (key === 'Escape' || key === 'p' || key === 'P') this._toggleEscMenu();
       } else {
         if ((key === 'p' || key === 'P') && !this.isPaused) this._setPause(true);
         if (key === 'i' || key === 'I') {
@@ -538,14 +556,19 @@ export class Game {
       }
     };
     document.addEventListener('keydown', this._keydownHandler);
-    this._escMenuVisible = false;
 
-    // Pointer lock perdu → pause automatique (sauf multijoueur)
+    // Pointer lock perdu :
+    //  - solo → pause automatique
+    //  - multijoueur → ouvre le menu ESC (capte le 1er Echap consommé par le navigateur
+    //    pour déverrouiller la souris → plus besoin d'appuyer deux fois)
     this._pauseCooldownUntil = 0;
     this._pllHandler = () => {
-      if (this.player.isDead || this._missionComplete || isPvP) return;
-      if (!document.pointerLockElement && !this.isPaused
-          && performance.now() > this._pauseCooldownUntil) {
+      if (this.player.isDead || this._missionComplete) return;
+      if (document.pointerLockElement) return;
+      if (performance.now() <= this._pauseCooldownUntil) return;
+      if (isPvP) {
+        if (!this._escMenuVisible) this._toggleEscMenu(true);
+      } else if (!this.isPaused) {
         this._setPause(true);
       }
     };
@@ -1233,6 +1256,21 @@ export class Game {
     document.body.requestPointerLock();
   }
 
+  // Lignes du tableau des scores : joueur local + joueurs distants
+  _buildScoreboardRows() {
+    const rows = [{
+      name   : this._config.pilotName || 'VOUS',
+      kills  : this.stats?.kills ?? 0,
+      deaths : this.stats?.deaths ?? 0,
+      isLocal: true,
+      isDead : this.player.isDead,
+    }];
+    for (const rp of (this._multiplayerManager?.getRemotePlayers() ?? [])) {
+      rows.push({ name: rp.name, kills: rp.kills ?? 0, deaths: rp.deaths ?? 0, isLocal: false, isDead: rp.isDead });
+    }
+    return rows;
+  }
+
   // ── Mode spectateur (survie multijoueur) ──────────────────────────────────
   _enterSpectator() {
     this._spectatorMode   = true;
@@ -1494,7 +1532,16 @@ export class Game {
         if      (d2 > 4000000 && fc % 12 !== 0) skipAI = true;
         else if (d2 > 1000000 && fc % 3  !== 0) skipAI = true;
       }
-      if (!skipAI) enemy.update(delta, targetPos, allyGroundTargets);
+      if (skipAI) {
+        // On accumule le temps sauté pour le rendre à la prochaine mise à jour,
+        // sinon les ennemis lointains avançaient ~12× trop lentement (ils
+        // n'arrivaient jamais — surtout en multijoueur où beaucoup spawnent loin).
+        enemy._accDelta = (enemy._accDelta ?? 0) + delta;
+      } else {
+        const dt = Math.min(0.1, delta + (enemy._accDelta ?? 0));
+        enemy._accDelta = 0;
+        enemy.update(dt, targetPos, allyGroundTargets);
+      }
       this._frameAIUpdates++;
 
       if (!enemy.isDead) {
@@ -1622,7 +1669,16 @@ export class Game {
         this._multiplayerManager.sendLocalState(this.player);
         this._netSyncTimer = 0;
       }
+      // Diffuse notre score dès qu'il change → tableau des scores synchronisé
+      const k = this.stats?.kills ?? 0, d = this.stats?.deaths ?? 0;
+      if (k !== this._lastSentKills || d !== this._lastSentDeaths) {
+        this._lastSentKills = k; this._lastSentDeaths = d;
+        this._multiplayerManager.sendScore(k, d, this._config.pilotName);
+      }
     }
+
+    // Tableau des scores ouvert → rafraîchi en temps réel
+    if (this.ui._scoreboardVisible) this.ui.updateScoreboardData(this._buildScoreboardRows());
 
     // Mise à jour carte Village (ballons, etc.) + LOD tous les 4 frames
     if (this._villageMap) {
@@ -2341,6 +2397,8 @@ export class Game {
     this.ui?._survivalBanner?.remove();
     this.ui?._survivalCdEl?.remove();
     this.ui?._spectatorEl?.remove();
+    this.ui?._scoreboardOverlay?.remove();
+    this.ui?._noticeStack?.remove();
     this.ui?._alertFuelEl?.remove();
     this.ui?._alertHealthEl?.remove();
     this.ui?.setMatchTimer(0); // cache le timer

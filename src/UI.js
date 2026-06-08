@@ -458,9 +458,10 @@ export class UI {
 
   // Overlay ESC pour le multijoueur — même présentation que le menu pause solo
   // (le jeu continue derrière : pas de gel, mais réapparition possible)
-  showEscMenu(visible, onQuit = null, onRespawn = null) {
+  showEscMenu(visible, onQuit = null, onRespawn = null, onResume = null) {
     if (onQuit    !== null) this._escQuitCb    = onQuit;
     if (onRespawn !== null) this._escRespawnCb = onRespawn;
+    if (onResume  !== null) this._escResumeCb  = onResume;
 
     if (!this._escOverlay) {
       const wrap = document.createElement('div');
@@ -513,7 +514,11 @@ export class UI {
       };
 
       const btnResume = mkPBtn(t('resume'), C.cream, true);
-      btnResume.addEventListener('click', (e) => { e.stopPropagation(); this.showEscMenu(false); });
+      btnResume.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this._escResumeCb) this._escResumeCb();   // resync Game + re-lock souris
+        else this.showEscMenu(false);
+      });
 
       const btnRespawn = mkPBtn(t('respawnBtn'), C.dimCream);
       btnRespawn.addEventListener('click', (e) => {
@@ -724,6 +729,20 @@ export class UI {
 
     // Scoreboard (enfant du conteneur central, pas de position propre)
     this._topCenter.appendChild(this._buildScoreboard());
+
+    // Compteur de vague persistant (survie uniquement)
+    this._waveTopEl = document.createElement('div');
+    Object.assign(this._waveTopEl.style, {
+      fontFamily   : '"Courier New",monospace',
+      fontSize     : '14px', letterSpacing: '4px', fontWeight: 'bold',
+      color        : '#d4c88a',
+      background   : 'rgba(8,8,4,0.78)',
+      border       : '1px solid #4a4030', borderRadius: '3px',
+      padding      : '4px 18px',
+      display      : 'none', pointerEvents: 'none', whiteSpace: 'nowrap',
+      boxShadow    : 'inset 0 0 10px rgba(0,0,0,0.7)',
+    });
+    this._topCenter.appendChild(this._waveTopEl);
 
     // Timer de match (caché par défaut, s'affiche sous le scoreboard)
     this._timerEl = document.createElement('div');
@@ -1786,15 +1805,17 @@ export class UI {
     ctx.restore();
   }
 
-  // ── Scoreboard (haut-centre) ──────────────────────────────────────────────
+  // ── Scoreboard (haut-centre) — désormais réservé au score d'équipe TDM ─────
+  // Le score individuel kills/deaths vit dans le tableau central (TAB / Select).
   _buildScoreboard() {
     const el = document.createElement('div');
+    this._topScoreboardEl = el;
     Object.assign(el.style, {
       background : 'rgba(8,8,4,0.78)',
       border     : '1px solid #4a4030',
       borderRadius: '3px',
       padding    : '6px 20px',
-      display    : 'flex',
+      display    : 'none',   // masqué par défaut (affiché seulement en TDM)
       gap        : '28px',
       fontFamily : '"Courier New",monospace',
       boxShadow  : 'inset 0 0 10px rgba(0,0,0,0.7)',
@@ -1885,7 +1906,9 @@ export class UI {
 
   // Active l'affichage TDM : playerTeam = 'team1' | 'team2'
   setTDMMode(enabled, playerTeam = 'team1') {
-    if (this._normalScoreGroup) this._normalScoreGroup.style.display = enabled ? 'none' : 'flex';
+    // Le bandeau haut n'affiche plus que le score d'équipe TDM (sinon masqué)
+    if (this._topScoreboardEl) this._topScoreboardEl.style.display = enabled ? 'flex' : 'none';
+    if (this._normalScoreGroup) this._normalScoreGroup.style.display = 'none';
     if (this._tdmScoreGroup)    this._tdmScoreGroup.style.display    = enabled ? 'flex' : 'none';
     if (!enabled) return;
 
@@ -1916,18 +1939,63 @@ export class UI {
   }
 
   _updateScoreboard(stats) {
-    const k = document.getElementById('score-kills');
-    const d = document.getElementById('score-deaths');
-    if (k) k.textContent = stats.kills;
-    if (d) {
-      if (this._survivalMode) {
-        d.textContent  = stats.survivalWave ?? 0;
-        d.style.color  = '#d4c88a';
-      } else {
-        d.textContent = stats.deaths;
-        d.style.color = stats.deaths > 0 ? '#c84040' : '#d4c88a';
-      }
+    // Le score individuel est désormais dans le tableau central (TAB / Select).
+    // Ici on ne gère plus que le compteur de vague persistant en survie.
+    if (this._survivalMode && this._waveTopEl) {
+      this._waveTopEl.textContent = `${t('waveLabel')} ${stats.survivalWave ?? 0}`;
     }
+  }
+
+  // ── Tableau des scores central (TAB / Select) ─────────────────────────────
+  // rows : [{ name, kills, deaths, isLocal, isDead }]
+  toggleScoreboard() { this.showScoreboard(!this._scoreboardVisible); }
+
+  showScoreboard(visible) {
+    this._scoreboardVisible = visible;
+    if (!this._scoreboardOverlay) {
+      const wrap = document.createElement('div');
+      Object.assign(wrap.style, {
+        position: 'fixed', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        fontFamily: '"Courier New",monospace',
+        background: 'rgba(8,9,7,0.90)',
+        border: '1px solid #4a4030', borderRadius: '4px',
+        boxShadow: '0 10px 50px rgba(0,0,0,0.7)',
+        padding: '18px 26px', minWidth: '340px',
+        pointerEvents: 'none', zIndex: '450', display: 'none',
+      });
+      const title = document.createElement('div');
+      title.textContent = t('scoreboardTitle');
+      title.style.cssText = 'font-size:12px;letter-spacing:5px;color:#d4c88a;text-align:center;margin-bottom:12px;';
+      wrap.appendChild(title);
+      this._scoreboardRows = document.createElement('div');
+      wrap.appendChild(this._scoreboardRows);
+      document.body.appendChild(wrap);
+      this._scoreboardOverlay = wrap;
+    }
+    this._scoreboardOverlay.style.display = visible ? 'block' : 'none';
+  }
+
+  updateScoreboardData(rows) {
+    if (!this._scoreboardVisible || !this._scoreboardRows) return;
+    const head =
+      `<div style="display:flex;font-size:8px;letter-spacing:2px;color:#6a6040;border-bottom:1px solid #3a3020;padding-bottom:5px;margin-bottom:5px;">` +
+      `<span style="flex:1;">${t('playerCol')}</span>` +
+      `<span style="width:54px;text-align:center;">${t('elimCol')}</span>` +
+      `<span style="width:54px;text-align:center;">${t('deathCol')}</span></div>`;
+    // Tri : plus d'éliminations en premier
+    const sorted = [...rows].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths));
+    const body = sorted.map(r => {
+      const col   = r.isLocal ? '#9ef060' : (r.isDead ? '#7a6a5a' : '#d4c88a');
+      const op    = r.isDead ? '0.5' : '1';
+      const star  = r.isLocal ? '▸ ' : '';
+      const name  = (star + (r.name || '?')).slice(0, 16);
+      return `<div style="display:flex;align-items:center;font-size:12px;letter-spacing:1px;color:${col};opacity:${op};padding:3px 0;">` +
+        `<span style="flex:1;white-space:nowrap;overflow:hidden;">${name}</span>` +
+        `<span style="width:54px;text-align:center;font-weight:bold;">${r.kills}</span>` +
+        `<span style="width:54px;text-align:center;">${r.deaths}</span></div>`;
+    }).join('');
+    this._scoreboardRows.innerHTML = head + body;
   }
 
   // ── Aide touches (haut-gauche) ────────────────────────────────────────────
@@ -2269,10 +2337,8 @@ export class UI {
 
   setSurvivalMode(v) {
     this._survivalMode = v;
-    // Mettre à jour le label du scoreboard selon le mode
-    if (this._scoreDeathsLabel) {
-      this._scoreDeathsLabel.textContent = v ? t('waves') : t('morts');
-    }
+    // Label de vague persistant en haut, exclusif au mode survie
+    if (this._waveTopEl) this._waveTopEl.style.display = v ? 'block' : 'none';
   }
 
   // ── Indicateur de manche — supprimé, intégré dans le scoreboard ──────────

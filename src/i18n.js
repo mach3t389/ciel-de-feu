@@ -208,6 +208,7 @@ const LANGS = {
       'V (maintenir) — Vue libre (clic pour lock souris + bouger)',
       'R (maintenir) — Vue arrière',
       'C — Changer de caméra (poursuite / cockpit / cinématique)',
+      'Tab — Tableau des scores (manette : Select)',
       'Échap — Pause',
       '— DEBUG —',
       'F3 — Afficher/masquer les stats de performance',
@@ -235,6 +236,10 @@ const LANGS = {
     respawnNextWave : 'RÉAPPARAÎTRE À LA PROCHAINE MANCHE',
     playerJoinedSuffix : 'a rejoint la partie',
     playerLeftSuffix   : 'a quitté la partie',
+    scoreboardTitle    : 'TABLEAU DES SCORES',
+    playerCol          : 'JOUEUR',
+    elimCol            : 'ÉLIM.',
+    deathCol           : 'MORTS',
   },
 
   en: {
@@ -445,6 +450,7 @@ const LANGS = {
       'V (hold) — Free look (click to lock mouse, then move)',
       'R (hold) — Look back',
       'C — Change camera (chase / cockpit / cinematic)',
+      'Tab — Scoreboard (gamepad: Select)',
       'Escape — Pause',
       '— DEBUG —',
       'F3 — Show/hide performance overlay',
@@ -472,6 +478,10 @@ const LANGS = {
     respawnNextWave : 'RESPAWN AT NEXT WAVE',
     playerJoinedSuffix : 'joined the game',
     playerLeftSuffix   : 'left the game',
+    scoreboardTitle    : 'SCOREBOARD',
+    playerCol          : 'PLAYER',
+    elimCol            : 'ELIM.',
+    deathCol           : 'DEATHS',
   },
 };
 
