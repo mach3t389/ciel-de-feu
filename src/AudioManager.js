@@ -420,44 +420,46 @@ export class AudioManager {
     };
 
     // ── Couche 1 : BOOM sub-grave — le choc d'air
-    const bufBoom = mkNoise(0.6);
+    const bufBoom = mkNoise(0.7);
     const srcBoom = ctx.createBufferSource(); srcBoom.buffer = bufBoom;
-    const lpBoom  = ctx.createBiquadFilter(); lpBoom.type = 'lowpass'; lpBoom.frequency.value = 140; lpBoom.Q.value = 0.8;
+    const lpBoom  = ctx.createBiquadFilter(); lpBoom.type = 'lowpass'; lpBoom.frequency.value = 120; lpBoom.Q.value = 0.6;
     const eBoom   = ctx.createGain();
     eBoom.gain.setValueAtTime(0, t);
-    eBoom.gain.linearRampToValueAtTime(2.4 * size, t + 0.008); // attaque ultra-rapide
-    eBoom.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    eBoom.gain.linearRampToValueAtTime(2.0 * size, t + 0.025); // attaque adoucie
+    eBoom.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
     srcBoom.connect(lpBoom); lpBoom.connect(eBoom); eBoom.connect(this._bus.sfx);
 
-    // ── Couche 2 : MID craquant — la déflagration
-    const bufCrk = mkNoise(0.45);
+    // ── Couche 2 : MID chaleureux — la déflagration (moins agressif)
+    const bufCrk = mkNoise(0.5);
     const srcCrk = ctx.createBufferSource(); srcCrk.buffer = bufCrk;
-    const bpCrk  = ctx.createBiquadFilter(); bpCrk.type = 'bandpass'; bpCrk.frequency.value = 800; bpCrk.Q.value = 0.6;
+    const bpCrk  = ctx.createBiquadFilter(); bpCrk.type = 'bandpass'; bpCrk.frequency.value = 520; bpCrk.Q.value = 0.5;
     const eCrk   = ctx.createGain();
-    eCrk.gain.setValueAtTime(1.6 * size, t);
-    eCrk.gain.exponentialRampToValueAtTime(0.001, t + 0.40);
+    eCrk.gain.setValueAtTime(0, t);
+    eCrk.gain.linearRampToValueAtTime(1.1 * size, t + 0.018); // attaque progressive
+    eCrk.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
     srcCrk.connect(bpCrk); bpCrk.connect(eCrk); eCrk.connect(this._bus.sfx);
 
-    // ── Couche 3 : DEBRIS métalliques — tôle arrachée (décroissance lente)
+    // ── Couche 3 : DEBRIS métalliques — tôle arrachée (résonance atténuée)
     const bufDeb = mkNoise(1.0);
     const srcDeb = ctx.createBufferSource(); srcDeb.buffer = bufDeb;
-    const bpDeb  = ctx.createBiquadFilter(); bpDeb.type = 'bandpass'; bpDeb.frequency.value = 2800; bpDeb.Q.value = 4.0;
+    const bpDeb  = ctx.createBiquadFilter(); bpDeb.type = 'bandpass'; bpDeb.frequency.value = 1800; bpDeb.Q.value = 1.8;
     const eDeb   = ctx.createGain();
-    eDeb.gain.setValueAtTime(0.5 * size, t + 0.02);
-    eDeb.gain.exponentialRampToValueAtTime(0.001, t + 0.90);
+    eDeb.gain.setValueAtTime(0, t + 0.03);
+    eDeb.gain.linearRampToValueAtTime(0.32 * size, t + 0.06);
+    eDeb.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
     srcDeb.connect(bpDeb); bpDeb.connect(eDeb); eDeb.connect(this._bus.sfx);
 
     // ── Couche 4 : WHOOSH — souffle de l'explosion qui s'étend
-    const bufWh = mkNoise(0.8);
+    const bufWh = mkNoise(1.0);
     const srcWh = ctx.createBufferSource(); srcWh.buffer = bufWh;
     const lpWh  = ctx.createBiquadFilter(); lpWh.type = 'lowpass';
-    lpWh.frequency.setValueAtTime(300, t);
-    lpWh.frequency.linearRampToValueAtTime(2200, t + 0.12);  // s'ouvre = l'air souffle
-    lpWh.frequency.exponentialRampToValueAtTime(80, t + 0.70);
+    lpWh.frequency.setValueAtTime(250, t);
+    lpWh.frequency.linearRampToValueAtTime(1800, t + 0.15);
+    lpWh.frequency.exponentialRampToValueAtTime(80, t + 0.85);
     const eWh = ctx.createGain();
     eWh.gain.setValueAtTime(0, t);
-    eWh.gain.linearRampToValueAtTime(0.9 * size, t + 0.10);
-    eWh.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+    eWh.gain.linearRampToValueAtTime(1.2 * size, t + 0.12);
+    eWh.gain.exponentialRampToValueAtTime(0.001, t + 0.90);
     srcWh.connect(lpWh); lpWh.connect(eWh); eWh.connect(this._bus.sfx);
 
     srcBoom.start(t); srcCrk.start(t); srcDeb.start(t + 0.02); srcWh.start(t);
