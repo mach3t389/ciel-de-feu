@@ -1302,6 +1302,15 @@ export class Game {
     document.body.requestPointerLock();
   }
 
+  // Volume d'explosion atténué par la distance — pour les kills qui ne sont PAS
+  // les nôtres (IA vs IA, autres joueurs) : plein son tout près, fondu jusqu'au
+  // silence, pour éviter la cacophonie quand ça meurt partout sur la carte.
+  _distExplosionVol(pos, base = 1.0) {
+    const d = this.player.position.distanceTo(pos);
+    const fade = Math.max(0, Math.min(1, 1 - (d - 120) / 680)); // plein <120m, nul >800m
+    return base * fade;
+  }
+
   // Lignes du tableau des scores : joueur local + joueurs distants
   _buildScoreboardRows() {
     const rows = [{
@@ -1518,7 +1527,8 @@ export class Game {
           const wasAlive = !a.isDead;
           a.hit(25); b.age = 999;
           if (wasAlive && a.isDead) {
-            this._audio?.playExplosion(0.8);
+            const v = this._distExplosionVol(a.position, 0.8);
+            if (v > 0.04) this._audio?.playExplosion(v);
             if (this._isTDM) { this._oppTeamScore++; this.ui.setTDMScore(this._myTeamScore, this._oppTeamScore); }
           }
           break;
@@ -1535,7 +1545,8 @@ export class Game {
           const wasAlive = !e.isDead;
           e.hit(25); b.age = 999;
           if (wasAlive && e.isDead) {
-            this._audio?.playExplosion(0.9);
+            const v = this._distExplosionVol(e.position, 0.9);
+            if (v > 0.04) this._audio?.playExplosion(v);
             this._audio?.removeEnemyEngine(e);
             if (this._isTDM) { this._myTeamScore++; this.ui.setTDMScore(this._myTeamScore, this._oppTeamScore); }
           }
