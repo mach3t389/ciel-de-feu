@@ -19,6 +19,8 @@ const C = {
   tickMinor: '#4a4030',
   rivetHi  : '#9a8a60',
   rivetLo  : '#2a2418',
+  // Fond gris uniforme pour tous les overlays (pause, crash, victoire, scoreboard)
+  menuBackdrop : 'rgba(10,11,13,0.66)',
 };
 
 export class UI {
@@ -144,7 +146,7 @@ export class UI {
         position      : 'fixed', inset: '0',
         display       : 'flex', flexDirection: 'column',
         alignItems    : 'center', justifyContent: 'center',
-        background    : 'rgba(0,0,0,0.62)',
+        background    : C.menuBackdrop,
         fontFamily    : '"Courier New",monospace',
         color         : C.cream,
         pointerEvents : 'none',
@@ -469,7 +471,7 @@ export class UI {
         position      : 'fixed', inset: '0',
         display       : 'flex', flexDirection: 'column',
         alignItems    : 'center', justifyContent: 'center',
-        background    : 'rgba(0,0,0,0.62)',
+        background    : C.menuBackdrop,
         fontFamily    : '"Courier New",monospace',
         color         : C.cream,
         pointerEvents : 'none',
@@ -594,7 +596,7 @@ export class UI {
     if (stats) this._updateScoreboard(stats);
     if (player.isDead && !this._deadShown && !this._survivalMode) {
       this._deadShown = true;
-      this._showDead(this._onRespawn);
+      this._showDead(this._onRespawn, { rows: this._scoreboardProvider?.() });
     }
   }
 
@@ -1420,6 +1422,34 @@ export class UI {
           ctx.fillText(distStr, sx, sy - dh*2 - 6);
         }
 
+        // ── Indicateur de visée : où tirer pour toucher une cible mobile ──
+        // Relié au losange par une ligne fine → pas de confusion sur la cible.
+        // Pour une cible lente le cercle reste sur l'avion ; il dévie quand elle file.
+        if (dist < 850 && this._leadSpeed) {
+          const lead = this._leadPoint(player.position, e, this._leadSpeed);
+          const lndc = lead.clone().project(camera);
+          if (lndc.z < 1.0) {
+            const lx = ( lndc.x * 0.5 + 0.5) * W;
+            const ly = (-lndc.y * 0.5 + 0.5) * H;
+            const lr = 7;
+            // distance écran entre l'avion et le point de visée
+            if (Math.hypot(lx - sx, ly - sy) > 4) {
+              ctx.globalAlpha = 0.45;
+              ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(lx, ly);
+              ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
+              ctx.globalAlpha = 1;
+            }
+            ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ff4433'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(lx - lr - 3, ly); ctx.lineTo(lx - lr + 2, ly);
+            ctx.moveTo(lx + lr - 2, ly); ctx.lineTo(lx + lr + 3, ly);
+            ctx.moveTo(lx, ly - lr - 3); ctx.lineTo(lx, ly - lr + 2);
+            ctx.moveTo(lx, ly + lr - 2); ctx.lineTo(lx, ly + lr + 3);
+            ctx.stroke();
+          }
+        }
+
       } else {
         // Flèche sur le bord de l'écran
         const angle = inFront
@@ -1948,42 +1978,13 @@ export class UI {
 
   // ── Tableau des scores central (TAB / Select) ─────────────────────────────
   // rows : [{ name, kills, deaths, isLocal, isDead }]
-  toggleScoreboard() { this.showScoreboard(!this._scoreboardVisible); }
-
-  showScoreboard(visible) {
-    this._scoreboardVisible = visible;
-    if (!this._scoreboardOverlay) {
-      const wrap = document.createElement('div');
-      Object.assign(wrap.style, {
-        position: 'fixed', top: '50%', left: '50%',
-        transform: 'translate(-50%, -50%)',
-        fontFamily: '"Courier New",monospace',
-        background: 'rgba(8,9,7,0.90)',
-        border: '1px solid #4a4030', borderRadius: '4px',
-        boxShadow: '0 10px 50px rgba(0,0,0,0.7)',
-        padding: '18px 26px', minWidth: '340px',
-        pointerEvents: 'none', zIndex: '450', display: 'none',
-      });
-      const title = document.createElement('div');
-      title.textContent = t('scoreboardTitle');
-      title.style.cssText = 'font-size:12px;letter-spacing:5px;color:#d4c88a;text-align:center;margin-bottom:12px;';
-      wrap.appendChild(title);
-      this._scoreboardRows = document.createElement('div');
-      wrap.appendChild(this._scoreboardRows);
-      document.body.appendChild(wrap);
-      this._scoreboardOverlay = wrap;
-    }
-    this._scoreboardOverlay.style.display = visible ? 'block' : 'none';
-  }
-
-  updateScoreboardData(rows) {
-    if (!this._scoreboardVisible || !this._scoreboardRows) return;
+  // HTML réutilisable (scoreboard en jeu ET écrans de fin de partie)
+  _scoreboardHTML(rows) {
     const head =
       `<div style="display:flex;font-size:8px;letter-spacing:2px;color:#6a6040;border-bottom:1px solid #3a3020;padding-bottom:5px;margin-bottom:5px;">` +
       `<span style="flex:1;">${t('playerCol')}</span>` +
       `<span style="width:54px;text-align:center;">${t('elimCol')}</span>` +
       `<span style="width:54px;text-align:center;">${t('deathCol')}</span></div>`;
-    // Tri : plus d'éliminations en premier
     const sorted = [...rows].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths));
     const body = sorted.map(r => {
       const col   = r.isLocal ? '#9ef060' : (r.isDead ? '#7a6a5a' : '#d4c88a');
@@ -1995,7 +1996,40 @@ export class UI {
         `<span style="width:54px;text-align:center;font-weight:bold;">${r.kills}</span>` +
         `<span style="width:54px;text-align:center;">${r.deaths}</span></div>`;
     }).join('');
-    this._scoreboardRows.innerHTML = head + body;
+    return head + body;
+  }
+
+  showScoreboard(visible) {
+    this._scoreboardVisible = visible;
+    if (!this._scoreboardOverlay) {
+      // Plein écran avec fond gris uniforme (cohérent avec pause / crash)
+      const wrap = document.createElement('div');
+      Object.assign(wrap.style, {
+        position: 'fixed', inset: '0',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: C.menuBackdrop,
+        fontFamily: '"Courier New",monospace',
+        pointerEvents: 'none', zIndex: '450',
+      });
+      const panel = document.createElement('div');
+      panel.style.cssText = `background:rgba(11,12,10,0.92);border:1px solid #4a4030;border-radius:4px;` +
+        `box-shadow:0 10px 50px rgba(0,0,0,0.7);padding:18px 26px;min-width:340px;`;
+      const title = document.createElement('div');
+      title.textContent = t('scoreboardTitle');
+      title.style.cssText = 'font-size:12px;letter-spacing:5px;color:#d4c88a;text-align:center;margin-bottom:12px;';
+      panel.appendChild(title);
+      this._scoreboardRows = document.createElement('div');
+      panel.appendChild(this._scoreboardRows);
+      wrap.appendChild(panel);
+      document.body.appendChild(wrap);
+      this._scoreboardOverlay = wrap;
+    }
+    this._scoreboardOverlay.style.display = visible ? 'flex' : 'none';
+  }
+
+  updateScoreboardData(rows) {
+    if (!this._scoreboardVisible || !this._scoreboardRows) return;
+    this._scoreboardRows.innerHTML = this._scoreboardHTML(rows);
   }
 
   // ── Aide touches (haut-gauche) ────────────────────────────────────────────
@@ -2129,7 +2163,7 @@ export class UI {
     if (v) { v.textContent = armor;   v.style.color = armor   === 0 ? '#80e840' : '#d4c88a'; }
   }
 
-  showVictory(stats, onReplay, onMenu) {
+  showVictory(stats, onReplay, onMenu, rows = null) {
     if (this._victoryOverlay) return;
     // Cacher le menu pause s'il est visible
     if (this._pauseOverlay) this._pauseOverlay.style.display = 'none';
@@ -2138,7 +2172,7 @@ export class UI {
     this._victoryOverlay = overlay;
     Object.assign(overlay.style, {
       position:'fixed', inset:'0',
-      background:'radial-gradient(ellipse at center, rgba(6,22,6,0) 0%, rgba(8,28,8,0.14) 55%, rgba(10,38,10,0.30) 100%)',
+      background: C.menuBackdrop,
       display:'flex', alignItems:'center', justifyContent:'center',
       fontFamily:'"Courier New",monospace',
       color:C.cream, pointerEvents:'none',
@@ -2177,45 +2211,53 @@ export class UI {
     card.appendChild(titleEl);
     card.appendChild(sub);
     card.appendChild(statsEl);
-
-    // Boutons identiques à l'écran de mort
-    const mkBtn = (label, borderColor, textColor) => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      Object.assign(b.style, {
-        pointerEvents: 'auto',
-        background   : 'transparent',
-        border       : `1.5px solid ${borderColor}`,
-        color        : textColor,
-        fontFamily   : '"Courier New",monospace',
-        fontSize     : '15px',
-        letterSpacing: '3px',
-        padding      : '12px 32px',
-        cursor       : 'pointer',
-        marginBottom : '12px',
-        minWidth     : '220px',
-        transition   : 'background 0.2s, color 0.2s',
-      });
-      b.addEventListener('mouseenter', () => { b.style.background = borderColor; b.style.color = '#0a0a06'; });
-      b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; b.style.color = textColor; });
-      return b;
-    };
+    if (rows && rows.length) card.appendChild(this._mkEndScoreboard(rows));
 
     if (onReplay) {
-      const btnReplay = mkBtn(t('retry'), '#7a9050', '#a8c878');
+      const btnReplay = this._mkEndButton(t('retry'), '#7a9050', '#a8c878');
       btnReplay.addEventListener('click', () => { overlay.remove(); this._victoryOverlay = null; onReplay(); });
       card.appendChild(btnReplay);
     }
 
-    const btnMenu = mkBtn(t('mainMenu'), '#6a5040', '#a88a78');
-    btnMenu.style.fontSize = '12px';
-    btnMenu.style.padding  = '9px 24px';
+    const btnMenu = this._mkEndButton(t('mainMenu'), '#6a5040', '#a88a78');
     btnMenu.style.marginBottom = '0';
     btnMenu.addEventListener('click', () => { if (onMenu) onMenu(); });
     card.appendChild(btnMenu);
 
     overlay.appendChild(card);
     document.body.appendChild(overlay);
+  }
+
+  // Bouton d'écran de fin — taille uniforme (couleur seule différencie le principal)
+  _mkEndButton(label, borderColor, textColor) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    Object.assign(b.style, {
+      pointerEvents: 'auto',
+      background   : 'transparent',
+      border       : `1.5px solid ${borderColor}`,
+      color        : textColor,
+      fontFamily   : '"Courier New",monospace',
+      fontSize     : '14px',
+      letterSpacing: '3px',
+      padding      : '12px 32px',
+      cursor       : 'pointer',
+      marginBottom : '12px',
+      minWidth     : '240px',
+      textAlign    : 'center',
+      transition   : 'background 0.2s, color 0.2s',
+    });
+    b.addEventListener('mouseenter', () => { b.style.background = borderColor; b.style.color = '#0a0a06'; });
+    b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; b.style.color = textColor; });
+    return b;
+  }
+
+  // Mini tableau des scores intégré aux écrans de fin
+  _mkEndScoreboard(rows) {
+    const box = document.createElement('div');
+    box.style.cssText = 'min-width:300px;margin-bottom:24px;border-top:1px solid #3a3020;padding-top:14px;';
+    box.innerHTML = this._scoreboardHTML(rows);
+    return box;
   }
 
   _showDead(onRespawn, opts = {}) {
@@ -2227,16 +2269,14 @@ export class UI {
       subtitle = t('crashSub'),
       onMenu   = this._onMenu || (() => location.reload()),
       onReplay = null,
+      rows     = null,
     } = opts;
 
     const overlay = document.createElement('div');
     this._deadOverlay = overlay;
     Object.assign(overlay.style, {
       position:'fixed', inset:'0',
-      // Voile rouge nettement atténué — la lisibilité vient du carré, pas du fond
-      background: noRedBg
-        ? 'rgba(0,0,0,0.45)'
-        : 'radial-gradient(ellipse at center, rgba(25,5,5,0) 0%, rgba(35,6,6,0.12) 55%, rgba(48,8,8,0.28) 100%)',
+      background: C.menuBackdrop,   // fond gris uniforme (cohérent avec pause / victoire)
       display:'flex', alignItems:'center', justifyContent:'center',
       fontFamily:'"Courier New",monospace',
       color:C.cream, pointerEvents:'none',
@@ -2264,28 +2304,9 @@ export class UI {
 
     card.appendChild(titleEl);
     card.appendChild(sub);
+    if (rows && rows.length) card.appendChild(this._mkEndScoreboard(rows));
 
-    const mkDeadBtn = (label, borderColor, textColor) => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      Object.assign(b.style, {
-        pointerEvents: 'auto',
-        background   : 'transparent',
-        border       : `1.5px solid ${borderColor}`,
-        color        : textColor,
-        fontFamily   : '"Courier New",monospace',
-        fontSize     : '15px',
-        letterSpacing: '3px',
-        padding      : '12px 32px',
-        cursor       : 'pointer',
-        marginBottom : '12px',
-        minWidth     : '220px',
-        transition   : 'background 0.2s, color 0.2s',
-      });
-      b.addEventListener('mouseenter', () => { b.style.background = borderColor; b.style.color = '#0a0a06'; });
-      b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; b.style.color = textColor; });
-      return b;
-    };
+    const mkDeadBtn = (label, borderColor, textColor) => this._mkEndButton(label, borderColor, textColor);
 
     if (onRespawn) {
       const btnRespawn = mkDeadBtn(t('respawnBtn'), '#d4c88a', '#d4c88a');
@@ -2310,8 +2331,6 @@ export class UI {
     }
 
     const btnMenu = mkDeadBtn(t('mainMenu'), '#6a5040', '#a88a78');
-    btnMenu.style.fontSize = '12px';
-    btnMenu.style.padding  = '9px 24px';
     btnMenu.style.marginBottom = '0';
     btnMenu.addEventListener('click', () => {
       overlay.remove();
@@ -2332,6 +2351,7 @@ export class UI {
       title    : t('gameOver'),
       subtitle : t('gameDone'),
       onMenu   : onQuit,
+      rows     : this._scoreboardProvider?.(),
     });
   }
 
@@ -2496,7 +2516,7 @@ export class UI {
   }
 
   // ── Écran de fin survie ───────────────────────────────────────────────────
-  showSurvivalGameOver(wavesCleared, kills, onQuit, onReplay = null) {
+  showSurvivalGameOver(wavesCleared, kills, onQuit, onReplay = null, rows = null) {
     if (this._survivalGameOverShown) return;
     this._survivalGameOverShown = true;
     if (this._pauseOverlay)   this._pauseOverlay.style.display = 'none';
@@ -2506,8 +2526,7 @@ export class UI {
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
       position: 'fixed', inset: '0',
-      // Voile rouge atténué — lisibilité assurée par le carré
-      background: 'radial-gradient(ellipse at center, rgba(25,5,5,0) 0%, rgba(35,6,6,0.14) 55%, rgba(48,8,8,0.32) 100%)',
+      background: C.menuBackdrop,   // fond gris uniforme
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: '"Courier New",monospace',
       color: C.cream, pointerEvents: 'none',
@@ -2543,25 +2562,12 @@ export class UI {
         `${kills} ${t('eliminations')}` +
       `</div>`;
 
-    const mkBtn = (label, bc, tc) => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      Object.assign(b.style, {
-        pointerEvents: 'auto', background: 'transparent',
-        border: `1.5px solid ${bc}`, color: tc,
-        fontFamily: '"Courier New",monospace', fontSize: '15px',
-        letterSpacing: '3px', padding: '12px 32px',
-        cursor: 'pointer', marginBottom: '12px', minWidth: '220px',
-        transition: 'background 0.2s, color 0.2s',
-      });
-      b.addEventListener('mouseenter', () => { b.style.background = bc; b.style.color = '#080806'; });
-      b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; b.style.color = tc; });
-      return b;
-    };
+    const mkBtn = (label, bc, tc) => this._mkEndButton(label, bc, tc);
 
     card.appendChild(title);
     card.appendChild(sub);
     card.appendChild(scoreEl);
+    if (rows && rows.length) card.appendChild(this._mkEndScoreboard(rows));
 
     if (onReplay) {
       const btnRetry = mkBtn(t('retry'), '#7a9050', '#a8c878');
@@ -2570,8 +2576,6 @@ export class UI {
     }
 
     const btnMenu = mkBtn(t('mainMenu'), '#8a6040', '#d4a870');
-    btnMenu.style.fontSize = '12px';
-    btnMenu.style.padding  = '9px 24px';
     btnMenu.style.marginBottom = '0';
     btnMenu.addEventListener('click', () => { overlay.remove(); if (onQuit) onQuit(); });
     card.appendChild(btnMenu);

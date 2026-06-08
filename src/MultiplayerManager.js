@@ -145,6 +145,8 @@ class RemotePlayer {
 
   get position() { return this.pivot.position; }
   get quaternion() { return this.pivot.quaternion; }
+  // Vélocité monde (pour l'indicateur de visée balistique du joueur)
+  get velocity() { return this._velocity || new THREE.Vector3(); }
 
   update(delta) {
     if (this.isDead) {

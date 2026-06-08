@@ -286,6 +286,7 @@ export class Game {
     this._audio.startEngine();
     this.ui._audioRef = this._audio;
     this.ui._gfxRef   = (level) => this._setLowGraphics(level);
+    this.ui._scoreboardProvider = () => this._buildScoreboardRows();
     this.ui.setAudio(this._audio);
     this._netSyncTimer = 0;
 
@@ -316,10 +317,10 @@ export class Game {
       else if (!this.isPaused) this._setPause(true);
     };
 
-    // Tab / Select → tableau des scores
-    this.player.onScoreboardToggle = () => {
-      this.ui.toggleScoreboard();
-      this.ui.updateScoreboardData(this._buildScoreboardRows());
+    // Tab / Select → tableau des scores (maintenir pour afficher)
+    this.player.onScoreboardShow = (show) => {
+      this.ui.showScoreboard(show);
+      if (show) this.ui.updateScoreboardData(this._buildScoreboardRows());
     };
 
     // C : cycle caméra — 0=poursuite, 1=cockpit, 2=cinématique lointaine
@@ -1334,7 +1335,7 @@ export class Game {
     if (this._pointerLockHint) {
       const locked   = document.pointerLockElement === document.body;
       const gpActive = Array.from(navigator.getGamepads?.() ?? []).some(g => g?.connected);
-      const hide     = locked || this.isPaused || this.player?.isDead || this._missionComplete || gpActive;
+      const hide     = locked || this.isPaused || this._escMenuVisible || this.player?.isDead || this._missionComplete || gpActive;
       this._pointerLockHint.style.display = hide ? 'none' : 'block';
     }
 
@@ -1375,6 +1376,7 @@ export class Game {
           this.stats,
           this._config.networkManager ? null : () => this._quit('replay'),
           () => this._quit(),
+          this._buildScoreboardRows(),
         );
       }
     }
@@ -1403,6 +1405,7 @@ export class Game {
           this._survivalWave, this._survivalKills,
           () => this._quit(),
           null,
+          this._buildScoreboardRows(),
         );
       }
     }
@@ -1431,6 +1434,7 @@ export class Game {
             this._survivalWave, this._survivalKills,
             () => this._quit(),
             this._config.networkManager ? null : () => this._quit('replay'),
+            this._buildScoreboardRows(),
           );
         }
       }
@@ -1641,6 +1645,7 @@ export class Game {
           this.stats,
           this._config.networkManager ? null : () => this._quit('replay'),
           () => this._quit(),
+          this._buildScoreboardRows(),
         );
       }
     }
@@ -2344,7 +2349,7 @@ export class Game {
     this._pointerLockHint = hint;
 
     document.addEventListener('pointerlockchange', () => {
-      if (this.player?.isDead) return;
+      if (this.player?.isDead || this.isPaused || this._escMenuVisible) { hint.style.display = 'none'; return; }
       hint.style.display = document.pointerLockElement === document.body ? 'none' : 'block';
     });
   }

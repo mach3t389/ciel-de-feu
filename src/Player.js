@@ -352,10 +352,10 @@ export class Player {
         if (this.onHelpToggle) this.onHelpToggle();
         this.keys.h_prev = true;
       }
-      // Tab : tableau des scores (edge trigger)
+      // Tab : tableau des scores (maintenir pour afficher)
       if (e.key === 'Tab') {
         e.preventDefault();
-        if (!this.keys.tab_prev && this.onScoreboardToggle) this.onScoreboardToggle();
+        if (!this.keys.tab_prev && this.onScoreboardShow) this.onScoreboardShow(true);
         this.keys.tab_prev = true;
       }
       // R : vue arrière (maintenir)
@@ -376,7 +376,7 @@ export class Player {
       if (e.key === ' ')       this.keys.space  = false;
       if (e.key === 'c' || e.key === 'C') this.keys.c_prev = false;
       if (e.key === 'h' || e.key === 'H') this.keys.h_prev = false;
-      if (e.key === 'Tab') this.keys.tab_prev = false;
+      if (e.key === 'Tab') { this.keys.tab_prev = false; if (this.onScoreboardShow) this.onScoreboardShow(false); }
       if (e.key === 'r' || e.key === 'R') this.keys.lookBack = false;
       if (e.key === 'v' || e.key === 'V') this._vKeyActive = false;
     };
@@ -682,9 +682,9 @@ export class Player {
     if (btnMenu && !this._gpBtnMenu_prev && this.onPause) this.onPause();
     this._gpBtnMenu_prev = btnMenu;
 
-    // ── Select / View (btn 8) → tableau des scores ───────────────────────
+    // ── Select / View (btn 8) → tableau des scores (maintenir) ───────────
     const btnSelect = gp.buttons[8]?.pressed ?? false;
-    if (btnSelect && !this._gpBtnSelect_prev && this.onScoreboardToggle) this.onScoreboardToggle();
+    if (btnSelect !== this._gpBtnSelect_prev && this.onScoreboardShow) this.onScoreboardShow(btnSelect);
     this._gpBtnSelect_prev = btnSelect;
   }
 
