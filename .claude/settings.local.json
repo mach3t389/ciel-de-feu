@@ -57,7 +57,9 @@
       "Bash(grep -n \"_setupInput\\\\|_setupControls\\\\|_bindInput\\\\|setupInput\\\\|^  [a-zA-Z_]*\\(.*{$\" src/Player.js)",
       "Bash(grep -rn \"VITE_WS_URL\\\\|wss://\\\\|ws://\\\\|_defaultUrl\" src/NetworkManager.js)",
       "Bash(grep -rn \"wss://\\\\|onrender\\\\|railway\\\\|fly.dev\\\\|VITE_WS_URL\\\\|herokuapp\\\\|glitch\" . --include=*.js --include=*.json --include=*.md --include=.env*)",
-      "Bash(node --check src/NetworkManager.js)"
+      "Bash(node --check src/NetworkManager.js)",
+      "Bash(timeout 4 node server.js)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

@@ -3,10 +3,19 @@
 // Requiert : npm install ws
 
 import { WebSocketServer } from 'ws';
+import { createServer } from 'http';
 import { randomUUID } from 'crypto';
 
-const PORT  = process.env.PORT || 8080;
-const wss   = new WebSocketServer({ port: PORT });
+const PORT = process.env.PORT || 8080;
+
+// Serveur HTTP support : répond 200 aux requêtes normales (health-check Railway/
+// Render) et sert de socle à l'upgrade WebSocket. Sans ça, les plateformes qui
+// pinguent le port en HTTP peuvent juger le service défaillant et le couper.
+const httpServer = createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Ciel de Feu — serveur multijoueur en ligne\n');
+});
+const wss   = new WebSocketServer({ server: httpServer });
 const rooms = new Map(); // code → Room
 
 let clientCount = 0;
@@ -233,5 +242,7 @@ function generateCode() {
 
 // Version des messages gérés — sert à vérifier que le déploiement est à jour.
 const PROTOCOL = 'v2-lobby-sync'; // config_update / player_plane / player_team / score_update
-console.log(`Serveur WebSocket démarré sur le port ${PORT} — protocole ${PROTOCOL}`);
-console.log('Messages lobby gérés : create_room, join_room, config_update, player_plane, player_team, player_ready, score_update');
+httpServer.listen(PORT, () => {
+  console.log(`Serveur HTTP+WebSocket démarré sur le port ${PORT} — protocole ${PROTOCOL}`);
+  console.log('Messages lobby gérés : create_room, join_room, config_update, player_plane, player_team, player_ready, score_update');
+});
