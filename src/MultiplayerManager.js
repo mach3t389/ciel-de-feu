@@ -108,6 +108,7 @@ class RemotePlayer {
       if (this.hp <= 0 && !this.isDead) this._die();
     }
     if (state.dead !== undefined && state.dead && !this.isDead) this._die();
+    if (state.dead === false && this.isDead) this.respawn(state.position);
   }
 
   _die() {
@@ -134,7 +135,7 @@ class RemotePlayer {
       this._deathTimer -= delta;
       return;
     }
-    const t = Math.min(1, delta * 16); // ~60fps de rattrapage
+    const t = Math.min(1, delta * 8);
     if (this._targetPos) this.pivot.position.lerp(this._targetPos, t);
     this.pivot.quaternion.slerp(this._targetQuat, t);
   }

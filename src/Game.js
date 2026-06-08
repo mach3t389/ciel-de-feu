@@ -833,6 +833,15 @@ export class Game {
     } else {
       this._applySpawnPosition();     // base alliée (slot initial)
     }
+
+    // Informer les autres joueurs de la réapparition
+    if (this._multiplayerManager) {
+      const pos = p.position;
+      this._config.networkManager.send('player_respawn', {
+        position: { x: pos.x, y: pos.y, z: pos.z }
+      });
+    }
+
     document.body.requestPointerLock();
   }
 
@@ -970,10 +979,11 @@ export class Game {
       }
       if (this._isSurvival) {
         this._updateBestWave(this._survivalWave);
-        // Multijoueur : entrer en spectateur si des alliés sont encore vivants
+        // Multijoueur : entrer en spectateur si des alliés sont connectés (vivants ou pas encore à jour)
         const remotePlayers = this._multiplayerManager?.getRemotePlayers() ?? [];
-        const anyAllyAlive  = !!this._config.networkManager && remotePlayers.some(p => !p.isDead);
-        if (anyAllyAlive) {
+        const hasAllies     = !!this._config.networkManager && remotePlayers.length > 0;
+        const anyAllyAlive  = hasAllies && remotePlayers.some(p => !p.isDead);
+        if (hasAllies && (anyAllyAlive || remotePlayers.length > 0)) {
           this._enterSpectator();
         } else {
           this.ui.showSurvivalGameOver(

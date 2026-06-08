@@ -145,7 +145,7 @@ wss.on('connection', (ws) => {
         const room = rooms.get(ws._room);
         if (!room || room.hostId !== clientId) return;
         room.started = true;
-        room.broadcastAll('game_start', { config: payload.config || room.config });
+        room.broadcast('game_start', { config: payload.config || room.config }, clientId);
         console.log(`[R] Partie lancée: ${room.code}`);
         break;
       }
