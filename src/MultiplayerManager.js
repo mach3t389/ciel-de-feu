@@ -46,6 +46,7 @@ class RemotePlayer {
       this.mesh.scale.setScalar(maxDim > 0 ? 4 / maxDim : 1);
       this.mesh.rotation.y = Math.PI;
 
+      this._mats = [];
       this.mesh.traverse(node => {
         if (node.isMesh && node.material) {
           const mats = Array.isArray(node.material) ? node.material : [node.material];
@@ -53,6 +54,7 @@ class RemotePlayer {
             if (m.emissive !== undefined) {
               m.emissive = new THREE.Color(this._emissiveHex);
               m.emissiveIntensity = 0.18;
+              this._mats.push(m);
             }
           });
         }
@@ -119,12 +121,26 @@ class RemotePlayer {
     // speed×delta unités/s, donc on extrapole exactement entre deux paquets réseau)
     this._velocity = new THREE.Vector3(0, 0, -1)
       .applyQuaternion(this._targetQuat).multiplyScalar(this.speed);
-    if (state.hp    !== undefined) {
-      this.hp = state.hp;
+    if (state.hp !== undefined) {
+      // La cible est autoritaire, mais on a pu appliquer des dégâts optimistes
+      // (réactivité). On accepte une baisse de PV (plus de dégâts) ou un plein
+      // (réapparition / ravitaillement), mais pas une hausse partielle qui
+      // annulerait nos dégâts optimistes en attendant l'aller-retour réseau.
+      if (state.hp <= this.hp || state.hp >= 100) this.hp = state.hp;
       if (this.hp <= 0 && !this.isDead) this._die();
     }
     if (state.dead !== undefined && state.dead && !this.isDead) this._die();
     if (state.dead === false && this.isDead) this.respawn(state.position);
+  }
+
+  // Dégâts optimistes appliqués localement par le tireur → réaction immédiate
+  // (la cible reste autoritaire et resynchronisera ses PV juste après)
+  applyLocalHit(dmg) {
+    if (this.isDead) return;
+    this.hp = Math.max(0, this.hp - dmg);
+    this._flashTimer = 0.16;
+    // La mort reste autoritaire (décidée par la cible) → évite les kills
+    // fantômes et le double comptage de score.
   }
 
   _die() {
@@ -162,6 +178,13 @@ class RemotePlayer {
     // Convergence exponentielle rapide → suivi quasi instantané, sans à-coups
     if (this._targetPos) this.pivot.position.lerp(this._targetPos, 1 - Math.exp(-18 * delta));
     this.pivot.quaternion.slerp(this._targetQuat, 1 - Math.exp(-16 * delta));
+
+    // Flash de touche (retour visuel immédiat quand on tire dessus)
+    if (this._flashTimer > 0) {
+      this._flashTimer -= delta;
+      const lit = this._flashTimer > 0;
+      if (this._mats) for (const m of this._mats) m.emissiveIntensity = lit ? 1.6 : 0.18;
+    }
   }
 
   remove(scene) {

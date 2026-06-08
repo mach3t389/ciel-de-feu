@@ -1483,8 +1483,13 @@ export class Menu {
           statusEl.textContent = `Connecté — ${code}`;
           statusEl.style.color = M.green;
           if (res.config) {
-            Object.assign(this._config, res.config);
+            // Ne copier QUE les réglages partagés de la partie — jamais l'identité
+            // du joueur (name / pilotName / team), sinon on hérite du nom et de la
+            // couleur de l'hôte.
             const cfg = res.config;
+            for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire']) {
+              if (cfg[k] !== undefined) this._config[k] = cfg[k];
+            }
             if (cfg.mode         !== undefined) { modeGroup.setValue(cfg.mode); renderModeDesc(cfg.mode); teamSection.style.display = cfg.mode === 'tdm' ? '' : 'none'; diffSection.style.display = ['coop','survival'].includes(cfg.mode) ? '' : 'none'; enemyCountSection.style.display = cfg.mode === 'coop' ? '' : 'none'; timeLimitSection.style.display = isCompetitive(cfg.mode) ? '' : 'none'; refreshLobbyStats(); }
             if (cfg.difficulty   !== undefined) diffChoices.setValue(cfg.difficulty);
             if (cfg.totalEnemies !== undefined) enemyCountChoices.setValue(cfg.totalEnemies);

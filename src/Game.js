@@ -1498,6 +1498,7 @@ export class Game {
             this.ui.showHitMarker();
             this._audio?.playImpact('plane');
             this._multiplayerManager.sendHit(rp.id, PVP_DMG);
+            rp.applyLocalHit(PVP_DMG);   // dégâts optimistes → réaction immédiate
             break;
           }
         }
