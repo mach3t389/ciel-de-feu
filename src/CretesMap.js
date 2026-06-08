@@ -376,9 +376,10 @@ export class CretesMap {
       })
     );
 
+    const BLDG_LOD = [0.30, 0.12, 0.05];
     const groups = {};
     for (const [key, scene] of Object.entries(glbs)) {
-      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building');
+      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building', BLDG_LOD);
       if (g) {
         const bbox = new THREE.Box3().setFromObject(scene);
         g.naturalHeight = bbox.max.y - bbox.min.y;
@@ -660,8 +661,8 @@ export class CretesMap {
     return placed[0] + placed[1];
   }
 
-  _createInstancedGroup(modelScene, maxCount, category = '') {
-    const lod = new InstancedLOD(this.scene, modelScene, maxCount, category);
+  _createInstancedGroup(modelScene, maxCount, category = '', lodRatios) {
+    const lod = new InstancedLOD(this.scene, modelScene, maxCount, category, lodRatios);
     return lod.instances.length > 0 ? lod : null;
   }
 

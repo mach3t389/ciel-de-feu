@@ -41,7 +41,13 @@ function _triCount(geo) {
  *   g.updateLOD(camX, camZ, 600, 1500, 3000);
  */
 export class InstancedLOD {
-  constructor(scene, modelScene, maxCount, category = '') {
+  /**
+   * lodRatios : [r0, r1, r2] fractions de triangles à conserver par niveau.
+   *   null    = géométrie complète (LOD0 par défaut)
+   *   0.30    = 30 % des triangles (réduction agressive pour les bâtiments)
+   * Défaut : [null, 0.5, 0.2] — comportement historique.
+   */
+  constructor(scene, modelScene, maxCount, category = '', lodRatios = [null, 0.5, 0.2]) {
     modelScene.updateWorldMatrix(true, true);
     const bbox          = new THREE.Box3().setFromObject(modelScene);
     this.baseOffset     = -bbox.min.y;
@@ -56,6 +62,8 @@ export class InstancedLOD {
     // _lods[lodLevel] = array of InstancedMesh (one per model sub-mesh)
     this._lods = [[], [], []];
 
+    const [r0, r1, r2] = lodRatios;
+
     modelScene.traverse(n => {
       if (!n.isMesh) return;
       const gFull = n.geometry.clone();
@@ -63,11 +71,14 @@ export class InstancedLOD {
       gFull.computeBoundingSphere();
       const mat = n.material;
 
-      const gLod1 = _simplify(gFull.clone(), 0.5) ?? gFull;
-      const gLod2 = _simplify(gFull.clone(), 0.2) ?? gLod1;
+      // Chaque niveau est simplifié indépendamment depuis la géométrie complète
+      // pour une meilleure qualité ; r0=null = pas de simplification pour LOD0.
+      const gBase = r0 ? (_simplify(gFull.clone(), r0) ?? gFull) : gFull;
+      const gLod1 = r1 ? (_simplify(gFull.clone(), r1) ?? gBase) : gBase;
+      const gLod2 = r2 ? (_simplify(gFull.clone(), r2) ?? gLod1) : gLod1;
 
       for (let lv = 0; lv < 3; lv++) {
-        const geo = lv === 0 ? gFull : lv === 1 ? gLod1 : gLod2;
+        const geo = lv === 0 ? gBase : lv === 1 ? gLod1 : gLod2;
         const im  = new THREE.InstancedMesh(geo, mat, maxCount);
         im.count             = 0;
         im.frustumCulled     = false;

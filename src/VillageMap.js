@@ -439,9 +439,11 @@ export class VillageMap {
     );
 
     // Créer un groupe instancié par type de bâtiment
+    // Ratios agressifs : LOD0=30%, LOD1=12%, LOD2=5% pour réduire ~5M→~1.6M triangles
+    const BLDG_LOD = [0.30, 0.12, 0.05];
     const groups = {};
     for (const [key, scene] of Object.entries(glbs)) {
-      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building');
+      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building', BLDG_LOD);
       if (g) {
         const bbox = new THREE.Box3().setFromObject(scene);
         g.naturalHeight = bbox.max.y - bbox.min.y;
@@ -805,8 +807,8 @@ export class VillageMap {
 
   // ── Utilitaires ────────────────────────────────────────────────────────────
 
-  _createInstancedGroup(modelScene, maxCount, category = '') {
-    const lod = new InstancedLOD(this.scene, modelScene, maxCount, category);
+  _createInstancedGroup(modelScene, maxCount, category = '', lodRatios) {
+    const lod = new InstancedLOD(this.scene, modelScene, maxCount, category, lodRatios);
     return lod.instances.length > 0 ? lod : null;
   }
 
