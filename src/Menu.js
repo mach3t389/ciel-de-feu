@@ -1621,6 +1621,32 @@ export class Menu {
     wrap.appendChild(this._mkAudioSection(this._audio ?? null));
     wrap.appendChild(mkDivider());
 
+    // ── Qualité graphique ─────────────────────────────────────────────────────
+    wrap.appendChild(mkLabel(t('graphicsQuality')));
+
+    const GFX_MODES = [
+      { value: 0, label: t('gfxHigh'), color: M.cream,    desc: t('gfxHighDesc') },
+      { value: 1, label: t('gfxMed'),  color: '#ccaa33',  desc: t('gfxMedDesc')  },
+      { value: 2, label: t('gfxLow'),  color: '#dd6633',  desc: t('gfxLowDesc')  },
+    ];
+    const curGfx = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
+    const gfxDesc = el('div', { style: {
+      fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6',
+      marginTop: '4px', minHeight: '14px',
+    }});
+    gfxDesc.textContent = GFX_MODES.find(m => m.value === curGfx)?.desc ?? '';
+
+    wrap.appendChild(mkChoiceGroup(
+      GFX_MODES.map(({ value, label, color }) => ({ value, label, color })),
+      curGfx,
+      v => {
+        localStorage.setItem('lowGraphics', String(v));
+        gfxDesc.textContent = GFX_MODES.find(m => m.value === v)?.desc ?? '';
+      }
+    ));
+    wrap.appendChild(gfxDesc);
+    wrap.appendChild(mkDivider());
+
     // ── Mode de contrôle ─────────────────────────────────────────────────────
     wrap.appendChild(mkLabel(t('ctrlMode')));
 
