@@ -1,6 +1,9 @@
 // Client WebSocket pour le multijoueur
 // Protocole : messages JSON { type, payload }
 
+// Messages haute fréquence exclus des logs de diagnostic (sinon spam)
+const NOISY = new Set(['player_update', 'bullet_fired', 'score_update']);
+
 export class NetworkManager {
   constructor(url = null) {
     this._url      = url || this._defaultUrl();
@@ -53,7 +56,11 @@ export class NetworkManager {
   }
 
   send(type, payload = {}) {
-    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return;
+    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) {
+      if (!NOISY.has(type)) console.warn('[NET send IGNORÉ — non connecté]', type, 'readyState=', this._ws?.readyState);
+      return;
+    }
+    if (!NOISY.has(type)) console.log('[NET send]', type, payload);
     this._ws.send(JSON.stringify({ type, payload }));
   }
 
@@ -93,6 +100,7 @@ export class NetworkManager {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     const { type, payload } = msg;
+    if (!NOISY.has(type)) console.log('[NET recv]', type, payload);
 
     // Réponse à une requête en attente
     if (this._pending.has(type)) {
@@ -105,6 +113,10 @@ export class NetworkManager {
     // Attribution d'ID
     if (type === 'welcome') { this.id = payload.id; return; }
 
+    const handlers = this._handlers.get(type);
+    if (!handlers || handlers.length === 0) {
+      console.warn('[NET recv SANS handler]', type);
+    }
     this._emit(type, payload);
   }
 
