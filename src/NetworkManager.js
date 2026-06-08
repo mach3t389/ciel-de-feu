@@ -6,13 +6,12 @@ const NOISY = new Set(['player_update', 'bullet_fired', 'score_update']);
 
 export class NetworkManager {
   constructor(url = null) {
-    this._url       = url || this._defaultUrl();
-    this._ws        = null;
-    this._handlers  = new Map();
-    this._pending   = new Map(); // type → { resolve, reject }
-    this._msgBuffer = new Map(); // messages arrivés avant l'enregistrement du handler
-    this.id         = null;      // id attribué par le serveur
-    this.connected  = false;
+    this._url      = url || this._defaultUrl();
+    this._ws       = null;
+    this._handlers = new Map();
+    this._pending  = new Map(); // type → { resolve, reject }
+    this.id        = null;      // id attribué par le serveur
+    this.connected = false;
   }
 
   _defaultUrl() {
@@ -65,16 +64,10 @@ export class NetworkManager {
     this._ws.send(JSON.stringify({ type, payload }));
   }
 
-  // Enregistre un handler — rejoue automatiquement les messages bufférisés
+  // Enregistre un handler pour les messages entrants
   on(type, handler) {
     if (!this._handlers.has(type)) this._handlers.set(type, []);
     this._handlers.get(type).push(handler);
-    // Race condition : messages arrivés avant l'enregistrement → rejoués maintenant
-    if (this._msgBuffer.has(type)) {
-      const queued = this._msgBuffer.get(type);
-      this._msgBuffer.delete(type);
-      queued.forEach(payload => { try { handler(payload); } catch (e) { console.error(e); } });
-    }
   }
 
   off(type, handler) {
@@ -122,11 +115,7 @@ export class NetworkManager {
 
     const handlers = this._handlers.get(type);
     if (!handlers || handlers.length === 0) {
-      // Pas encore de handler : buffériser pour rejouer lors de nm.on(type, ...)
-      if (!this._msgBuffer.has(type)) this._msgBuffer.set(type, []);
-      this._msgBuffer.get(type).push(payload);
-      if (!NOISY.has(type)) console.log('[NET buffered]', type, payload);
-      return;
+      console.warn('[NET recv SANS handler]', type);
     }
     this._emit(type, payload);
   }
