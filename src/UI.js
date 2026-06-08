@@ -2082,6 +2082,7 @@ export class UI {
 
   _showDead(onRespawn, opts = {}) {
     if (this._deadOverlay) return;
+    if (this._pauseOverlay) this._pauseOverlay.style.display = 'none';
     const {
       noRedBg  = false,
       title    = t('crashTitle'),
@@ -2330,6 +2331,7 @@ export class UI {
   showSurvivalGameOver(wavesCleared, kills, onQuit, onReplay = null) {
     if (this._survivalGameOverShown) return;
     this._survivalGameOverShown = true;
+    if (this._pauseOverlay)   this._pauseOverlay.style.display = 'none';
     if (this._survivalBanner)  { this._survivalBanner.style.opacity = '0'; }
     if (this._survivalCdEl)    { this._survivalCdEl.style.display  = 'none'; }
 

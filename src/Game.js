@@ -466,7 +466,7 @@ export class Game {
     };
 
     this._keydownHandler = (e) => {
-      if (this.player.isDead) return;
+      if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
       if (isPvP) {
         // Multijoueur : Echap ouvre l'overlay ESC sans pause
@@ -490,7 +490,7 @@ export class Game {
     // Pointer lock perdu → pause automatique (sauf multijoueur)
     this._pauseCooldownUntil = 0;
     this._pllHandler = () => {
-      if (this.player.isDead || isPvP) return;
+      if (this.player.isDead || this._missionComplete || isPvP) return;
       if (!document.pointerLockElement && !this.isPaused
           && performance.now() > this._pauseCooldownUntil) {
         this._setPause(true);
