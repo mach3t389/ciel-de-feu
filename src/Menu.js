@@ -1492,45 +1492,41 @@ export class Menu {
       this.hide();
     };
 
+    // Applique un patch de config reçu du serveur et met à jour l'UI en conséquence
+    const applyConfigPatch = (patch) => {
+      for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount']) {
+        if (patch[k] !== undefined) this._config[k] = patch[k];
+      }
+      if (patch.mode !== undefined) {
+        modeGroup.setValue(patch.mode);
+        renderModeDesc(patch.mode);
+        teamSection.style.display       = patch.mode === 'tdm' ? '' : 'none';
+        diffSection.style.display       = ['coop','survival'].includes(patch.mode) ? '' : 'none';
+        enemyCountSection.style.display = patch.mode === 'coop' ? '' : 'none';
+        timeLimitSection.style.display  = isCompetitive(patch.mode) ? '' : 'none';
+        tdmAiSection.style.display      = patch.mode === 'tdm' ? '' : 'none';
+        refreshLobbyStats();
+      }
+      if (patch.difficulty   !== undefined) diffChoices.setValue(patch.difficulty);
+      if (patch.totalEnemies !== undefined) enemyCountChoices.setValue(patch.totalEnemies);
+      if (patch.ffaTimeLimit !== undefined) timeGroup.setValue(patch.ffaTimeLimit);
+      if (patch.friendlyFire !== undefined) ffGroup.setValue(patch.friendlyFire);
+      if (patch.map          !== undefined) { mapGroup.setValue(patch.map); refreshLobbyStats(); }
+      if (patch.tdmAiCount   !== undefined) tdmAiChoices.setValue(patch.tdmAiCount);
+      renderPlayers();
+    };
+
     const connectToServer = async () => {
       try {
         const { NetworkManager } = await import('./NetworkManager.js');
         nm = new NetworkManager();
         await nm.connect();
 
-        if (isHost) {
-          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, tdmAiCount: this._config.tdmAiCount ?? 0 });
-          statusEl.textContent = 'En attente de joueurs...';
-          statusEl.style.color = M.green;
-        } else {
-          const res = await nm.joinRoom(code, { name: self.name, team: self.team });
-          statusEl.textContent = `Connecté — ${code}`;
-          statusEl.style.color = M.green;
-          if (res.config) {
-            // Ne copier QUE les réglages partagés de la partie — jamais l'identité
-            // du joueur (name / pilotName / team), sinon on hérite du nom et de la
-            // couleur de l'hôte.
-            const cfg = res.config;
-            for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount']) {
-              if (cfg[k] !== undefined) this._config[k] = cfg[k];
-            }
-            if (cfg.mode         !== undefined) { modeGroup.setValue(cfg.mode); renderModeDesc(cfg.mode); teamSection.style.display = cfg.mode === 'tdm' ? '' : 'none'; diffSection.style.display = ['coop','survival'].includes(cfg.mode) ? '' : 'none'; enemyCountSection.style.display = cfg.mode === 'coop' ? '' : 'none'; timeLimitSection.style.display = isCompetitive(cfg.mode) ? '' : 'none'; tdmAiSection.style.display = cfg.mode === 'tdm' ? '' : 'none'; refreshLobbyStats(); }
-            if (cfg.difficulty   !== undefined) diffChoices.setValue(cfg.difficulty);
-            if (cfg.totalEnemies !== undefined) enemyCountChoices.setValue(cfg.totalEnemies);
-            if (cfg.ffaTimeLimit !== undefined) timeGroup.setValue(cfg.ffaTimeLimit);
-            if (cfg.friendlyFire !== undefined) ffGroup.setValue(cfg.friendlyFire);
-            if (cfg.map          !== undefined) { mapGroup.setValue(cfg.map); refreshLobbyStats(); }
-            if (cfg.tdmAiCount   !== undefined) tdmAiChoices.setValue(cfg.tdmAiCount);
-          }
-          if (res.players) {
-            res.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
-            renderPlayers();
-          }
-        }
-
+        // Les handlers sont enregistrés AVANT join/create pour ne rater aucun
+        // message arrivant pendant la négociation (ex. config_update envoyé par
+        // l'hôte dès qu'il reçoit player_joined, avant que joinRoom soit résolu).
         nm.on('player_joined',  ({ player })           => {
           players.push({ ...player, isReady: false }); renderPlayers();
-          // L'hôte resynchronise le nouvel arrivant (config complète + sa couleur)
           if (isHost && nm) {
             nm.send('config_update', {
               mode: this._config.mode, map: this._config.map,
@@ -1545,28 +1541,25 @@ export class Menu {
         nm.on('player_ready',   ({ id, ready })        => { const p = players.find(p => p.id === id); if (p) { p.isReady = ready; renderPlayers(); } });
         nm.on('player_plane',   ({ id, plane })        => { const p = players.find(p => p.id === id); if (p) { p.team = plane; renderPlayers(); } });
         nm.on('player_team',    ({ id, playerTeam })   => { const p = players.find(p => p.id === id); if (p) { p.playerTeam = playerTeam; renderPlayers(); } });
-        nm.on('config_update',  (patch) => {
-          Object.assign(this._config, patch);
-          if (patch.mode !== undefined) {
-            modeGroup.setValue(patch.mode);
-            renderModeDesc(patch.mode);
-            teamSection.style.display       = patch.mode === 'tdm' ? '' : 'none';
-            diffSection.style.display       = ['coop','survival'].includes(patch.mode) ? '' : 'none';
-            enemyCountSection.style.display = patch.mode === 'coop' ? '' : 'none';
-            timeLimitSection.style.display  = isCompetitive(patch.mode) ? '' : 'none';
-            tdmAiSection.style.display      = patch.mode === 'tdm' ? '' : 'none';
-            refreshLobbyStats();
-          }
-          if (patch.difficulty   !== undefined) diffChoices.setValue(patch.difficulty);
-          if (patch.totalEnemies !== undefined) enemyCountChoices.setValue(patch.totalEnemies);
-          if (patch.ffaTimeLimit !== undefined) timeGroup.setValue(patch.ffaTimeLimit);
-          if (patch.friendlyFire !== undefined) ffGroup.setValue(patch.friendlyFire);
-          if (patch.map          !== undefined) { mapGroup.setValue(patch.map); refreshLobbyStats(); }
-          if (patch.tdmAiCount   !== undefined) tdmAiChoices.setValue(patch.tdmAiCount);
-          renderPlayers();
-        });
+        nm.on('config_update',  applyConfigPatch);
         nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));
         nm.on('return_lobby',   ()                     => this._showLobby());
+
+        if (isHost) {
+          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, tdmAiCount: this._config.tdmAiCount ?? 0 });
+          statusEl.textContent = 'En attente de joueurs...';
+          statusEl.style.color = M.green;
+        } else {
+          const res = await nm.joinRoom(code, { name: self.name, team: self.team });
+          statusEl.textContent = `Connecté — ${code}`;
+          statusEl.style.color = M.green;
+          // Appliquer la config initiale reçue dans la réponse join_room
+          if (res.config) applyConfigPatch(res.config);
+          if (res.players) {
+            res.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
+            renderPlayers();
+          }
+        }
 
         this._config.networkManager = nm;
       } catch {
