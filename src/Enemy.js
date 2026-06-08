@@ -105,6 +105,10 @@ export class Enemy {
     this.onFire      = null;
     this._shootCd    = 0.3 + Math.random() * 0.4;
 
+    // Altitude de patrouille personnalisée (override du plancher global)
+    this._minAlt    = options.minAlt    ?? MIN_ALT;
+    this._clearance = options.clearance ?? CLEARANCE;
+
     // Terrain
     this.getTerrainHeight = null;
 
@@ -455,7 +459,7 @@ export class Enemy {
       const h = this._gnd(pos.x + fx * d, pos.z + fz * d);
       if (h > maxAhead) maxAhead = h;
     }
-    const terrainFloor = Math.max(MIN_ALT, maxAhead + CLEARANCE);
+    const terrainFloor = Math.max(this._minAlt, maxAhead + this._clearance);
 
     // 3) L'altitude finale ne descend jamais sous le plancher du relief
     this._goal.y = Math.max(goalY, terrainFloor);

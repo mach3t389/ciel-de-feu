@@ -580,6 +580,13 @@ export class Game {
     const defenderOpts = {
       role: 'defender', homeZone: { x: enemyBase.x, z: enemyBase.z, radius: 700 }, leash: 600, detect: 2200,
     };
+    // Niveaux d'altitude pour les défenseurs — répartition basse/moyenne/haute
+    const _defAlt = () => {
+      const r = Math.random();
+      if (r < 0.35) return { minAlt: 90,  clearance: 50  }; // bas — couvert par les tourelles
+      if (r < 0.75) return {};                                // moyen — défaut
+      return          { minAlt: 380, clearance: 100 };       // haut — couverture aérienne
+    };
     const roamOpts = {
       role: 'attacker', homeZone: { x: 0, z: 0, radius: 3000 }, leash: 4000,
     };
@@ -598,9 +605,11 @@ export class Game {
     while (created < count) {
       const remaining  = count - created;
       const groupSize  = remaining > 2 ? (Math.random() < 0.4 ? 3 : 2) : 1;
-      const opts       = scattered ? roamOpts : (created < attackCount ? attackerOpts : defenderOpts);
-      const skill      = pickSkill();
-      const spawn      = mkSpawn();
+      const baseOpts  = scattered ? roamOpts : (created < attackCount ? attackerOpts : defenderOpts);
+      const altOpts   = (!scattered && created >= attackCount) ? _defAlt() : {};
+      const opts      = { ...baseOpts, ...altOpts };
+      const skill     = pickSkill();
+      const spawn     = mkSpawn();
 
       const leader = new Enemy(this.scene, spawn.clone(), { hp: diff.hp, ...opts, skill, preloadedScene: this._enemyModelScene });
       leader.getTerrainHeight = this.getTerrainHeight ?? null;
@@ -668,9 +677,16 @@ export class Game {
         enemyBase.z + Math.sin(ang) * spread,
       );
       const isAttacker = i < attackCount;
-      const opts = isAttacker
+      const baseOpts = isAttacker
         ? { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 650 }, leash: 1600 }
         : { role: 'defender', homeZone: { x: enemyBase.x,  z: enemyBase.z,  radius: 700 }, leash: 600, detect: 2200 };
+      const waveAltOpts = !isAttacker ? (() => {
+        const r = Math.random();
+        if (r < 0.35) return { minAlt: 90,  clearance: 50  };
+        if (r < 0.75) return {};
+        return          { minAlt: 380, clearance: 100 };
+      })() : {};
+      const opts = { ...baseOpts, ...waveAltOpts };
 
       const enemy = new Enemy(this.scene, spawnPos, { hp: diff.hp, ...opts, skill: pickSkill(), preloadedScene: this._enemyModelScene });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
@@ -1205,18 +1221,21 @@ export class Game {
           this._refuelTimer += delta;
           if (this._refuelTimer > 2.0) {
             const wasFull = p.fuel >= 100 && p.ammo >= 200 && p.health >= 100;
-            p.fuel   = Math.min(100, p.fuel   + delta * 12);
-            p.ammo   = Math.min(200, p.ammo   + delta * 25);
-            p.health = Math.min(100, p.health + delta * 18);
-            refueling = true;
-            // Tick sonore de ravitaillement (~1 Hz)
-            this._refuelSoundTimer = (this._refuelSoundTimer || 0) + delta;
-            if (this._refuelSoundTimer >= 1.0) {
-              this._audio?.playRefuelTick();
+            if (!wasFull) {
+              p.fuel   = Math.min(100, p.fuel   + delta * 12);
+              p.ammo   = Math.min(200, p.ammo   + delta * 25);
+              p.health = Math.min(100, p.health + delta * 18);
+              refueling = true;
+              this._refuelSoundTimer = (this._refuelSoundTimer || 0) + delta;
+              if (this._refuelSoundTimer >= 1.0) {
+                this._audio?.playRefuelTick();
+                this._refuelSoundTimer = 0;
+              }
+              if (p.fuel >= 100 && p.ammo >= 200 && p.health >= 100) {
+                this.ui.showRefuelComplete();
+              }
+            } else {
               this._refuelSoundTimer = 0;
-            }
-            if (!wasFull && p.fuel >= 100 && p.ammo >= 200 && p.health >= 100) {
-              this.ui.showRefuelComplete();
             }
           }
           break;
