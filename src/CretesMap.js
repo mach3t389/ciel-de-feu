@@ -484,7 +484,7 @@ export class CretesMap {
       '/Arbres/SM_Tree_A.glb', '/Arbres/SM_Tree_B.glb',
       '/Arbres/SM_Tree_C.glb', '/Arbres/SM_Tree_Root.glb',
     ];
-    const MAX   = 1000;
+    const MAX   = 1200;
     const gltfs = await Promise.all(paths.map(p => loadGLB(p).catch(() => null)));
     const groups = gltfs.map(g => g ? this._createInstancedGroup(g.scene, MAX, 'tree') : null);
     if (groups.every(g => !g)) return null;
@@ -492,7 +492,7 @@ export class CretesMap {
     const dummy  = new THREE.Object3D();
     const placed = [0, 0, 0, 0];
     let attempts = 0;
-    const TARGET = 2800;
+    const TARGET = 3800;
 
     while (placed.reduce((a,b)=>a+b,0) < TARGET && attempts < TARGET * 14) {
       attempts++;
@@ -500,7 +500,7 @@ export class CretesMap {
       const wz = rng(-SIZE * 0.46, SIZE * 0.46);
       const h  = this.getTerrainHeight(wx, wz);
 
-      if (h < 6 || h > 320) continue;
+      if (h < 6 || h > 480) continue;
       const hR = this.getTerrainHeight(wx + 14, wz);
       const hU = this.getTerrainHeight(wx, wz + 14);
       if (Math.sqrt(((hR-h)/14)**2 + ((hU-h)/14)**2) > 0.85) continue;
@@ -536,8 +536,9 @@ export class CretesMap {
     const dummy = new THREE.Object3D();
     for (const v of VILLAGES) {
       const layers = [
-        { rMin: v.innerR * 1.55, rMax: v.outerR * 0.92, count: 16, scaleMin: 1.0, scaleMax: 1.8 },
-        { rMin: v.innerR * 1.10, rMax: v.innerR * 1.55, count: 10, scaleMin: 0.8, scaleMax: 1.4 },
+        { rMin: v.outerR * 0.92, rMax: v.outerR * 1.5,  count: 22, scaleMin: 1.1, scaleMax: 2.0 },
+        { rMin: v.innerR * 1.55, rMax: v.outerR * 0.92, count: 20, scaleMin: 1.0, scaleMax: 1.8 },
+        { rMin: v.innerR * 1.10, rMax: v.innerR * 1.55, count: 12, scaleMin: 0.8, scaleMax: 1.4 },
         { rMin: 28,              rMax: v.innerR * 1.10, count:  8, scaleMin: 0.5, scaleMax: 1.0 },
       ];
       for (const layer of layers) {
