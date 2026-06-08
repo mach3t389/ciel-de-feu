@@ -1239,6 +1239,7 @@ export class Menu {
         diffSection.style.display       = (v === 'coop' || v === 'survival') ? '' : 'none';
         enemyCountSection.style.display = (v === 'coop') ? '' : 'none';
         timeLimitSection.style.display  = isCompetitive(v) ? '' : 'none';
+        tdmAiSection.style.display      = v === 'tdm'  ? '' : 'none';
         refreshLobbyStats();
         renderPlayers();
         if (nm) nm.send('config_update', { mode: v });
@@ -1301,6 +1302,18 @@ export class Menu {
     if (!isHost) { timeGroup.style.pointerEvents = 'none'; timeGroup.style.opacity = '0.45'; }
     timeLimitSection.appendChild(timeGroup);
     optionsWrap.appendChild(timeLimitSection);
+
+    // Avions IA par équipe — Équipes (tdm) uniquement
+    const tdmAiSection = el('div', { style: { display: this._config.mode === 'tdm' ? '' : 'none' }});
+    tdmAiSection.appendChild(lbl(t('tdmAiCount')));
+    const tdmAiChoices = mkChoiceGroup(
+      [{ value: 0, label: t('tdmAiNone') }, { value: 2, label: '2' }, { value: 4, label: '4' }, { value: 6, label: '6' }],
+      this._config.tdmAiCount ?? 0,
+      v => { this._config.tdmAiCount = v; if (nm) nm.send('config_update', { tdmAiCount: v }); }
+    );
+    if (!isHost) { tdmAiChoices.style.pointerEvents = 'none'; tdmAiChoices.style.opacity = '0.45'; }
+    tdmAiSection.appendChild(tdmAiChoices);
+    optionsWrap.appendChild(tdmAiSection);
 
     // Tir allié — dans colonne gauche, juste après options
     leftCol.appendChild(divider());
@@ -1463,7 +1476,18 @@ export class Menu {
       const allIds = players.map(p => (p.id === 'local' ? myId : p.id)).sort();
       const playerSlot = Math.max(0, allIds.indexOf(myId));
       const remotePlayers = players.filter(p => p.id !== 'local' && p.id !== myId);
-      this._config = { ...this._config, ...config, networkManager: network, playerSlot, remotePlayers };
+      // Réglages PARTAGÉS depuis l'hôte uniquement — on conserve l'identité locale
+      // (pilotName / team / playerTeam), sinon tous les joueurs héritent du nom,
+      // de la couleur et de l'équipe de l'hôte.
+      const shared = {};
+      for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount']) {
+        if (config[k] !== undefined) shared[k] = config[k];
+      }
+      this._config = {
+        ...this._config, ...shared,
+        networkManager: network, playerSlot, remotePlayers,
+        playerCount: config.playerCount ?? players.length,
+      };
       this._resolve(this._config);
       this.hide();
     };
@@ -1475,7 +1499,7 @@ export class Menu {
         await nm.connect();
 
         if (isHost) {
-          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team });
+          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, tdmAiCount: this._config.tdmAiCount ?? 0 });
           statusEl.textContent = 'En attente de joueurs...';
           statusEl.style.color = M.green;
         } else {
@@ -1487,15 +1511,16 @@ export class Menu {
             // du joueur (name / pilotName / team), sinon on hérite du nom et de la
             // couleur de l'hôte.
             const cfg = res.config;
-            for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire']) {
+            for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount']) {
               if (cfg[k] !== undefined) this._config[k] = cfg[k];
             }
-            if (cfg.mode         !== undefined) { modeGroup.setValue(cfg.mode); renderModeDesc(cfg.mode); teamSection.style.display = cfg.mode === 'tdm' ? '' : 'none'; diffSection.style.display = ['coop','survival'].includes(cfg.mode) ? '' : 'none'; enemyCountSection.style.display = cfg.mode === 'coop' ? '' : 'none'; timeLimitSection.style.display = isCompetitive(cfg.mode) ? '' : 'none'; refreshLobbyStats(); }
+            if (cfg.mode         !== undefined) { modeGroup.setValue(cfg.mode); renderModeDesc(cfg.mode); teamSection.style.display = cfg.mode === 'tdm' ? '' : 'none'; diffSection.style.display = ['coop','survival'].includes(cfg.mode) ? '' : 'none'; enemyCountSection.style.display = cfg.mode === 'coop' ? '' : 'none'; timeLimitSection.style.display = isCompetitive(cfg.mode) ? '' : 'none'; tdmAiSection.style.display = cfg.mode === 'tdm' ? '' : 'none'; refreshLobbyStats(); }
             if (cfg.difficulty   !== undefined) diffChoices.setValue(cfg.difficulty);
             if (cfg.totalEnemies !== undefined) enemyCountChoices.setValue(cfg.totalEnemies);
             if (cfg.ffaTimeLimit !== undefined) timeGroup.setValue(cfg.ffaTimeLimit);
             if (cfg.friendlyFire !== undefined) ffGroup.setValue(cfg.friendlyFire);
             if (cfg.map          !== undefined) { mapGroup.setValue(cfg.map); refreshLobbyStats(); }
+            if (cfg.tdmAiCount   !== undefined) tdmAiChoices.setValue(cfg.tdmAiCount);
           }
           if (res.players) {
             res.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
@@ -1511,6 +1536,7 @@ export class Menu {
               mode: this._config.mode, map: this._config.map,
               difficulty: this._config.difficulty, totalEnemies: this._config.totalEnemies,
               ffaTimeLimit: this._config.ffaTimeLimit, friendlyFire: this._config.friendlyFire,
+              tdmAiCount: this._config.tdmAiCount,
             });
             nm.send('player_plane', { plane: this._config.team });
           }
@@ -1528,6 +1554,7 @@ export class Menu {
             diffSection.style.display       = ['coop','survival'].includes(patch.mode) ? '' : 'none';
             enemyCountSection.style.display = patch.mode === 'coop' ? '' : 'none';
             timeLimitSection.style.display  = isCompetitive(patch.mode) ? '' : 'none';
+            tdmAiSection.style.display      = patch.mode === 'tdm' ? '' : 'none';
             refreshLobbyStats();
           }
           if (patch.difficulty   !== undefined) diffChoices.setValue(patch.difficulty);
@@ -1535,6 +1562,7 @@ export class Menu {
           if (patch.ffaTimeLimit !== undefined) timeGroup.setValue(patch.ffaTimeLimit);
           if (patch.friendlyFire !== undefined) ffGroup.setValue(patch.friendlyFire);
           if (patch.map          !== undefined) { mapGroup.setValue(patch.map); refreshLobbyStats(); }
+          if (patch.tdmAiCount   !== undefined) tdmAiChoices.setValue(patch.tdmAiCount);
           renderPlayers();
         });
         nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));

@@ -493,6 +493,21 @@ export class Game {
       }
     }
 
+    // ── IA d'équipe (mode Équipes) ────────────────────────────────────────────
+    // Chaque équipe reçoit N avions IA qui se battent entre eux + contre les
+    // joueurs. Régénération par vagues. Les IA ennemies peuvent tuer les IA alliées.
+    this.allies = [];
+    this._tdmAiCount = isTDM ? (this._config.tdmAiCount ?? 0) : 0;
+    this._tdmAiRespawnTimer = 6;
+    if (this._tdmAiCount > 0) {
+      const myApIdx = this._config.playerTeam === 'team2' ? 1 : 0;
+      const aps = this._villageMap?.airports;
+      this._tdmAllyBase  = aps?.[myApIdx]?.center             ?? playerBase;
+      this._tdmEnemyBase = aps?.[myApIdx === 0 ? 1 : 0]?.center ?? enemyBase;
+      this._spawnTeamAI('ally',  this._tdmAiCount);
+      this._spawnTeamAI('enemy', this._tdmAiCount);
+    }
+
     // Stats DE LA PARTIE (repartent à 0) — affichées sur le HUD
     // Le cumul de toutes les parties reste dans localStorage (visible au menu)
     this.stats = {
@@ -646,6 +661,36 @@ export class Game {
   _wireEnemyFire(enemy) {
     enemy.netId = this._enemyNetIdCounter++;
     enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat);
+  }
+
+  // IA d'équipe (TDM) : spawn `count` avions d'une faction près de sa base.
+  // Allié → tirs dans _alliedBulletManager (touchent les ennemis), avion bleu.
+  // Ennemi → tirs dans _enemyBulletManager (touchent le joueur + les IA alliées).
+  _spawnTeamAI(faction, count) {
+    const isAlly = faction === 'ally';
+    const base   = isAlly ? this._tdmAllyBase : this._tdmEnemyBase;
+    const list   = isAlly ? this.allies : this.enemies;
+    const diff   = this._scaledDiff();
+    const baseColor = isAlly ? 0x2255cc : 0xaa1515;
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const r   = 60 + Math.random() * 140;
+      const sp  = new THREE.Vector3(base.x + Math.cos(ang)*r, (base.y ?? 45) + 130 + i*14, base.z + Math.sin(ang)*r);
+      const skill = Math.random() < 0.6 ? 'regular' : 'ace';
+      const e = new Enemy(this.scene, sp, {
+        hp: diff.hp, skill, role: 'attacker', faction, baseColor,
+        homeZone: { x: base.x, z: base.z, radius: 700 }, leash: 6000,
+        preloadedScene: this._enemyModelScene,
+      });
+      e.getTerrainHeight = this.getTerrainHeight ?? null;
+      if (isAlly) {
+        e.netId = this._enemyNetIdCounter++;
+        e.onFire = (pos, quat) => this._alliedBulletManager.fire(pos, quat, null, true);
+      } else {
+        this._wireEnemyFire(e);
+      }
+      list.push(e);
+    }
   }
 
   // Première vague : spawn en altitude autour de la base ennemie (ou dispersés en FFA)
@@ -1456,26 +1501,45 @@ export class Game {
       });
     }
 
-    // Balles ennemies → dégâts au joueur
-    if (!this.player.isDead) {
-      for (const b of this._enemyBulletManager.getBullets()) {
-        if (b.age >= 999) continue;
+    // Balles ennemies → dégâts au joueur PUIS aux IA alliées (mode Équipes)
+    for (const b of this._enemyBulletManager.getBullets()) {
+      if (b.age >= 999) continue;
+      if (!this.player.isDead && b.mesh.position.distanceTo(this.player.position) < 8) {
+        this.player.health = Math.max(0, this.player.health - (b.dmg ?? 7));
+        b.age = 999;
+        this.ui.showPlayerHit();
+        this._audio?.playPlayerHit();
+        continue;
+      }
+      for (const a of this.allies) {
+        if (a.isDead) continue;
         this._frameCollisionChecks++;
-        if (b.mesh.position.distanceTo(this.player.position) < 8) {
-          this.player.health = Math.max(0, this.player.health - (b.dmg ?? 7));
-          b.age = 999;
-          this.ui.showPlayerHit();
-          this._audio?.playPlayerHit();
+        if (b.mesh.position.distanceTo(a.position) < 9) {
+          const wasAlive = !a.isDead;
+          a.hit(25); b.age = 999;
+          if (wasAlive && a.isDead) {
+            this._audio?.playExplosion(0.8);
+            if (this._isTDM) { this._oppTeamScore++; this.ui.setTDMScore(this._myTeamScore, this._oppTeamScore); }
+          }
+          break;
         }
       }
     }
 
-    // Balles alliées (sol) → dégâts aux avions ennemis
+    // Balles alliées → dégâts aux avions ennemis (tourelles sol + IA alliées)
     for (const b of this._alliedBulletManager.getBullets()) {
+      if (b.age >= 999) continue;
       for (const e of this.enemies) {
         this._frameCollisionChecks++;
         if (!e.isDead && b.mesh.position.distanceTo(e.position) < 9) {
-          e.hit(25); b.age = 999; break;
+          const wasAlive = !e.isDead;
+          e.hit(25); b.age = 999;
+          if (wasAlive && e.isDead) {
+            this._audio?.playExplosion(0.9);
+            this._audio?.removeEnemyEngine(e);
+            if (this._isTDM) { this._myTeamScore++; this.ui.setTDMScore(this._myTeamScore, this._oppTeamScore); }
+          }
+          break;
         }
       }
     }
@@ -1517,18 +1581,35 @@ export class Game {
     for (const rp of (this._multiplayerManager?.getRemotePlayers() ?? [])) {
       if (!rp.isDead && rp.isEnemy === false) humanTargets.push(rp.position);
     }
-    const nearestHuman = (epos) => {
-      if (humanTargets.length === 0) return this.player.position;
-      let best = humanTargets[0], bestD = epos.distanceToSquared(best);
-      for (let i = 1; i < humanTargets.length; i++) {
-        const d = epos.distanceToSquared(humanTargets[i]);
-        if (d < bestD) { bestD = d; best = humanTargets[i]; }
+    const nearestOf = (epos, list, fallback) => {
+      if (list.length === 0) return fallback;
+      let best = list[0], bestD = epos.distanceToSquared(best);
+      for (let i = 1; i < list.length; i++) {
+        const d = epos.distanceToSquared(list[i]);
+        if (d < bestD) { bestD = d; best = list[i]; }
       }
       return best;
     };
+    const nearestHuman = (epos) => nearestOf(epos, humanTargets, this.player.position);
+
+    // ── Mode Équipes : cibles par faction ───────────────────────────────────
+    // IA ennemies chassent l'équipe alliée (joueur + IA alliées + coéquipiers
+    // distants) ; IA alliées chassent l'équipe ennemie (IA ennemies + adversaires).
+    let enemyAITargets = humanTargets, allyAITargets = [];
+    if (this._isTDM && this._tdmAiCount > 0) {
+      enemyAITargets = [...humanTargets];
+      allyAITargets  = [];
+      for (const a of this.allies)  if (!a.isDead) enemyAITargets.push(a.position);
+      for (const e of this.enemies) if (!e.isDead) allyAITargets.push(e.position);
+      for (const rp of (this._multiplayerManager?.getRemotePlayers() ?? [])) {
+        if (rp.isDead) continue;
+        if (rp.isEnemy) allyAITargets.push(rp.position);
+      }
+    }
 
     for (const enemy of this.enemies) {
-      const targetPos = nearestHuman(enemy.position);
+      const targetPos = this._isTDM ? nearestOf(enemy.position, enemyAITargets, this.player.position)
+                                    : nearestHuman(enemy.position);
       // Throttle IA : <1000m=60Hz, 1000-2000m=~20Hz (1/3), 2000m+=~5Hz (1/12)
       let skipAI = false;
       if (!enemy.isDead) {
@@ -1563,9 +1644,11 @@ export class Game {
               this._audio?.playExplosion(1.0);
               this._audio?.removeEnemyEngine(enemy);
               this.stats.kills++;
-              this._multiplayerManager?.sendEnemyKill(enemy.netId);
+              // TDM : IA locales par client → ne pas diffuser (éviter la désync)
+              if (!this._isTDM) this._multiplayerManager?.sendEnemyKill(enemy.netId);
               this._bumpLifetime('stats_kills');
               if (this._isSurvival) this._survivalKills++;
+              if (this._isTDM) { this._myTeamScore++; this.ui.setTDMScore(this._myTeamScore, this._oppTeamScore); }
               // Mode entraînement : respawn un ennemi passif à la base ennemie après 5s
               if (this._practiceMode) {
                 setTimeout(() => { if (this._practiceMode) this._spawnPracticeEnemy(); }, 5000);
@@ -1605,6 +1688,37 @@ export class Game {
           }
         }
       }
+    }
+
+    // ── IA alliées (mode Équipes) : mise à jour + régénération par vagues ────
+    if (this._tdmAiCount > 0) {
+      for (const ally of this.allies) {
+        const targetPos = nearestOf(ally.position, allyAITargets, this._tdmEnemyBase ?? this.player.position);
+        let skipAI = false;
+        if (!ally.isDead) {
+          const d2 = targetPos.distanceToSquared(ally.position);
+          const fc = this._frameCount;
+          if      (d2 > 4000000 && fc % 12 !== 0) skipAI = true;
+          else if (d2 > 1000000 && fc % 3  !== 0) skipAI = true;
+        }
+        if (skipAI) {
+          ally._accDelta = (ally._accDelta ?? 0) + delta;
+        } else {
+          const dt = Math.min(0.1, delta + (ally._accDelta ?? 0));
+          ally._accDelta = 0;
+          ally.update(dt, targetPos, []);
+        }
+      }
+      // Régénération par vagues : recompléter chaque équipe toutes les 6 s
+      this._tdmAiRespawnTimer -= delta;
+      if (this._tdmAiRespawnTimer <= 0) {
+        this._tdmAiRespawnTimer = 6;
+        const allyAlive  = this.allies.filter(a => !a.isDead).length;
+        const enemyAlive = this.enemies.filter(e => !e.isDead).length;
+        if (allyAlive  < this._tdmAiCount) this._spawnTeamAI('ally',  this._tdmAiCount - allyAlive);
+        if (enemyAlive < this._tdmAiCount) this._spawnTeamAI('enemy', this._tdmAiCount - enemyAlive);
+      }
+      this.allies = this.allies.filter(a => !a.isDead || a.mesh !== null);
     }
 
     // Purger les ennemis dont l'animation de mort est terminée (mesh=null)
@@ -1858,6 +1972,7 @@ export class Game {
     // Met à jour le HUD (ennemis IA + joueurs distants)
     const allTargets = [
       ...this.enemies,
+      ...this.allies,
       ...(this._multiplayerManager ? this._multiplayerManager.getRemotePlayers() : []),
     ];
     // Base alliée / ennemie selon le mode

@@ -118,10 +118,15 @@ export class Enemy {
       terrainClear: 0, hp: this.hp, alt: 0, terrainAlt: 0,
     };
 
+    // Faction : 'enemy' (par défaut) ou 'ally' (IA d'équipe en mode Équipes)
+    this.faction = options.faction ?? 'enemy';
+    if (this.faction === 'ally') this.isEnemy = false;   // → marqueur allié (vert) côté UI
+
     // Rendu / mort
     this._deathTimer = 0;
     this._hitFlash   = 0;
-    this._baseColor  = (this.role === 'attacker') ? 0xaa1515 : 0x8b1a1a;
+    this._baseColor  = options.baseColor
+      ?? ((this.role === 'attacker') ? 0xaa1515 : 0x8b1a1a);
     this._loaded     = false;
     this._propBone   = null;
     this._meshNodes  = [];
