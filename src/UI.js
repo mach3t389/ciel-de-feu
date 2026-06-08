@@ -2466,37 +2466,55 @@ export class UI {
   }
 
   // ── Bannière mode spectateur (survie multijoueur) ────────────────────────
-  showSpectatorBanner(visible) {
+  // allyName : nom de l'allié actuellement regardé
+  // canCycle : true si plusieurs alliés vivants (affiche l'indice Tab)
+  showSpectatorBanner(visible, allyName = '', canCycle = false) {
     if (!this._spectatorEl) {
       this._spectatorEl = document.createElement('div');
       Object.assign(this._spectatorEl.style, {
         position    : 'fixed',
-        top         : '42%',
+        bottom      : '38%',
         left        : '50%',
-        transform   : 'translate(-50%, -50%)',
+        transform   : 'translateX(-50%)',
         fontFamily  : '"Courier New",monospace',
         textAlign   : 'center',
         pointerEvents: 'none',
         zIndex      : '601',
         transition  : 'opacity 0.4s',
+        background  : 'rgba(0,0,0,0.45)',
+        padding     : '10px 24px',
+        border      : '1px solid rgba(212,200,138,0.2)',
       });
-      this._spectatorEl.innerHTML =
-        `<div style="font-size:22px;letter-spacing:8px;color:#d4c88a;` +
-        `text-shadow:0 0 18px rgba(212,200,138,0.55);">${t('spectatorMode')}</div>` +
-        `<div style="font-size:11px;letter-spacing:4px;color:#a09050;margin-top:8px;">` +
-        `${t('respawnNextWave')}</div>`;
       document.body.appendChild(this._spectatorEl);
     }
+    if (visible) {
+      const cycleHint = canCycle
+        ? `<div style="font-size:10px;letter-spacing:3px;color:#7a7050;margin-top:6px;">TAB — ${t('spectatorCycle')}</div>`
+        : '';
+      const nameHtml = allyName
+        ? `<div style="font-size:13px;letter-spacing:5px;color:#a8c070;margin-top:4px;">${allyName}</div>`
+        : '';
+      this._spectatorEl.innerHTML =
+        `<div style="font-size:20px;letter-spacing:8px;color:#d4c88a;` +
+        `text-shadow:0 0 18px rgba(212,200,138,0.55);">${t('spectatorMode')}</div>` +
+        nameHtml +
+        `<div style="font-size:10px;letter-spacing:4px;color:#a09050;margin-top:6px;">${t('respawnNextWave')}</div>` +
+        cycleHint;
+      this._spectatorEl.style.display = 'block';
+    }
     this._spectatorEl.style.opacity = visible ? '1' : '0';
-    // Retirer du DOM après la transition de sortie
     if (!visible) {
       clearTimeout(this._spectatorHideTimer);
       this._spectatorHideTimer = setTimeout(() => {
         if (this._spectatorEl) this._spectatorEl.style.display = 'none';
       }, 450);
-    } else {
-      this._spectatorEl.style.display = 'block';
     }
+  }
+
+  // Retire l'overlay de mort (utilisé quand on entre en mode spectateur)
+  clearDeadScreen() {
+    if (this._deadOverlay) { this._deadOverlay.remove(); this._deadOverlay = null; }
+    this._deadShown = false;
   }
 
   // ── Notifications joueurs (arrivée / départ) — pile en haut-centre ─────────

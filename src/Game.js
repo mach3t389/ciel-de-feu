@@ -579,6 +579,8 @@ export class Game {
       if (e.key === 'F4') { e.preventDefault(); this._setLowGraphics((this._lowGraphics + 1) % 3); return; }
       if (e.key === 'F5') { e.preventDefault(); this._toggleTop20(); return; }
       if (e.key === 'F6') { e.preventDefault(); this._toggleTextureDebug(); return; }
+      // Tab en mode spectateur → cycler entre les alliés vivants
+      if (e.key === 'Tab' && this._spectatorMode) { e.preventDefault(); this._cycleSpectatorTarget(); return; }
       if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
       if (isPvP) {
@@ -1366,15 +1368,40 @@ export class Game {
 
   // ── Mode spectateur (survie multijoueur) ──────────────────────────────────
   _enterSpectator() {
-    this._spectatorMode   = true;
-    const remotePlayers   = this._multiplayerManager?.getRemotePlayers() ?? [];
-    this._spectatorTarget = remotePlayers.find(p => !p.isDead) ?? null;
-    this.ui.showSpectatorBanner(true);
+    this._spectatorMode     = true;
+    this._spectatorTargetIdx = 0;
+    // Masquer l'avion local — on pilote la caméra sur un allié
+    if (this.player.model) this.player.model.visible = false;
+    // Effacer l'écran de mort rouge si présent
+    this.ui.clearDeadScreen();
+    this._updateSpectatorTarget();
+  }
+
+  _updateSpectatorTarget() {
+    const alive = (this._multiplayerManager?.getRemotePlayers() ?? []).filter(p => !p.isDead);
+    if (alive.length === 0) { this._spectatorTarget = null; }
+    else {
+      this._spectatorTargetIdx = ((this._spectatorTargetIdx ?? 0) % alive.length);
+      this._spectatorTarget = alive[this._spectatorTargetIdx];
+    }
+    const name     = this._spectatorTarget?.name ?? '';
+    const canCycle = alive.length > 1;
+    this.ui.showSpectatorBanner(true, name, canCycle);
+  }
+
+  _cycleSpectatorTarget() {
+    if (!this._spectatorMode) return;
+    const alive = (this._multiplayerManager?.getRemotePlayers() ?? []).filter(p => !p.isDead);
+    if (alive.length < 2) return;
+    this._spectatorTargetIdx = ((this._spectatorTargetIdx ?? 0) + 1) % alive.length;
+    this._updateSpectatorTarget();
   }
 
   _exitSpectator() {
     this._spectatorMode   = false;
     this._spectatorTarget = null;
+    // Rendre l'avion local visible à nouveau
+    if (this.player.model) this.player.model.visible = true;
     this.ui.showSpectatorBanner(false);
     this._respawn();
   }
@@ -1468,27 +1495,39 @@ export class Game {
 
     // Mode spectateur (survie MP) : piloter la caméra vers un allié vivant
     if (this._spectatorMode) {
-      // Rafraîchir la cible si elle est morte
+      // Rafraîchir la cible si elle est morte ou inconnue (sans changer l'index explicitement)
       if (!this._spectatorTarget || this._spectatorTarget.isDead) {
-        const remotePlayers = this._multiplayerManager?.getRemotePlayers() ?? [];
-        this._spectatorTarget = remotePlayers.find(p => !p.isDead) ?? null;
+        this._updateSpectatorTarget();
       }
       if (this._spectatorTarget) {
         // Le CameraController suit player.pivot → on le déplace sur la cible
         this.player.pivot.position.copy(this._spectatorTarget.position);
         this.player.pivot.quaternion.copy(this._spectatorTarget.quaternion);
       }
-      // Tous les alliés morts → game over (on le montre une seule fois)
-      const allDead = (this._multiplayerManager?.getRemotePlayers() ?? []).every(p => p.isDead);
-      if (allDead) {
-        this._spectatorMode = false;
-        this.ui.showSpectatorBanner(false);
-        this.ui.showSurvivalGameOver(
-          this._survivalWave, this._survivalKills,
-          () => this._quit(),
-          null,
-          this._buildScoreboardRows(),
-        );
+      // Tous les alliés morts → game over
+      // Guard : ne pas déclencher pendant le compte à rebours inter-vague (risque
+      // de faux-positif si un allié distant est en train de se réapparaître).
+      if (!this._survivalBetweenWaves) {
+        const remotePlayers = this._multiplayerManager?.getRemotePlayers() ?? [];
+        const allDead = remotePlayers.length > 0 && remotePlayers.every(p => p.isDead);
+        if (allDead) {
+          // Délai de grâce : confirmation pendant 1,5 s avant de déclarer game over
+          this._allDeadTimer = (this._allDeadTimer ?? 0) + delta;
+          if (this._allDeadTimer >= 1.5) {
+            this._allDeadTimer = 0;
+            this._spectatorMode = false;
+            if (this.player.model) this.player.model.visible = true;
+            this.ui.showSpectatorBanner(false);
+            this.ui.showSurvivalGameOver(
+              this._survivalWave, this._survivalKills,
+              () => this._quit(),
+              null,
+              this._buildScoreboardRows(),
+            );
+          }
+        } else {
+          this._allDeadTimer = 0;
+        }
       }
     }
 
@@ -1772,7 +1811,13 @@ export class Game {
         if (this._survivalCountdown <= 0) {
           this._survivalBetweenWaves = false;
           // Réapparition automatique du spectateur au début de chaque nouvelle vague
-          if (this._spectatorMode) this._exitSpectator();
+          if (this._spectatorMode) {
+            this._exitSpectator();
+          } else if (this.player.isDead) {
+            // Filet de sécurité : le joueur est mort mais n'est pas en mode spectateur
+            // (ex. mort juste avant la fin du compte à rebours sans entrer en spectateur)
+            this._respawn();
+          }
           this._startSurvivalWave();
         }
       } else {

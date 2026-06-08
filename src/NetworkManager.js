@@ -110,6 +110,13 @@ export class NetworkManager {
       return;
     }
 
+    // Erreur serveur : rejeter toute requête en attente (ex. salle introuvable lors d'un joinRoom)
+    if (type === 'error' && this._pending.size > 0) {
+      for (const [, { reject }] of this._pending) reject(new Error(payload?.message ?? 'server error'));
+      this._pending.clear();
+      return;
+    }
+
     // Attribution d'ID
     if (type === 'welcome') { this.id = payload.id; return; }
 

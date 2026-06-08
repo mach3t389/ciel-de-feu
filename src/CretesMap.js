@@ -384,6 +384,8 @@ export class CretesMap {
 
     const dummy  = new THREE.Object3D();
     const counts = Object.fromEntries(Object.keys(paths).map(k => [k, 0]));
+    const placed = [];
+    const MIN_D2 = 22 * 22;
 
     for (const v of VILLAGES) {
       const square = new THREE.Mesh(
@@ -395,12 +397,11 @@ export class CretesMap {
       square.renderOrder = 1;
       this.scene.add(square);
 
-      const placed = [];
-      const MIN_D2 = 20 * 20;
       for (const [dx, dz, type, targetH, rotY] of this._makeVillageLayout()) {
         const g = groups[type];
         if (!g || counts[type] >= MAX_PER_TYPE || g.naturalHeight <= 0) continue;
         const wx = v.x + dx, wz = v.z + dz;
+        if (this._nearAirport(wx, wz, 55)) continue;
         if (placed.some(([px, pz]) => (wx-px)**2 + (wz-pz)**2 < MIN_D2)) continue;
         const scale = targetH / g.naturalHeight;
         const gY  = this.getTerrainHeight(wx, wz);

@@ -1527,12 +1527,27 @@ export class Menu {
           statusEl.textContent = 'En attente de joueurs...';
           statusEl.style.color = M.green;
         } else {
-          const res = await nm.joinRoom(code, { name: self.name, team: self.team });
+          // Retry si la salle n'existe pas encore (hôte en train de créer la partie)
+          let res = null;
+          const MAX_RETRIES = 10, RETRY_MS = 3000;
+          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              res = await nm.joinRoom(code, { name: self.name, team: self.team });
+              break; // succès
+            } catch (err) {
+              const msg = err?.message ?? String(err);
+              const notFound = msg.includes('introuvable') || msg.includes('not found');
+              if (!notFound || attempt >= MAX_RETRIES) throw err;
+              statusEl.textContent = `Recherche de la salle ${code}… (${attempt + 1}/${MAX_RETRIES})`;
+              statusEl.style.color = M.yellow;
+              await new Promise(r => setTimeout(r, RETRY_MS));
+            }
+          }
           statusEl.textContent = `Connecté — ${code}`;
           statusEl.style.color = M.green;
           // Appliquer la config initiale reçue dans la réponse join_room
-          if (res.config) applyConfigPatch(res.config);
-          if (res.players) {
+          if (res?.config) applyConfigPatch(res.config);
+          if (res?.players) {
             res.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
             renderPlayers();
           }
