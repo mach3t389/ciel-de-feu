@@ -54,7 +54,8 @@
       "Bash(node --check src/MultiplayerManager.js)",
       "Bash(node --check server.js)",
       "Bash(grep -n \"import.*i18n\\\\|^import { t\\\\| t,\" src/Game.js)",
-      "Bash(grep -n \"_setupInput\\\\|_setupControls\\\\|_bindInput\\\\|setupInput\\\\|^  [a-zA-Z_]*\\(.*{$\" src/Player.js)"
+      "Bash(grep -n \"_setupInput\\\\|_setupControls\\\\|_bindInput\\\\|setupInput\\\\|^  [a-zA-Z_]*\\(.*{$\" src/Player.js)",
+      "Bash(grep -rn \"VITE_WS_URL\\\\|wss://\\\\|ws://\\\\|_defaultUrl\" src/NetworkManager.js)"
     ]
   }
 }

@@ -238,8 +238,9 @@ const LANGS = {
     playerLeftSuffix   : 'a quitté la partie',
     scoreboardTitle    : 'TABLEAU DES SCORES',
     playerCol          : 'JOUEUR',
-    elimCol            : 'ÉLIM.',
+    elimCol            : 'ÉLIMINATIONS',
     deathCol           : 'MORTS',
+    you                : 'VOUS',
   },
 
   en: {
@@ -480,8 +481,9 @@ const LANGS = {
     playerLeftSuffix   : 'left the game',
     scoreboardTitle    : 'SCOREBOARD',
     playerCol          : 'PLAYER',
-    elimCol            : 'ELIM.',
+    elimCol            : 'ELIMINATIONS',
     deathCol           : 'DEATHS',
+    you                : 'YOU',
   },
 };
 

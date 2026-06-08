@@ -1107,16 +1107,7 @@ export class Menu {
     wrap.appendChild(nameErrJoin);
     wrap.appendChild(mkDivider());
 
-    wrap.appendChild(mkLabel(t('plane')));
-    wrap.appendChild(mkChoiceGroup(
-      Object.entries(TEAM_COLORS).map(([k, v]) => ({ value: k, label: t('color_' + k), color: v.hex, borderColor: v.borderHex })),
-      this._config.team,
-      v => {
-        this._config.team = v;
-        if (this._loadPreviewModel && TEAM_COLORS[v]?.path) this._loadPreviewModel(TEAM_COLORS[v].path);
-      }
-    ));
-    wrap.appendChild(mkDivider());
+    // Couleur d'avion choisie dans le lobby (pas ici) — évite la redondance
 
     const errMsg = el('div', { text: '', style: { color: M.red, fontSize: '10px', letterSpacing: '2px', minHeight: '14px' }});
     wrap.appendChild(errMsg);
@@ -1507,7 +1498,18 @@ export class Menu {
           }
         }
 
-        nm.on('player_joined',  ({ player })           => { players.push({ ...player, isReady: false }); renderPlayers(); });
+        nm.on('player_joined',  ({ player })           => {
+          players.push({ ...player, isReady: false }); renderPlayers();
+          // L'hôte resynchronise le nouvel arrivant (config complète + sa couleur)
+          if (isHost && nm) {
+            nm.send('config_update', {
+              mode: this._config.mode, map: this._config.map,
+              difficulty: this._config.difficulty, totalEnemies: this._config.totalEnemies,
+              ffaTimeLimit: this._config.ffaTimeLimit, friendlyFire: this._config.friendlyFire,
+            });
+            nm.send('player_plane', { plane: this._config.team });
+          }
+        });
         nm.on('player_left',    ({ id })               => { const i = players.findIndex(p => p.id === id); if (i > -1) players.splice(i, 1); renderPlayers(); });
         nm.on('player_ready',   ({ id, ready })        => { const p = players.find(p => p.id === id); if (p) { p.isReady = ready; renderPlayers(); } });
         nm.on('player_plane',   ({ id, plane })        => { const p = players.find(p => p.id === id); if (p) { p.team = plane; renderPlayers(); } });

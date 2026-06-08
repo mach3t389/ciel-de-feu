@@ -1355,9 +1355,16 @@ export class UI {
       const isAlly    = e.isEnemy === false; // RemotePlayer allié
       const isClosest = i === 0 && !isAlly;
 
+      // Position lissée du marqueur : les ennemis lointains ne mettent leur IA à
+      // jour qu'1 frame sur 12 → leur position « saute ». On interpole vers la
+      // position réelle pour un marqueur fluide (snap si saut énorme = respawn).
+      if (!e._mkPos) e._mkPos = e.position.clone();
+      else if (e._mkPos.distanceToSquared(e.position) > 90000) e._mkPos.copy(e.position);
+      else e._mkPos.lerp(e.position, 0.25);
+
       // Marqueur centré sur l'avion lui-même : la pointe basse du losange
       // tombe exactement sur le point d'impact → viser le marqueur = toucher.
-      const above = e.position.clone();
+      const above = e._mkPos.clone();
       const ndc = above.clone().project(camera);
       const sx = ( ndc.x * 0.5 + 0.5) * W;
       const sy = (-ndc.y * 0.5 + 0.5) * H;
@@ -1425,20 +1432,13 @@ export class UI {
         // ── Indicateur de visée : où tirer pour toucher une cible mobile ──
         // Relié au losange par une ligne fine → pas de confusion sur la cible.
         // Pour une cible lente le cercle reste sur l'avion ; il dévie quand elle file.
-        if (dist < 850 && this._leadSpeed) {
+        if (dist < 1100 && this._leadSpeed) {
           const lead = this._leadPoint(player.position, e, this._leadSpeed);
           const lndc = lead.clone().project(camera);
           if (lndc.z < 1.0) {
             const lx = ( lndc.x * 0.5 + 0.5) * W;
             const ly = (-lndc.y * 0.5 + 0.5) * H;
             const lr = 7;
-            // distance écran entre l'avion et le point de visée
-            if (Math.hypot(lx - sx, ly - sy) > 4) {
-              ctx.globalAlpha = 0.45;
-              ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(lx, ly);
-              ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
-              ctx.globalAlpha = 1;
-            }
             ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI * 2);
             ctx.strokeStyle = '#ff4433'; ctx.lineWidth = 2; ctx.stroke();
             ctx.beginPath();
@@ -1981,10 +1981,10 @@ export class UI {
   // HTML réutilisable (scoreboard en jeu ET écrans de fin de partie)
   _scoreboardHTML(rows) {
     const head =
-      `<div style="display:flex;font-size:8px;letter-spacing:2px;color:#6a6040;border-bottom:1px solid #3a3020;padding-bottom:5px;margin-bottom:5px;">` +
-      `<span style="flex:1;">${t('playerCol')}</span>` +
-      `<span style="width:54px;text-align:center;">${t('elimCol')}</span>` +
-      `<span style="width:54px;text-align:center;">${t('deathCol')}</span></div>`;
+      `<div style="display:flex;font-size:8px;letter-spacing:1px;color:#6a6040;border-bottom:1px solid #3a3020;padding-bottom:5px;margin-bottom:5px;">` +
+      `<span style="flex:1;padding-right:12px;">${t('playerCol')}</span>` +
+      `<span style="width:104px;text-align:center;">${t('elimCol')}</span>` +
+      `<span style="width:72px;text-align:center;">${t('deathCol')}</span></div>`;
     const sorted = [...rows].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths));
     const body = sorted.map(r => {
       const col   = r.isLocal ? '#9ef060' : (r.isDead ? '#7a6a5a' : '#d4c88a');
@@ -1992,9 +1992,9 @@ export class UI {
       const star  = r.isLocal ? '▸ ' : '';
       const name  = (star + (r.name || '?')).slice(0, 16);
       return `<div style="display:flex;align-items:center;font-size:12px;letter-spacing:1px;color:${col};opacity:${op};padding:3px 0;">` +
-        `<span style="flex:1;white-space:nowrap;overflow:hidden;">${name}</span>` +
-        `<span style="width:54px;text-align:center;font-weight:bold;">${r.kills}</span>` +
-        `<span style="width:54px;text-align:center;">${r.deaths}</span></div>`;
+        `<span style="flex:1;padding-right:12px;white-space:nowrap;overflow:hidden;">${name}</span>` +
+        `<span style="width:104px;text-align:center;font-weight:bold;">${r.kills}</span>` +
+        `<span style="width:72px;text-align:center;">${r.deaths}</span></div>`;
     }).join('');
     return head + body;
   }
@@ -2013,7 +2013,7 @@ export class UI {
       });
       const panel = document.createElement('div');
       panel.style.cssText = `background:rgba(11,12,10,0.92);border:1px solid #4a4030;border-radius:4px;` +
-        `box-shadow:0 10px 50px rgba(0,0,0,0.7);padding:18px 26px;min-width:340px;`;
+        `box-shadow:0 10px 50px rgba(0,0,0,0.7);padding:18px 26px;min-width:400px;`;
       const title = document.createElement('div');
       title.textContent = t('scoreboardTitle');
       title.style.cssText = 'font-size:12px;letter-spacing:5px;color:#d4c88a;text-align:center;margin-bottom:12px;';
@@ -2255,7 +2255,7 @@ export class UI {
   // Mini tableau des scores intégré aux écrans de fin
   _mkEndScoreboard(rows) {
     const box = document.createElement('div');
-    box.style.cssText = 'min-width:300px;margin-bottom:24px;border-top:1px solid #3a3020;padding-top:14px;';
+    box.style.cssText = 'min-width:360px;margin-bottom:24px;border-top:1px solid #3a3020;padding-top:14px;';
     box.innerHTML = this._scoreboardHTML(rows);
     return box;
   }

@@ -1260,7 +1260,7 @@ export class Game {
   // Lignes du tableau des scores : joueur local + joueurs distants
   _buildScoreboardRows() {
     const rows = [{
-      name   : this._config.pilotName || 'VOUS',
+      name   : this._config.pilotName || t('you'),
       kills  : this.stats?.kills ?? 0,
       deaths : this.stats?.deaths ?? 0,
       isLocal: true,
