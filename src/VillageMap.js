@@ -767,9 +767,9 @@ export class VillageMap {
       this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 150,  300,  400, fwdX, fwdZ));
       this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 400,  800, 2000, fwdX, fwdZ));
     } else {
-      this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 2500, fwdX, fwdZ));
-      this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500,  800, 1200, fwdX, fwdZ));
-      this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  600,  800, fwdX, fwdZ));
+      this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 3500, fwdX, fwdZ));
+      this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500,  800, 1400, fwdX, fwdZ));
+      this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  700, 1400, fwdX, fwdZ));
       this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 1000, 2500, 4500, fwdX, fwdZ));
     }
   }

@@ -509,19 +509,20 @@ export class UI {
       if ((active.length || groundTargets.length || enemyBase || villages.length) && camera) {
         this._drawRadar(active, player, groundTargets, enemyBase, villages);
       }
-      if (camera && !player.isDead) {
-        if (!hideMarkers) {
-          if (active.length || basePos || groundTargets.length || villages.length) {
-            this._drawWorldMarkers(active, player, camera, basePos, groundTargets, villages);
-          } else if (this._worldCanvas) {
-            this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
-          }
+    }
+    // Marqueurs redessinés chaque frame pour éviter le sautillement
+    if (camera && !player.isDead) {
+      if (!hideMarkers) {
+        if (active.length || basePos || groundTargets.length || villages.length) {
+          this._drawWorldMarkers(active, player, camera, basePos, groundTargets, villages);
         } else if (this._worldCanvas) {
           this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
         }
-      } else if (!camera && this._worldCanvas) {
+      } else if (this._worldCanvas) {
         this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
       }
+    } else if (!camera && this._worldCanvas) {
+      this._worldCanvas.getContext('2d').clearRect(0, 0, this._worldCanvas.width, this._worldCanvas.height);
     }
     this._drawHitMarker();
     this._updateEngineStatus(player);
