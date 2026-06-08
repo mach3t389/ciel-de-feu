@@ -43,7 +43,9 @@ export class Game {
     };
 
     // ── Renderer ────────────────────────────────────────────────────────────
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this._isLowEnd = navigator.hardwareConcurrency <= 4 ||
+                     (navigator.deviceMemory != null && navigator.deviceMemory <= 4);
+    this.renderer = new THREE.WebGLRenderer({ antialias: !this._isLowEnd, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = false;
@@ -53,7 +55,7 @@ export class Game {
 
     // ── Scène ───────────────────────────────────────────────────────────────
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x7aa0c8, 300, 2200);
+    this.scene.fog = new THREE.Fog(0x7aa0c8, 300, this._isLowEnd ? 1600 : 2200);
 
     // ── Caméra principale ───────────────────────────────────────────────────
     // near=1.0 (pas 0.1) : la caméra 3e personne est toujours à ≥5u de l'avion,
@@ -334,7 +336,7 @@ export class Game {
     const timeLimitMin = (isFFA || isTDM) ? (this._config.ffaTimeLimit ?? 0) : 0;
     this._timeRemaining = timeLimitMin > 0 ? timeLimitMin * 60 : null;
     if (this._timeRemaining !== null) this.ui.setMatchTimer(this._timeRemaining);
-    const MAX_ACTIVE   = Math.min(30, 15 + 5 * (playerCount - 1)); // +5 en l'air / joueur
+    const MAX_ACTIVE   = this._isLowEnd ? 8 : Math.min(30, 15 + 5 * (playerCount - 1));
     const WAVE_SIZE    = 5;
 
     // État de mission
@@ -1382,7 +1384,8 @@ export class Game {
     ];
 
     this._cloudMeshes = [];
-    spawns.forEach(([cx, cy, cz, s]) => {
+    const visibleSpawns = this._isLowEnd ? spawns.slice(0, 10) : spawns;
+    visibleSpawns.forEach(([cx, cy, cz, s]) => {
       const blobCount = 6 + Math.floor(rng(0, 7));
       const axisLen   = rng(70, 140) * s;
       const geos      = [];
@@ -1440,7 +1443,7 @@ export class Game {
 
   // ── Terrain montagneux avec vertex colors ─────────────────────────────────
   _buildGround() {
-    const SEGS = 160;          // segments par axe
+    const SEGS = this._isLowEnd ? 110 : 160;  // segments par axe
     const SIZE = 3000;         // taille du terrain en unités monde (3 km × 3 km)
 
     // ── Noise valeur (fBm) ────────────────────────────────────────────────

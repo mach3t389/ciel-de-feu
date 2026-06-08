@@ -130,6 +130,19 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      // ── Chargement terminé ───────────────────────────────────────────────
+      case 'player_loaded': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        const p = room.players.get(clientId);
+        if (p) p.info.loaded = true;
+        const total       = room.players.size;
+        const loadedCount = Array.from(room.players.values()).filter(({ info }) => info.loaded).length;
+        room.broadcastAll('player_load_progress', { loaded: loadedCount, total });
+        if (loadedCount >= total) room.broadcastAll('all_players_loaded', {});
+        break;
+      }
+
       // ── Prêt ──────────────────────────────────────────────────────────────
       case 'player_ready': {
         const room = rooms.get(ws._room);

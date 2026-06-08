@@ -135,7 +135,8 @@ const LANGS = {
     mapShort_4  : 'BOCAGE',
     mapShort_5  : 'NORMANDIE',
     // Chargement
-    loading    : 'CHARGEMENT EN COURS',
+    loading           : 'CHARGEMENT EN COURS',
+    waitingForPlayers : 'EN ATTENTE DES AUTRES JOUEURS...',
 
     // ── Paramètres ───────────────────────────────────────────────────────────
     stats       : 'STATISTIQUES',
@@ -355,7 +356,8 @@ const LANGS = {
     mapShort_4  : 'BOCAGE',
     mapShort_5  : 'NORMANDY',
     // Loading
-    loading    : 'LOADING',
+    loading           : 'LOADING',
+    waitingForPlayers : 'WAITING FOR OTHER PLAYERS...',
 
     // ── Settings ─────────────────────────────────────────────────────────────
     stats       : 'STATISTICS',

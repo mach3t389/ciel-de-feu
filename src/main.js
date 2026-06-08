@@ -20,6 +20,13 @@ while (true) {
 
   const game = new Game(document.getElementById('app'), config);
   await game.preload(p => loading.setProgress(p));
+
+  if (config.networkManager) {
+    loading.setStatus(t('waitingForPlayers'));
+    config.networkManager.send('player_loaded', {});
+    await new Promise(resolve => config.networkManager.once('all_players_loaded', resolve));
+  }
+
   loading.hide();
 
   const result = await game.start();

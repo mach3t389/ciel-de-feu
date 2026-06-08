@@ -72,7 +72,12 @@ export class LoadingScreen {
     this._root = root;
     this._bar  = bar;
     this._pct  = pct;
+    this._sub  = sub;
     document.body.appendChild(root);
+  }
+
+  setStatus(text) {
+    this._sub.textContent = text;
   }
 
   setProgress(p) {

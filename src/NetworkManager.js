@@ -69,6 +69,11 @@ export class NetworkManager {
     this._handlers.set(type, arr);
   }
 
+  once(type, handler) {
+    const wrapper = (payload) => { this.off(type, wrapper); handler(payload); };
+    this.on(type, wrapper);
+  }
+
   // ── Interne ────────────────────────────────────────────────────────────────
   _request(type, payload) {
     return new Promise((resolve, reject) => {
