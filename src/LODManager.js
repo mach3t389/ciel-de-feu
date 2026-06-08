@@ -69,10 +69,12 @@ export class InstancedLOD {
       for (let lv = 0; lv < 3; lv++) {
         const geo = lv === 0 ? gFull : lv === 1 ? gLod1 : gLod2;
         const im  = new THREE.InstancedMesh(geo, mat, maxCount);
-        im.count           = 0;
-        im.frustumCulled   = false;
+        im.count             = 0;
+        im.frustumCulled     = false;
+        im.visible           = (lv === 0); // LOD1/2 masqués jusqu'au premier updateLOD
         im.userData.category = category;
         im.userData.lodLevel = lv;
+        im.userData.meshName = n.name || '';
         scene.add(im);
         this._lods[lv].push(im);
       }
@@ -96,8 +98,9 @@ export class InstancedLOD {
     const d1sq   = lod1Dist * lod1Dist;
     const cullSq = cullDist * cullDist;
 
+    // Réinitialiser les comptes ET masquer tous les niveaux
     for (let lv = 0; lv < 3; lv++)
-      for (const im of this._lods[lv]) im.count = 0;
+      for (const im of this._lods[lv]) { im.count = 0; im.visible = false; }
 
     const n   = this._matrices.length;
     const pos = this._positions;
@@ -117,9 +120,12 @@ export class InstancedLOD {
       }
     }
 
+    // N'activer que les niveaux qui ont des instances
     for (let lv = 0; lv < 3; lv++)
-      for (const im of this._lods[lv])
+      for (const im of this._lods[lv]) {
+        im.visible = im.count > 0;
         im.instanceMatrix.needsUpdate = true;
+      }
   }
 
   // Current visible triangle count (sum across all active LOD levels)

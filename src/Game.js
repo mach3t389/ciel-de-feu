@@ -805,20 +805,22 @@ export class Game {
       const tris = o.geometry.index
         ? o.geometry.index.count / 3
         : (o.geometry.attributes?.position?.count ?? 0) / 3;
-      const cat = o.userData.category ?? '';
-      const lod = o.userData.lodLevel !== undefined ? `L${o.userData.lodLevel}` : '';
-      entries.push({ name: `${cat}${lod ? ' ' + lod : ''}`, triPer: Math.round(tris), count: o.count, total: Math.round(tris * o.count) });
+      const cat  = o.userData.category  ?? '';
+      const mesh = o.userData.meshName  ?? '';
+      const lod  = o.userData.lodLevel !== undefined ? `L${o.userData.lodLevel}` : '';
+      const label = (mesh || cat || '?').slice(0, 16);
+      entries.push({ name: `${label} ${lod}`.trim(), triPer: Math.round(tris), count: o.count, total: Math.round(tris * o.count) });
     });
     entries.sort((a, b) => b.total - a.total);
     const top = entries.slice(0, 20);
 
-    const W = 340, lh = 14, pad = 7;
+    const W = 380, lh = 14, pad = 7;
     const rows = [
       '[F5] TOP 20 MESHES (instances)',
       '─────────────────────────────────',
-      'Catégorie       tri/inst  inst   total',
+      'Nom               tri/inst  inst   total',
       '─────────────────────────────────',
-      ...top.map(e => `${(e.name).padEnd(14)} ${String(e.triPer).padStart(7)}  ${String(e.count).padStart(4)}  ${(e.total/1000).toFixed(1)}k`),
+      ...top.map(e => `${e.name.padEnd(18)} ${String(e.triPer).padStart(7)}  ${String(e.count).padStart(4)}  ${(e.total/1000).toFixed(1)}k`),
     ];
 
     const h = rows.length * lh + pad * 2;
@@ -854,18 +856,23 @@ export class Game {
     const fps = this._fpsBuffer.reduce((a, b) => a + b, 0) / this._fpsBuffer.length;
 
     // Visible mesh count — recomputed once per second (~60 frames)
-    // Traversal 1×/s — compte meshes visibles et InstancedMesh
     this._visibleMeshTick++;
     if (this._visibleMeshTick >= 60) {
       this._visibleMeshTick = 0;
-      let meshN = 0, instN = 0;
+      let meshN = 0, instN = 0, l0 = 0, l1 = 0, l2 = 0;
       this.scene.traverse(o => {
         if (!o.visible) return;
-        if (o.isInstancedMesh) { instN += o.count; meshN++; }
-        else if (o.isMesh || o.isSkinnedMesh) meshN++;
+        if (o.isInstancedMesh) {
+          instN += o.count; meshN++;
+          const lv = o.userData.lodLevel;
+          if      (lv === 0) l0 += o.count;
+          else if (lv === 1) l1 += o.count;
+          else if (lv === 2) l2 += o.count;
+        } else if (o.isMesh || o.isSkinnedMesh) meshN++;
       });
-      this._visibleMeshCount  = meshN;
+      this._visibleMeshCount   = meshN;
       this._instanceTotalCount = instN;
+      this._lodStats = { l0, l1, l2 };
     }
 
     const info  = this.renderer.info.render;
@@ -881,6 +888,7 @@ export class Game {
     const gs = this._groundDefense?.debugStats ?? {};
     const triK2 = n => ((n ?? 0) / 1000).toFixed(1) + 'k';
 
+    const ls   = this._lodStats ?? {};
     const sep = '─────────────────────────────────';
     const rows = [
       '[F3] PERFORMANCE DEBUG',
@@ -892,6 +900,10 @@ export class Game {
       `Triangles        ${triK}k`,
       `Meshes visibles  ${this._visibleMeshCount}`,
       `Instances totales ${this._instanceTotalCount ?? 0}`,
+      sep,
+      `LOD0 instances   ${ls.l0 ?? '—'}`,
+      `LOD1 instances   ${ls.l1 ?? '—'}`,
+      `LOD2 instances   ${ls.l2 ?? '—'}`,
       sep,
       `Avions actifs    ${planes}`,
       `AI Updates/frame ${this._frameAIUpdates}`,
