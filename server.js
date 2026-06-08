@@ -231,4 +231,7 @@ function generateCode() {
   return code;
 }
 
-console.log(`Serveur WebSocket démarré sur ws://localhost:${PORT}`);
+// Version des messages gérés — sert à vérifier que le déploiement est à jour.
+const PROTOCOL = 'v2-lobby-sync'; // config_update / player_plane / player_team / score_update
+console.log(`Serveur WebSocket démarré sur le port ${PORT} — protocole ${PROTOCOL}`);
+console.log('Messages lobby gérés : create_room, join_room, config_update, player_plane, player_team, player_ready, score_update');
