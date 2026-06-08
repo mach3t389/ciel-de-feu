@@ -28,9 +28,9 @@ const STICK_SENSITIVITY = 0.0018;
 const STICK_DECAY       = 0.08;  // quasi-persistant : le stick reste en position, dérive très lentement
 const GAMEPAD_DEADZONE  = 0.10;
 
-// Rampe exponentielle clavier : légère douceur au départ → pleine autorité rapide
-const KEY_RAMP_TIME = 0.22;  // secondes pour atteindre 100% d'autorité
-const KEY_RAMP_EXP  = 1.6;   // exposant (>1 = début lent, fin rapide)
+// Rampe clavier : réponse immédiate au premier appui, pleine autorité en ~120 ms
+const KEY_RAMP_TIME = 0.12;  // secondes pour atteindre 100% d'autorité
+const KEY_RAMP_EXP  = 0.7;   // <1 = début rapide, fin lente (pas de dead zone perçue)
 
 // ── Mode STANDARD ─────────────────────────────────────────────────────────────
 const MAX_PITCH_RATE  = 0.90;  // rad/s tangage — tous périphériques
