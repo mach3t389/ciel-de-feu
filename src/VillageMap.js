@@ -419,17 +419,13 @@ export class VillageMap {
   // ── Villages (InstancedMesh — un seul draw call par mesh de bâtiment) ────────
   async _buildVillages() {
     const paths = {
-      church : '/Village/Church_V2.glb',
-      tavern : '/Village/Tavern.glb',
-      puit   : '/Village/SM_Puit.glb',
-      house1 : '/Village/House1.glb',
-      house2 : '/Village/House2.glb',
-      house2s: '/Village/House2Small.glb',
-      house3 : '/Village/House3.glb',
-      house4 : '/Village/House4.glb',
-      house5 : '/Village/House5.glb',
+      maison1: '/Village/Maison1.glb',
+      maison2: '/Village/Maison2.glb',
+      maison3: '/Village/Maison3.glb',
+      maison4: '/Village/Maison4.glb',
+      maison5: '/Village/Maison5.glb',
     };
-    const MAX_PER_TYPE = 40;
+    const MAX_PER_TYPE = 60;
     const glbs = {};
     await Promise.all(
       Object.entries(paths).map(async ([key, path]) => {
@@ -438,12 +434,9 @@ export class VillageMap {
       })
     );
 
-    // Créer un groupe instancié par type de bâtiment
-    // Ratios agressifs : LOD0=30%, LOD1=12%, LOD2=5% pour réduire ~5M→~1.6M triangles
-    const BLDG_LOD = [0.30, 0.12, 0.05];
     const groups = {};
     for (const [key, scene] of Object.entries(glbs)) {
-      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building', BLDG_LOD);
+      const g = this._createInstancedGroup(scene, MAX_PER_TYPE, 'building');
       if (g) {
         const bbox = new THREE.Box3().setFromObject(scene);
         g.naturalHeight = bbox.max.y - bbox.min.y;
@@ -506,29 +499,30 @@ export class VillageMap {
   }
 
   _makeVillageLayout() {
-    const house = ['house1','house2','house2s','house3','house4','house5'];
+    const house = ['maison1','maison2','maison3','maison4','maison5'];
     const p = [];
-    // Centre
-    p.push([0, 0, 'church', 28, 0]);
-    p.push([-18, 14, 'puit', 9, rng(0, Math.PI*2)]);
-    p.push([46, -10, 'tavern', 24, Math.PI + rng(-0.3, 0.3)]);
-
-    // Anneau intérieur serré — rayon 32-44, maisons hautes
+    // Anneau central — rayon 18-26
+    for (let i = 0; i < 5; i++) {
+      const ang = (i / 5) * Math.PI * 2 + rng(-0.3, 0.3);
+      const d   = 22 + rng(-4, 6);
+      p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[i%house.length], 20+rng(-2,5), ang+Math.PI+rng(-0.4,0.4)]);
+    }
+    // Anneau intérieur — rayon 36-48
     for (let i = 0; i < 9; i++) {
       const ang = (i / 9) * Math.PI * 2 + rng(-0.15, 0.15);
-      const d   = 36 + rng(-4, 8);
+      const d   = 42 + rng(-5, 8);
       p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[i%house.length], 18+rng(-2,4), ang+Math.PI+rng(-0.3,0.3)]);
     }
-    // Anneau médian — rayon 58-72
+    // Anneau médian — rayon 62-76
     for (let i = 0; i < 11; i++) {
       const ang = (i / 11) * Math.PI * 2 + rng(-0.18, 0.18);
-      const d   = 63 + rng(-7, 10);
+      const d   = 68 + rng(-7, 10);
       p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[i%house.length], 16+rng(-2,3), ang+Math.PI+rng(-0.3,0.3)]);
     }
-    // Anneau extérieur — rayon 82-96
+    // Anneau extérieur — rayon 88-102
     for (let i = 0; i < 9; i++) {
       const ang = (i / 9) * Math.PI * 2 + rng(-0.22, 0.22);
-      const d   = 86 + rng(-6, 12);
+      const d   = 92 + rng(-6, 12);
       p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[(i+2)%house.length], 14+rng(-1,3), ang+rng(-0.4,0.4)]);
     }
     return p;
