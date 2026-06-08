@@ -233,6 +233,8 @@ const LANGS = {
     enemy           : 'ENNEMI',
     spectatorMode   : 'MODE SPECTATEUR',
     respawnNextWave : 'RÉAPPARAÎTRE À LA PROCHAINE MANCHE',
+    playerJoinedSuffix : 'a rejoint la partie',
+    playerLeftSuffix   : 'a quitté la partie',
   },
 
   en: {
@@ -468,6 +470,8 @@ const LANGS = {
     enemy           : 'ENEMY',
     spectatorMode   : 'SPECTATOR MODE',
     respawnNextWave : 'RESPAWN AT NEXT WAVE',
+    playerJoinedSuffix : 'joined the game',
+    playerLeftSuffix   : 'left the game',
   },
 };
 

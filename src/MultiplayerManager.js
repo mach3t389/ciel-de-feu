@@ -63,45 +63,60 @@ class RemotePlayer {
 
   _buildMarker() {
     const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 40;
+    canvas.width = 256; canvas.height = 64;  // résolution doublée → texte net même réduit
     const ctx = canvas.getContext('2d');
     const color = this._markerColor;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, 128, 40);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(1, 1, 126, 38);
-    ctx.fillStyle = color;
-    ctx.font = 'bold 13px Courier New';
+
+    if (this.isEnemy) {
+      // Ennemi : encadré plein, bien visible
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, 0, 256, 64);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(2, 2, 252, 60);
+      ctx.fillStyle = color;
+      ctx.font = 'bold 26px Courier New';
+    } else {
+      // Allié : juste le nom, sans cadre — discret
+      ctx.fillStyle = color;
+      ctx.font = '22px Courier New';
+    }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(this.name.slice(0, 10), 64, 20);
+    ctx.fillText(this.name.slice(0, 10), 128, 32);
 
     const tex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
     this._marker = new THREE.Sprite(mat);
-    const scale = this.isEnemy ? 18 : 11;
-    this._marker.scale.set(scale, scale * 0.31, 1);
-    this._marker.material.opacity = this.isEnemy ? 1.0 : 0.55;
-    this._marker.position.set(0, 8, 0);
+    const scale = this.isEnemy ? 18 : 6;
+    this._marker.scale.set(scale, scale * 0.25, 1);
+    this._marker.material.opacity = this.isEnemy ? 1.0 : 0.4;
+    this._marker.position.set(0, this.isEnemy ? 8 : 5, 0);
     this.pivot.add(this._marker);
   }
 
-  // Applique l'état reçu du réseau (stocke les cibles pour interpolation)
+  // Applique l'état reçu du réseau (stocke les cibles pour interpolation + extrapolation)
   applyState(state) {
     if (state.position) {
       const p = state.position;
       if (!this._targetPos) {
         // Premier paquet : téléporter directement pour éviter un glissement depuis l'origine
         this.pivot.position.set(p.x, p.y, p.z);
+        this._targetPos = new THREE.Vector3(p.x, p.y, p.z);
+      } else {
+        this._targetPos.set(p.x, p.y, p.z);
       }
-      this._targetPos = new THREE.Vector3(p.x, p.y, p.z);
+      this._sinceUpdate = 0;
     }
     if (state.quaternion) {
       const q = state.quaternion;
       this._targetQuat.set(q.x, q.y, q.z, q.w);
     }
     if (state.speed !== undefined) this.speed = state.speed;
+    // Dead reckoning : vitesse monde = avant × vitesse (la physique avance pivot de
+    // speed×delta unités/s, donc on extrapole exactement entre deux paquets réseau)
+    this._velocity = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(this._targetQuat).multiplyScalar(this.speed);
     if (state.hp    !== undefined) {
       this.hp = state.hp;
       if (this.hp <= 0 && !this.isDead) this._die();
@@ -134,9 +149,15 @@ class RemotePlayer {
       this._deathTimer -= delta;
       return;
     }
-    const t = Math.min(1, delta * 8);
-    if (this._targetPos) this.pivot.position.lerp(this._targetPos, t);
-    this.pivot.quaternion.slerp(this._targetQuat, t);
+    // Extrapolation : on prolonge la cible le long du vecteur vitesse entre deux
+    // paquets (plafonné à 0.5s pour éviter la dérive si le réseau décroche).
+    this._sinceUpdate = (this._sinceUpdate ?? 0) + delta;
+    if (this._targetPos && this._velocity && this._sinceUpdate < 0.5) {
+      this._targetPos.addScaledVector(this._velocity, delta);
+    }
+    // Convergence exponentielle rapide → suivi quasi instantané, sans à-coups
+    if (this._targetPos) this.pivot.position.lerp(this._targetPos, 1 - Math.exp(-18 * delta));
+    this.pivot.quaternion.slerp(this._targetQuat, 1 - Math.exp(-16 * delta));
   }
 
   remove(scene) {
@@ -172,9 +193,12 @@ export class MultiplayerManager {
       if (!this._players.has(player.id)) {
         this.addRemotePlayer(player.id, player);
       }
+      this._emit('remote_player_joined', { id: player?.id, name: player?.name });
     });
 
     this._network.on('player_left', ({ id }) => {
+      const p = this._players.get(id);
+      if (p) this._emit('remote_player_left', { id, name: p.name });
       this.removeRemotePlayer(id);
     });
 

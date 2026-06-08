@@ -456,39 +456,75 @@ export class UI {
     );
   }
 
-  // Overlay ESC pour le multijoueur (pas de pause — jeu continue)
-  showEscMenu(visible, onQuit = null) {
+  // Overlay ESC pour le multijoueur — même présentation que le menu pause solo
+  // (le jeu continue derrière : pas de gel, mais réapparition possible)
+  showEscMenu(visible, onQuit = null, onRespawn = null) {
+    if (onQuit    !== null) this._escQuitCb    = onQuit;
+    if (onRespawn !== null) this._escRespawnCb = onRespawn;
+
     if (!this._escOverlay) {
       const wrap = document.createElement('div');
       Object.assign(wrap.style, {
-        position     : 'fixed', top: '50%', left: '50%',
-        transform    : 'translate(-50%, -50%)',
-        display      : 'flex', flexDirection: 'column',
-        alignItems   : 'center', gap: '12px',
-        background   : 'rgba(8,8,6,0.88)',
-        border       : `1px solid #3a3020`,
-        padding      : '32px 48px',
-        fontFamily   : '"Courier New",monospace',
-        color        : C.cream,
-        zIndex       : '500',
+        position      : 'fixed', inset: '0',
+        display       : 'flex', flexDirection: 'column',
+        alignItems    : 'center', justifyContent: 'center',
+        background    : 'rgba(0,0,0,0.62)',
+        fontFamily    : '"Courier New",monospace',
+        color         : C.cream,
+        pointerEvents : 'none',
+        zIndex        : '500',
       });
 
       const title = document.createElement('div');
-      title.textContent = t('gameInProgress');
-      title.style.cssText = 'font-size:11px;letter-spacing:5px;color:#7a7050;margin-bottom:8px;';
+      title.textContent = t('pauseTitle');
+      title.style.cssText = `font-size:48px;font-weight:bold;letter-spacing:12px;opacity:0.9;margin-bottom:8px;`;
 
       const note = document.createElement('div');
       note.textContent = t('gameGoesOn');
-      note.style.cssText = 'font-size:9px;letter-spacing:2px;color:#4a4030;margin-bottom:12px;';
+      note.style.cssText = 'font-size:9px;letter-spacing:3px;color:#7a7050;margin-bottom:18px;';
 
-      const btnResume = document.createElement('button');
-      btnResume.textContent = t('resume');
-      this._styleEscBtn(btnResume, C.cream);
+      const divider = document.createElement('div');
+      divider.style.cssText = `width:120px;height:1px;background:${C.dimCream};opacity:0.2;margin-bottom:20px;`;
+
+      // Même style de bouton que le menu pause (mkPBtn)
+      const mkPBtn = (label, col, primary = false) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        Object.assign(b.style, {
+          background   : primary ? `rgba(212,200,138,0.08)` : 'transparent',
+          border       : `1px solid ${col}`,
+          color        : col,
+          fontFamily   : '"Courier New",monospace',
+          fontSize     : '12px',
+          letterSpacing: '4px',
+          padding      : '11px 0',
+          width        : '240px',
+          textAlign    : 'center',
+          cursor       : 'pointer',
+          pointerEvents: 'all',
+          transition   : 'background 0.15s, color 0.15s',
+          outline      : 'none',
+          marginBottom : '8px',
+          display      : 'block',
+        });
+        b.addEventListener('mouseover', () => { b.style.background = col; b.style.color = '#0a0a06'; });
+        b.addEventListener('mouseout',  () => { b.style.background = primary ? `rgba(212,200,138,0.08)` : 'transparent'; b.style.color = col; });
+        return b;
+      };
+
+      const btnResume = mkPBtn(t('resume'), C.cream, true);
       btnResume.addEventListener('click', (e) => { e.stopPropagation(); this.showEscMenu(false); });
 
-      const btnMenu = document.createElement('button');
-      btnMenu.textContent = t('mainMenu');
-      this._styleEscBtn(btnMenu, '#7a7050');
+      const btnRespawn = mkPBtn(t('respawnBtn'), C.dimCream);
+      btnRespawn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this._escRespawnCb) this._escRespawnCb();
+      });
+
+      const btnSettings = mkPBtn(t('settingsBtn'), C.dimCream);
+      btnSettings.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseSettings(); });
+
+      const btnMenu = mkPBtn(t('mainMenu'), C.dimCream);
       btnMenu.addEventListener('click', (e) => {
         e.stopPropagation();
         if (this._escQuitCb) this._escQuitCb();
@@ -496,31 +532,16 @@ export class UI {
 
       wrap.appendChild(title);
       wrap.appendChild(note);
+      wrap.appendChild(divider);
       wrap.appendChild(btnResume);
+      wrap.appendChild(btnRespawn);
+      wrap.appendChild(btnSettings);
       wrap.appendChild(btnMenu);
       document.body.appendChild(wrap);
       this._escOverlay = wrap;
     }
-    if (onQuit !== null) this._escQuitCb = onQuit;
     this._escOverlay.style.display = visible ? 'flex' : 'none';
-  }
-
-  _styleEscBtn(btn, color) {
-    Object.assign(btn.style, {
-      background   : 'transparent',
-      border       : `1px solid ${color}`,
-      color,
-      fontFamily   : '"Courier New",monospace',
-      fontSize     : '11px',
-      letterSpacing: '4px',
-      padding      : '9px 28px',
-      cursor       : 'pointer',
-      transition   : 'background 0.15s, color 0.15s',
-      outline      : 'none',
-      width        : '200px',
-    });
-    btn.addEventListener('mouseover', () => { btn.style.background = color; btn.style.color = '#0a0a06'; });
-    btn.addEventListener('mouseout',  () => { btn.style.background = 'transparent'; btn.style.color = color; });
+    if (visible) requestAnimationFrame(() => this._escOverlay?.querySelector('button')?.focus());
   }
 
   setReticlePosition(x, y) {
@@ -2374,6 +2395,38 @@ export class UI {
     } else {
       this._spectatorEl.style.display = 'block';
     }
+  }
+
+  // ── Notifications joueurs (arrivée / départ) — pile en haut-centre ─────────
+  showPlayerNotice(text, color = '#d4c88a') {
+    if (!this._noticeStack) {
+      this._noticeStack = document.createElement('div');
+      Object.assign(this._noticeStack.style, {
+        position: 'fixed', top: '64px', left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+        fontFamily: '"Courier New",monospace',
+        pointerEvents: 'none', zIndex: '650',
+      });
+      document.body.appendChild(this._noticeStack);
+    }
+    const el = document.createElement('div');
+    el.textContent = text;
+    Object.assign(el.style, {
+      background: 'rgba(8,8,6,0.82)',
+      border: `1px solid ${color}`,
+      color,
+      fontSize: '11px', letterSpacing: '3px',
+      padding: '7px 18px', borderRadius: '2px',
+      opacity: '0', transition: 'opacity 0.3s',
+      whiteSpace: 'nowrap',
+    });
+    this._noticeStack.appendChild(el);
+    requestAnimationFrame(() => { el.style.opacity = '1'; });
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 350);
+    }, 4000);
   }
 
   // ── Écran de fin survie ───────────────────────────────────────────────────

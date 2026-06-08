@@ -14,6 +14,7 @@ import { GroundDefense } from './GroundDefense.js';
 import { PracticeMode } from './PracticeMode.js';
 import { AudioManager } from './AudioManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
+import { t } from './i18n.js';
 
 const PLANE_PATHS = {
   blanc: '/Avions/SK_Veh_Plane_Stunt_01_AvionBlanc.glb',
@@ -84,6 +85,7 @@ export class Game {
     this.bulletManager      = new BulletManager(this.scene);
     this._enemyBulletManager = new EnemyBulletManager(this.scene);
     this._alliedBulletManager = new BulletManager(this.scene); // tirs sol alliés → ennemis
+    this._remoteBulletManager = new BulletManager(this.scene); // tirs des joueurs distants (visuel)
     this.ui            = new UI();
     this.ui.setRespawnCallback(() => this._respawn());
 
@@ -324,7 +326,7 @@ export class Game {
     const isFFA      = mode === 'ffa';
     const isTDM      = mode === 'tdm';
     const isSurvival = mode === 'survival';
-    const isMulti    = ['multiplayer', 'coop', 'ffa', 'tdm', 'freeflight'].includes(mode);
+    const isMulti    = ['multiplayer', 'coop', 'ffa', 'tdm', 'freeflight', 'survival'].includes(mode);
     this._isSurvival = isSurvival;
     this._isTDM      = isTDM;
 
@@ -434,6 +436,31 @@ export class Game {
         const e = this.enemies.find(e => e.netId === netId && !e.isDead);
         if (e) e.hit(99999);
       });
+
+      // Notifications arrivée / départ des autres joueurs
+      this._multiplayerManager.on('remote_player_joined', ({ name }) => {
+        this.ui.showPlayerNotice(`${name || '?'} ${t('playerJoinedSuffix')}`, '#7ae060');
+      });
+      this._multiplayerManager.on('remote_player_left', ({ name }) => {
+        this.ui.showPlayerNotice(`${name || '?'} ${t('playerLeftSuffix')}`, '#cc7744');
+      });
+
+      // Tirs des joueurs distants → traceurs visuels (les dégâts sont gérés par le
+      // tireur via player_hit, donc ces balles sont purement cosmétiques)
+      this._multiplayerManager.on('remoteBullet', ({ position, quaternion }) => {
+        const p = new THREE.Vector3(position.x, position.y, position.z);
+        const q = new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+        this._remoteBulletManager.fire(p, q);
+      });
+
+      // Un autre joueur nous a touché → on applique les dégâts à notre avion local
+      this._multiplayerManager.on('remoteHit', ({ targetId, damage }) => {
+        if (targetId !== this._config.networkManager.id) return;
+        if (this.player.isDead) return;
+        this.player.health = Math.max(0, this.player.health - (damage ?? 18));
+        this.ui.showPlayerHit();
+        this._audio?.playPlayerHit();
+      });
     }
 
     // Mode Équipes : compteurs de score par équipe
@@ -494,7 +521,11 @@ export class Game {
         // Multijoueur : Echap ouvre l'overlay ESC sans pause
         if (key === 'Escape' || key === 'p' || key === 'P') {
           const visible = this._escMenuVisible = !this._escMenuVisible;
-          this.ui.showEscMenu(visible, onQuit);
+          this.ui.showEscMenu(visible, onQuit, () => {
+            this._escMenuVisible = false;
+            this.ui.showEscMenu(false);
+            this._respawn();
+          });
           if (visible) document.exitPointerLock();
           else         document.body.requestPointerLock();
         }
@@ -1370,6 +1401,7 @@ export class Game {
     this.bulletManager.update(delta);
     this._enemyBulletManager.update(delta);
     this._alliedBulletManager.update(delta);
+    this._remoteBulletManager.update(delta);
 
     // Défense au sol : visée + tir des tourelles AA
     if (this._groundDefense) {
@@ -1406,20 +1438,63 @@ export class Game {
       }
     }
 
+    // ── PvP : nos balles → joueurs distants (détection côté tireur) ──────────
+    // Cible touchable si c'est un adversaire (FFA/équipe adverse) OU si le tir
+    // allié est activé. La victime applique les dégâts via player_hit → remoteHit.
+    if (this._multiplayerManager) {
+      const ff = !!this._config.friendlyFire;
+      const PVP_DMG = 18;
+      const remotes = this._multiplayerManager.getRemotePlayers();
+      for (const b of this.bulletManager.getBullets()) {
+        if (b.age >= 999) continue;
+        for (const rp of remotes) {
+          if (rp.isDead) continue;
+          if (!rp.isEnemy && !ff) continue;   // allié non touchable si tir allié off
+          this._frameCollisionChecks++;
+          if (b.mesh.position.distanceTo(rp.position) < 9) {
+            b.age = 999;
+            this.ui.showHitMarker();
+            this._audio?.playImpact('plane');
+            this._multiplayerManager.sendHit(rp.id, PVP_DMG);
+            break;
+          }
+        }
+      }
+    }
+
     // Mise à jour ennemis + détection collision balles joueur
     const allyGroundTargets = this._groundDefense
       ? this._groundDefense.units.filter(u => !u.isDead && u.team === 'ally')
       : [];
+
+    // Cibles humaines pour l'IA : joueur local + alliés distants (multijoueur coop/survie).
+    // Chaque ennemi poursuit le pilote humain le plus proche, pas seulement le joueur local.
+    const humanTargets = [];
+    if (!this.player.isDead) humanTargets.push(this.player.position);
+    for (const rp of (this._multiplayerManager?.getRemotePlayers() ?? [])) {
+      if (!rp.isDead && rp.isEnemy === false) humanTargets.push(rp.position);
+    }
+    const nearestHuman = (epos) => {
+      if (humanTargets.length === 0) return this.player.position;
+      let best = humanTargets[0], bestD = epos.distanceToSquared(best);
+      for (let i = 1; i < humanTargets.length; i++) {
+        const d = epos.distanceToSquared(humanTargets[i]);
+        if (d < bestD) { bestD = d; best = humanTargets[i]; }
+      }
+      return best;
+    };
+
     for (const enemy of this.enemies) {
+      const targetPos = nearestHuman(enemy.position);
       // Throttle IA : <1000m=60Hz, 1000-2000m=~20Hz (1/3), 2000m+=~5Hz (1/12)
       let skipAI = false;
       if (!enemy.isDead) {
-        const d2 = this.player.position.distanceToSquared(enemy.position);
+        const d2 = targetPos.distanceToSquared(enemy.position);
         const fc = this._frameCount;
         if      (d2 > 4000000 && fc % 12 !== 0) skipAI = true;
         else if (d2 > 1000000 && fc % 3  !== 0) skipAI = true;
       }
-      if (!skipAI) enemy.update(delta, this.player.position, allyGroundTargets);
+      if (!skipAI) enemy.update(delta, targetPos, allyGroundTargets);
       this._frameAIUpdates++;
 
       if (!enemy.isDead) {
@@ -1543,7 +1618,7 @@ export class Game {
     if (this._multiplayerManager) {
       this._multiplayerManager.update(delta);
       this._netSyncTimer += delta;
-      if (this._netSyncTimer >= 0.05) { // 20 Hz
+      if (this._netSyncTimer >= 0.033) { // 30 Hz — plus réactif, l'extrapolation lisse le reste
         this._multiplayerManager.sendLocalState(this.player);
         this._netSyncTimer = 0;
       }
@@ -2243,6 +2318,7 @@ export class Game {
     if (this._keydownHandler) document.removeEventListener('keydown',           this._keydownHandler);
     if (this._pllHandler)     document.removeEventListener('pointerlockchange', this._pllHandler);
     window.removeEventListener('resize', this._resizeHandler);
+    this.player?.dispose();   // retire les écouteurs souris/clavier globaux du Player
 
     // Pointer lock
     document.exitPointerLock();
@@ -2279,6 +2355,7 @@ export class Game {
     this.bulletManager?.dispose();
     this._enemyBulletManager?.dispose();
     this._alliedBulletManager?.dispose();
+    this._remoteBulletManager?.dispose();
     this._groundDefense?.dispose();
     this._practiceMode?.dispose();
 

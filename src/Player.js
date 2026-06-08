@@ -373,16 +373,13 @@ export class Player {
       if (e.key === 'r' || e.key === 'R') this.keys.lookBack = false;
       if (e.key === 'v' || e.key === 'V') this._vKeyActive = false;
     };
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup',   up);
-
     // Clic gauche : tirer + (optionnellement) acquérir le pointer lock.
     // Problème Chrome : requestPointerLock() déclenche un mouseup synthétique pendant
     // l'acquisition, ce qui couperait le tir maintenu. On l'ignore via _plPending.
     this._mouseFireDown = false;   // vrai tant que le bouton gauche est physiquement enfoncé
     this._pointerLockPending = false;
 
-    document.addEventListener('mousedown', (e) => {
+    const onMouseDown = (e) => {
       if (e.button !== 0) return;
       if (e.target.closest('button, a, input, [role="button"]')) return;
       if (this.isDead) return;
@@ -393,15 +390,15 @@ export class Player {
         this._pointerLockPending = true;
         document.body.requestPointerLock?.()?.catch?.(() => { this._pointerLockPending = false; });
       }
-    });
-    document.addEventListener('mouseup', (e) => {
+    };
+    const onMouseUp = (e) => {
       if (e.button !== 0) return;
       // Ignorer le mouseup synthétique émis par Chrome lors de l'acquisition du pointer lock
       if (this._pointerLockPending) return;
       this._mouseFireDown = false;
       this.keys.space     = false;
-    });
-    document.addEventListener('pointerlockchange', () => {
+    };
+    const onPointerLockChange = () => {
       // À chaque changement de lock (acquis ou perdu), on remet le tir à zéro.
       // Cela évite le cas où mouseup est arrivé pendant _pointerLockPending
       // et a été ignoré → _mouseFireDown resterait bloqué à true.
@@ -409,13 +406,12 @@ export class Player {
       this._pointerLockPending = false;
       this._mouseFireDown      = false;
       this.keys.space          = false;
-    });
-
+    };
     // Souris :
     //   stickX → yaw (gauche = tourner à gauche, droite = tourner à droite)
     //   stickY → pitch (haut = monter, bas = descendre)
     //   En mode free view (V) → orbite caméra
-    document.addEventListener('mousemove', (e) => {
+    const onMouseMove = (e) => {
       if (document.pointerLockElement !== document.body) return;
       if (this.freeView && !this._rsActive) {
         this._fvYaw   -= e.movementX * 0.008;
@@ -425,7 +421,30 @@ export class Player {
         this._stickX = THREE.MathUtils.clamp(this._stickX + e.movementX * STICK_SENSITIVITY, -1, 1);
         this._stickY = THREE.MathUtils.clamp(this._stickY + e.movementY * STICK_SENSITIVITY, -1, 1);
       }
-    });
+    };
+
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup',   up);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup',   onMouseUp);
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('mousemove', onMouseMove);
+
+    // Conservés pour pouvoir les retirer dans dispose() (sinon l'ancien Player
+    // continue de verrouiller la souris quand on revient au menu après une partie)
+    this._inputCleanup = () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup',   up);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mouseup',   onMouseUp);
+      document.removeEventListener('pointerlockchange', onPointerLockChange);
+      document.removeEventListener('mousemove', onMouseMove);
+    };
+  }
+
+  // Retire tous les écouteurs globaux — appelé par Game.destroy()
+  dispose() {
+    if (this._inputCleanup) { this._inputCleanup(); this._inputCleanup = null; }
   }
 
   // ── Traitement des inputs ────────────────────────────────────────────────
