@@ -7,21 +7,21 @@ const loadGLB = p => new Promise(res => _loader.load(p, res, null, () => res(nul
 // Parcours elliptique — positions relatives à la base joueur
 // ry calculé dynamiquement depuis la direction entre anneaux consécutifs
 const RING_POSITIONS = [
-  { x:  280, y: 160, z:    0 },
-  { x:  256, y: 175, z:   90 },
-  { x:  186, y: 200, z:  165 },
-  { x:   87, y: 220, z:  209 },
-  { x:  -29, y: 210, z:  219 },
-  { x: -140, y: 190, z:  190 },
-  { x: -226, y: 175, z:  129 },
-  { x: -274, y: 165, z:   46 },
-  { x: -274, y: 170, z:  -46 },
-  { x: -226, y: 185, z: -129 },
-  { x: -140, y: 200, z: -190 },
-  { x:  -29, y: 215, z: -219 },
-  { x:   87, y: 205, z: -209 },
-  { x:  186, y: 185, z: -165 },
-  { x:  256, y: 170, z:  -90 },
+  { x:  560, y: 160, z:    0 },
+  { x:  512, y: 175, z:  180 },
+  { x:  372, y: 200, z:  330 },
+  { x:  174, y: 220, z:  418 },
+  { x:  -58, y: 210, z:  438 },
+  { x: -280, y: 190, z:  380 },
+  { x: -452, y: 175, z:  258 },
+  { x: -548, y: 165, z:   92 },
+  { x: -548, y: 170, z:  -92 },
+  { x: -452, y: 185, z: -258 },
+  { x: -280, y: 200, z: -380 },
+  { x:  -58, y: 215, z: -438 },
+  { x:  174, y: 205, z: -418 },
+  { x:  372, y: 185, z: -330 },
+  { x:  512, y: 170, z: -180 },
 ];
 
 const TARGET_POSITIONS = [
