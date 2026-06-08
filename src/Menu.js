@@ -1543,6 +1543,16 @@ export class Menu {
         // sont maintenant bufférisés par NetworkManager et rejoués ici.
         nm.on('player_joined',  ({ player })           => {
           players.push({ ...player, isReady: false }); renderPlayers();
+          // L'hôte resynchronise le nouvel arrivant (config + couleur courante)
+          if (isHost && nm) {
+            nm.send('config_update', {
+              mode: this._config.mode, map: this._config.map,
+              difficulty: this._config.difficulty, totalEnemies: this._config.totalEnemies,
+              ffaTimeLimit: this._config.ffaTimeLimit, friendlyFire: this._config.friendlyFire,
+              tdmAiCount: this._config.tdmAiCount,
+            });
+            nm.send('player_plane', { plane: this._config.team });
+          }
         });
         nm.on('player_left',    ({ id })               => { const i = players.findIndex(p => p.id === id); if (i > -1) players.splice(i, 1); renderPlayers(); });
         nm.on('player_ready',   ({ id, ready })        => { const p = players.find(p => p.id === id); if (p) { p.isReady = ready; renderPlayers(); } });
