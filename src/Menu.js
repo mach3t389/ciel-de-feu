@@ -619,6 +619,9 @@ export class Menu {
     if (zoom === 'close') {
       this._camRadiusTarget = 4.2;
       this._camLookXTarget  = -0.4; // légèrement à gauche pour l'accueil
+    } else if (zoom === 'settings') {
+      this._camRadiusTarget = 4.2;  // même taille que l'accueil
+      this._camLookXTarget  = -1.6; // décalé vers la droite (panneau large à gauche)
     } else {
       this._camRadiusTarget = 7.2;
       this._camLookXTarget  = -3.0; // légèrement à droite pour les sous-menus
@@ -1598,7 +1601,7 @@ export class Menu {
   // ── Paramètres ─────────────────────────────────────────────────────────────
   _showSettings() {
     this._clear();
-    this._showPreview('close');
+    this._showPreview('settings');
     const wrap = mkPanelLeft('640px');
     wrap.appendChild(mkSectionTitle(t('settings')));
     wrap.appendChild(mkDivider());
