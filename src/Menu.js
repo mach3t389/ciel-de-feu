@@ -459,6 +459,8 @@ export class Menu {
     this._camRadiusTarget = 7.2;   // rayon cible
     this._camLookX        = -1.8;  // décalage lookAt X courant
     this._camLookXTarget  = -1.8;  // décalage lookAt X cible
+    this._camLookY        = -0.5;  // décalage lookAt Y courant
+    this._camLookYTarget  = -0.5;  // décalage lookAt Y cible
 
     this._mouseMoveHandler = (e) => {
       this._camTarget.x = (e.clientX / window.innerWidth  - 0.5) * 2;
@@ -517,13 +519,14 @@ export class Menu {
       this._camOrbit.y  += (this._camTarget.y      - this._camOrbit.y)  * lerpF;
       this._camRadius   += (this._camRadiusTarget  - this._camRadius)   * lerpF;
       this._camLookX    += (this._camLookXTarget   - this._camLookX)    * lerpF;
+      this._camLookY    += (this._camLookYTarget   - this._camLookY)    * lerpF;
 
       const orbitH = this._camOrbit.x * (Math.PI / 10);
       const orbitV = this._camOrbit.y * (Math.PI / 22);
       const r      = this._camRadius;
       const BASE_Y = 1.8 + (7.2 - r) * 0.08;
       camera.position.set(Math.sin(orbitH) * r, BASE_Y - orbitV * 2.2, Math.cos(orbitH) * r);
-      camera.lookAt(this._camLookX, -0.5, 0);
+      camera.lookAt(this._camLookX, this._camLookY, 0);
 
       if (modelRoot) {
         modelRoot.rotation.z = Math.sin(t * 0.31) * 0.018;
@@ -616,6 +619,7 @@ export class Menu {
 
   _showPreview(zoom = 'normal') {
     if (this._previewCanvas) this._previewCanvas.style.opacity = '1';
+    this._camLookYTarget = -0.5; // hauteur par défaut (lobby la surcharge à -2.0)
     if (zoom === 'close') {
       this._camRadiusTarget = 4.2;
       this._camLookXTarget  = -0.4; // légèrement à gauche pour l'accueil
@@ -1136,6 +1140,7 @@ export class Menu {
     this._clear();
     this._showPreview();
     this._camLookXTarget = -4.4; // avion légèrement décalé à droite dans le lobby
+    this._camLookYTarget = -2.0; // caméra pointée plus bas → avion visible plus haut
 
     const isHost = this._config.isHost;
     const code   = this._config.roomCode || '????';
@@ -1414,12 +1419,24 @@ export class Menu {
     const mapSection = el('div', { style: { flexShrink: '0' }});
     mapSection.appendChild(el('div', { style: { height: '1px', background: M.border, margin: '8px 0 4px' }}));
     mapSection.appendChild(lbl(t('map')));
+    const lobbyMapCanvas = document.createElement('canvas');
+    lobbyMapCanvas.width = 290; lobbyMapCanvas.height = 150;
+    Object.assign(lobbyMapCanvas.style, {
+      display: 'block',
+      border: `1px solid ${M.border}`,
+      marginBottom: '6px',
+      width: '100%',
+      boxSizing: 'border-box',
+    });
+    this._drawMapPreview(lobbyMapCanvas, this._config.map ?? 4);
+
     const mapGroup = mkChoiceGroup(
       [{ value: 4, label: t('mapShort_4') }, { value: 5, label: t('mapShort_5') }, { value: 1, label: t('mapShort_1') }],
       this._config.map ?? 4,
-      v => { this._config.map = v; refreshLobbyStats(); if (nm) nm.send('config_update', { map: v }); }
+      v => { this._config.map = v; this._drawMapPreview(lobbyMapCanvas, v); refreshLobbyStats(); if (nm) nm.send('config_update', { map: v }); }
     );
     if (!isHost) { mapGroup.style.pointerEvents = 'none'; mapGroup.style.opacity = '0.45'; }
+    mapSection.appendChild(lobbyMapCanvas);
     mapSection.appendChild(mapGroup);
 
     // Stats contextuelles (même logique que solo)
@@ -1511,7 +1528,7 @@ export class Menu {
       if (patch.totalEnemies !== undefined) enemyCountChoices.setValue(patch.totalEnemies);
       if (patch.ffaTimeLimit !== undefined) timeGroup.setValue(patch.ffaTimeLimit);
       if (patch.friendlyFire !== undefined) ffGroup.setValue(patch.friendlyFire);
-      if (patch.map          !== undefined) { mapGroup.setValue(patch.map); refreshLobbyStats(); }
+      if (patch.map          !== undefined) { mapGroup.setValue(patch.map); this._drawMapPreview(lobbyMapCanvas, patch.map); refreshLobbyStats(); }
       if (patch.tdmAiCount   !== undefined) tdmAiChoices.setValue(patch.tdmAiCount);
       renderPlayers();
     };

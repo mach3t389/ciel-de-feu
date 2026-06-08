@@ -2035,6 +2035,12 @@ export class Game {
       }
     }
 
+    // Mettre à jour les matrices caméra UNE SEULE FOIS ici — avant toute projection
+    // (mire ET marqueurs HUD utilisent camera.matrixWorldInverse via .project()).
+    // Auparavant updateMatrixWorld() était appelé APRÈS le calcul de la mire, ce qui
+    // faisait que la mire et l'indicateur de visée utilisaient des matrices différentes.
+    this.camera.updateMatrixWorld();
+
     // Positionner la mire sur l'écran au point visé par l'avion
     const qAim = new THREE.Quaternion()
       .setFromAxisAngle(new THREE.Vector3(0,1,0), this.player._yaw)
@@ -2045,13 +2051,9 @@ export class Game {
     const aimNDC = aimWorld.clone().project(this.camera);
     const rawAimX = ( aimNDC.x * 0.5 + 0.5) * window.innerWidth;
     const rawAimY = (-aimNDC.y * 0.5 + 0.5) * window.innerHeight;
-    const smooth  = Math.min(1, 25 * delta);
-    this._aimX += (rawAimX - this._aimX) * smooth;
-    this._aimY += (rawAimY - this._aimY) * smooth;
+    this._aimX = rawAimX;
+    this._aimY = rawAimY;
     this.ui.setReticlePosition(this._aimX, this._aimY);
-
-    // Forcer la mise à jour de la matrice caméra avant les projections HUD
-    this.camera.updateMatrixWorld();
 
     // Met à jour le HUD (ennemis IA + joueurs distants)
     const allTargets = [
