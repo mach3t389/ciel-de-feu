@@ -49,6 +49,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = false;
+    this.renderer.info.autoReset = false;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     container.appendChild(this.renderer.domElement);
@@ -796,44 +797,69 @@ export class Game {
     const fps = this._fpsBuffer.reduce((a, b) => a + b, 0) / this._fpsBuffer.length;
 
     // Visible mesh count — recomputed once per second (~60 frames)
+    // Traversal 1×/s — compte meshes visibles et InstancedMesh
     this._visibleMeshTick++;
     if (this._visibleMeshTick >= 60) {
       this._visibleMeshTick = 0;
-      let n = 0;
-      this.scene.traverse(o => { if (o.visible && (o.isMesh || o.isSkinnedMesh)) n++; });
-      this._visibleMeshCount = n;
+      let meshN = 0, instN = 0;
+      this.scene.traverse(o => {
+        if (!o.visible) return;
+        if (o.isInstancedMesh) { instN += o.count; meshN++; }
+        else if (o.isMesh || o.isSkinnedMesh) meshN++;
+      });
+      this._visibleMeshCount  = meshN;
+      this._instanceTotalCount = instN;
     }
 
-    const info   = this.renderer.info.render;
-    const mem    = (typeof performance !== 'undefined' && performance.memory)
+    const info  = this.renderer.info.render;
+    const mem   = (typeof performance !== 'undefined' && performance.memory)
       ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + ' MB'
       : '—';
     const planes = this.enemies.filter(e => !e.isDead).length + (this.player.isDead ? 0 : 1);
     const triK   = (info.triangles / 1000).toFixed(1);
     const gfx    = this._lowGraphics ? 'ON  [F4 désactiver]' : 'OFF [F4 activer]';
 
+    // Stats carte et défense sol
+    const ms = this._villageMap?.debugStats ?? {};
+    const gs = this._groundDefense?.debugStats ?? {};
+
+    const sep = '─────────────────────────────────';
     const rows = [
-      '[F3] DEBUG PERFORMANCE',
-      '',
-      `FPS             ${fps.toFixed(1)}`,
-      `Frame Time      ${(delta * 1000).toFixed(1)} ms`,
-      `Draw Calls      ${info.calls}`,
-      `Triangles       ${triK}k`,
-      `Objets visibles ${this._visibleMeshCount}`,
-      `Avions actifs   ${planes}`,
-      `Mémoire JS      ${mem}`,
-      '',
-      `LOW GRAPHICS    ${gfx}`,
+      '[F3] PERFORMANCE DEBUG',
+      sep,
+      `FPS              ${fps.toFixed(1)}`,
+      `Frame Time       ${(delta * 1000).toFixed(1)} ms`,
+      sep,
+      `Draw Calls       ${info.calls}`,
+      `Triangles        ${triK}k`,
+      `Meshes visibles  ${this._visibleMeshCount}`,
+      `Instances totales ${this._instanceTotalCount ?? 0}`,
+      sep,
+      `Avions actifs    ${planes}`,
+      `AI Updates/frame ${this._frameAIUpdates}`,
+      `Collision checks ${this._frameCollisionChecks}`,
+      sep,
+      `Arbres           ${ms.trees    ?? '—'}`,
+      `Roches           ${ms.rocks    ?? '—'}`,
+      `Buissons         ${ms.bushes   ?? '—'}`,
+      `Bâtiments        ${ms.buildings ?? '—'}`,
+      `Tourelles        ${gs.turrets  ?? '—'}`,
+      `Tanks            ${gs.tanks    ?? '—'}`,
+      `Véhicules        ${gs.vehicles ?? '—'}`,
+      sep,
+      `Mémoire JS       ${mem}`,
+      sep,
+      `LOW GRAPHICS     ${gfx}`,
     ];
 
-    const W = 310, lh = 16, pad = 8;
+    const W = 300, lh = 15, pad = 7;
     const h = rows.length * lh + pad * 2;
 
     if (!this._perfCanvas) {
       this._perfCanvas = document.createElement('canvas');
       Object.assign(this._perfCanvas.style, {
         position: 'fixed', top: '10px', right: '10px',
-        background: 'rgba(0,0,0,0.82)', border: '1px solid #3a3020',
+        background: 'rgba(0,0,0,0.86)', border: '1px solid #3a3020',
         pointerEvents: 'none', zIndex: '500',
         width: W + 'px',
       });
@@ -846,17 +872,21 @@ export class Game {
     ctx.scale(2, 2);
     ctx.clearRect(0, 0, W, h);
     ctx.font = '11px "Courier New",monospace';
+
     rows.forEach((r, i) => {
+      const isSep = r.startsWith('─');
       let col = '#aabb88';
-      if (i === 0) col = '#d4c88a';
-      else if (i === 1 || i === 9) col = 'transparent';
-      else if (r.startsWith('LOW')) col = this._lowGraphics ? '#88dd88' : '#d4c88a';
+      if (i === 0)          col = '#d4c88a';
+      else if (isSep)       col = '#2a2818';
       else if (r.startsWith('FPS')) {
-        const f = fps;
-        col = f >= 55 ? '#88dd88' : f >= 30 ? '#ddcc66' : '#dd6666';
-      }
+        col = fps >= 55 ? '#88dd88' : fps >= 30 ? '#ddcc66' : '#dd6666';
+      } else if (r.startsWith('LOW')) col = this._lowGraphics ? '#88dd88' : '#d4c88a';
       ctx.fillStyle = col;
-      ctx.fillText(r, pad, pad + i * lh + lh - 3);
+      if (!isSep) ctx.fillText(r, pad, pad + i * lh + lh - 3);
+      else {
+        ctx.fillStyle = '#2a2818';
+        ctx.fillRect(0, pad + i * lh, W, 1);
+      }
     });
   }
 
@@ -1048,6 +1078,11 @@ export class Game {
     }
 
     try {
+    // Réinitialiser les compteurs per-frame avant toute mise à jour
+    this.renderer.info.reset();
+    this._frameCollisionChecks = 0;
+    this._frameAIUpdates       = 0;
+
     // ── Timer de match (Versus / Équipes) ────────────────────────────────────
     if (this._timeRemaining !== null && !this._missionComplete) {
       this._timeRemaining -= delta;
@@ -1142,6 +1177,7 @@ export class Game {
     if (!this.player.isDead) {
       for (const b of this._enemyBulletManager.getBullets()) {
         if (b.age >= 999) continue;
+        this._frameCollisionChecks++;
         if (b.mesh.position.distanceTo(this.player.position) < 8) {
           this.player.health = Math.max(0, this.player.health - (b.dmg ?? 7));
           b.age = 999;
@@ -1154,6 +1190,7 @@ export class Game {
     // Balles alliées (sol) → dégâts aux avions ennemis
     for (const b of this._alliedBulletManager.getBullets()) {
       for (const e of this.enemies) {
+        this._frameCollisionChecks++;
         if (!e.isDead && b.mesh.position.distanceTo(e.position) < 9) {
           e.hit(25); b.age = 999; break;
         }
@@ -1166,10 +1203,12 @@ export class Game {
       : [];
     for (const enemy of this.enemies) {
       enemy.update(delta, this.player.position, allyGroundTargets);
+      this._frameAIUpdates++;
 
       if (!enemy.isDead) {
         for (const b of this.bulletManager.getBullets()) {
           if (b.age >= 999) continue;
+          this._frameCollisionChecks++;
           if (b.mesh.position.distanceTo(enemy.position) < 9) {
             const wasAlive = !enemy.isDead;
             enemy.hit(25);

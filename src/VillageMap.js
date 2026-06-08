@@ -73,11 +73,12 @@ export class VillageMap {
     this._buildTerrain();
     this._buildWater();
     this._buildAirportMeshes();
-    await this._buildVillages();
+    this._statsBuildingCount = (await this._buildVillages()) ?? 0;
     const treeGroups = await this._buildTrees();
     if (treeGroups) await this._buildVillageTrees(treeGroups);
-    await this._buildRocks();
-    await this._buildBushes();
+    this._statsTreeCount = treeGroups ? treeGroups.placed.reduce((a, b) => a + b, 0) : 0;
+    this._statsRockCount = (await this._buildRocks())  ?? 0;
+    this._statsBushCount = (await this._buildBushes()) ?? 0;
     await this._buildBalloons();
     return {
       getTerrainHeight: this.getTerrainHeight,
@@ -482,6 +483,16 @@ export class VillageMap {
     for (const g of Object.values(groups)) {
       if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
     }
+    return Object.values(counts).reduce((a, b) => a + b, 0);
+  }
+
+  get debugStats() {
+    return {
+      trees    : this._statsTreeCount     ?? 0,
+      rocks    : this._statsRockCount     ?? 0,
+      bushes   : this._statsBushCount     ?? 0,
+      buildings: this._statsBuildingCount ?? 0,
+    };
   }
 
   _makeVillageLayout() {
@@ -689,6 +700,7 @@ export class VillageMap {
       placed[ti]++;
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    return placed.reduce((a, b) => a + b, 0);
   }
 
   // ── Buissons (InstancedMesh) ───────────────────────────────────────────────
@@ -731,6 +743,7 @@ export class VillageMap {
       placed[ti]++;
     }
     for (const g of groups) if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
+    return placed[0] + placed[1];
   }
 
   // ── Montgolfières — au-dessus des villages ─────────────────────────────────

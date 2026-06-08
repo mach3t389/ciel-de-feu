@@ -240,6 +240,15 @@ export class GroundDefense {
     return this.units.filter(u => u.team === 'enemy' && !u.isDead && kinds.includes(u.kind)).length;
   }
 
+  get debugStats() {
+    const alive = this.units.filter(u => !u.isDead);
+    return {
+      turrets : alive.filter(u => u.kind === 'mg').length,
+      tanks   : alive.filter(u => u.kind === 'tank').length,
+      vehicles: alive.filter(u => u.kind === 'truck').length,
+    };
+  }
+
   dispose() {
     this.units.forEach(u => this.scene.remove(u.root));
     this.units = [];

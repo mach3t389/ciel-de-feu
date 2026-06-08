@@ -1935,10 +1935,15 @@ export class UI {
       boxShadow:'inset 0 0 10px rgba(0,0,0,0.7)',
       display:'none',
     });
-    panel.innerHTML = `
-      <div style="font-size:9px;letter-spacing:2px;color:#6a6040;margin-bottom:5px;">${t('controlsTitle')}</div>
-      <div style="color:#d4c88a;">${tCtrlLines().join('<br>')}</div>
-    `;
+    panel.innerHTML = tCtrlLines().map(line => {
+      if (line.startsWith('—')) {
+        return `<div style="font-size:9px;letter-spacing:2px;color:#6a6040;margin:6px 0 3px;">${line}</div>`;
+      }
+      if (line.startsWith('F3') || line.startsWith('F4') || line.startsWith('I ')) {
+        return `<div style="color:#88aa66;">${line}</div>`;
+      }
+      return `<div style="color:#d4c88a;">${line}</div>`;
+    }).join('');
     wrap.appendChild(panel);
 
     let open = false;
