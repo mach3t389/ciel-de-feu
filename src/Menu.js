@@ -1140,7 +1140,6 @@ export class Menu {
     this._clear();
     this._showPreview();
     this._camLookXTarget = -4.4; // avion légèrement décalé à droite dans le lobby
-    this._camLookYTarget = -2.0; // caméra pointée plus bas → avion visible plus haut
 
     const isHost = this._config.isHost;
     const code   = this._config.roomCode || '????';
@@ -1420,7 +1419,7 @@ export class Menu {
     mapSection.appendChild(el('div', { style: { height: '1px', background: M.border, margin: '8px 0 4px' }}));
     mapSection.appendChild(lbl(t('map')));
     const lobbyMapCanvas = document.createElement('canvas');
-    lobbyMapCanvas.width = 290; lobbyMapCanvas.height = 150;
+    lobbyMapCanvas.width = 290; lobbyMapCanvas.height = 100;
     Object.assign(lobbyMapCanvas.style, {
       display: 'block',
       border: `1px solid ${M.border}`,
