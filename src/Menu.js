@@ -1986,22 +1986,43 @@ export class Menu {
     }));
     wrap.appendChild(saveRow);
 
-    // ── Debug ──────────────────────────────────────────────────────────────────
+    // ── Reset progression (visible, non-triche) ────────────────────────────────
     wrap.appendChild(mkDivider());
-    const debugRow = el('div', { style: { display: 'flex', gap: '8px' }});
-    const mkDebugBtn = (label, fn) => {
+    const resetBtn = el('button', { text: t('cheatReset'), style: {
+      padding: '6px 14px', background: 'transparent',
+      border: `1px solid #883322`, borderRadius: '4px',
+      color: '#cc5533', fontFamily: 'Rajdhani, sans-serif',
+      fontSize: '11px', letterSpacing: '2px',
+      cursor: 'pointer', transition: 'all 0.15s', alignSelf: 'flex-start',
+    }});
+    resetBtn.addEventListener('mouseover', () => { resetBtn.style.background = '#44110a22'; resetBtn.style.color = '#ee7755'; });
+    resetBtn.addEventListener('mouseout',  () => { resetBtn.style.background = 'transparent'; resetBtn.style.color = '#cc5533'; });
+    resetBtn.addEventListener('click', () => {
+      if (confirm(t('resetConfirm'))) {
+        localStorage.removeItem('cielDeFeu_progression');
+        this._progression = new ProgressionSystem();
+        this._showSettings();
+      }
+    });
+    wrap.appendChild(resetBtn);
+
+    // ── Panneau dev caché : 5 clics rapides sur le titre ─────────────────────
+    const devPanel = el('div', { style: { display: 'none', marginTop: '8px', padding: '8px', border: `1px dashed #553300`, borderRadius: '4px', background: '#0a0700' }});
+    const devLabel = el('div', { text: '⚠ DEV', style: { fontSize: '8px', color: '#aa6633', letterSpacing: '3px', marginBottom: '6px' }});
+    const devRow   = el('div', { style: { display: 'flex', gap: '8px' }});
+    const mkDevBtn = (label, fn) => {
       const b = el('button', { text: label, style: {
-        padding: '5px 10px', background: 'transparent',
+        padding: '4px 10px', background: 'transparent',
         border: `1px solid #553300`, color: '#aa6633',
         fontFamily: 'Rajdhani, sans-serif', fontSize: '9px', letterSpacing: '1px',
         cursor: 'pointer', borderRadius: '4px', transition: 'all 0.1s',
       }});
       b.addEventListener('click', fn);
-      b.addEventListener('mouseover', () => { b.style.background = '#55330022'; b.style.color = '#cc8844'; });
-      b.addEventListener('mouseout',  () => { b.style.background = 'transparent'; b.style.color = '#aa6633'; });
+      b.addEventListener('mouseover', () => { b.style.color = '#cc8844'; b.style.borderColor = '#cc8844'; });
+      b.addEventListener('mouseout',  () => { b.style.color = '#aa6633'; b.style.borderColor = '#553300'; });
       return b;
     };
-    debugRow.appendChild(mkDebugBtn(t('cheatLevels'), () => {
+    devRow.appendChild(mkDevBtn(t('cheatLevels'), () => {
       const p = this._progression;
       for (let i = 0; i < 10; i++) {
         const xp = xpToNextLevel(p.level) - p.levelInfo.xpInLevel;
@@ -2009,28 +2030,49 @@ export class Menu {
       }
       this._showSettings();
     }));
-    debugRow.appendChild(mkDebugBtn(t('cheatCredits'), () => {
+    devRow.appendChild(mkDevBtn(t('cheatCredits'), () => {
       this._progression.addRewards(0, 50000);
       this._showSettings();
     }));
-    debugRow.appendChild(mkDebugBtn(t('cheatReset'), () => {
-      if (confirm(t('resetConfirm'))) {
-        localStorage.removeItem('cielDeFeu_progression');
-        this._progression = new ProgressionSystem();
-        this._showSettings();
+    devPanel.appendChild(devLabel);
+    devPanel.appendChild(devRow);
+    wrap.appendChild(devPanel);
+
+    // Activer le panneau dev : cliquer 5× sur le titre principal en moins de 3 s
+    const titleEl = wrap.querySelector('[data-settings-title]') ?? wrap.firstElementChild;
+    let devClicks = 0, devTimer = 0;
+    titleEl?.addEventListener('click', () => {
+      devClicks++;
+      clearTimeout(devTimer);
+      devTimer = setTimeout(() => { devClicks = 0; }, 3000);
+      if (devClicks >= 5) {
+        devPanel.style.display = devPanel.style.display === 'none' ? 'block' : 'none';
+        devClicks = 0;
       }
-    }));
-    wrap.appendChild(debugRow);
+    });
+    if (titleEl) titleEl.style.cursor = 'default';
 
     wrap.appendChild(mkDivider());
 
-    const btnControls = mkBtn(t('controls') || 'COMMANDES', M.dimCream);
+    // ── Bouton Commandes (secondaire) + bouton Retour (principal) ─────────────
+    const bottomRow = el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' }});
+    const btnControls = el('button', { text: t('controls') || 'COMMANDES', style: {
+      padding: '7px 16px', background: 'transparent',
+      border: `1px solid ${M.border}`, borderRadius: '4px',
+      color: M.dimCream, fontFamily: 'Rajdhani, sans-serif',
+      fontSize: '11px', letterSpacing: '2px', fontWeight: '600',
+      cursor: 'pointer', transition: 'all 0.15s',
+    }});
+    btnControls.addEventListener('mouseover', () => { btnControls.style.borderColor = M.cream; btnControls.style.color = M.cream; });
+    btnControls.addEventListener('mouseout',  () => { btnControls.style.borderColor = M.border; btnControls.style.color = M.dimCream; });
     btnControls.addEventListener('click', () => this._showControls());
-    wrap.appendChild(btnControls);
 
     const btnBack = mkBtn(t('back'), M.dimCream);
     btnBack.addEventListener('click', () => returnFn());
-    wrap.appendChild(btnBack);
+
+    bottomRow.appendChild(btnControls);
+    bottomRow.appendChild(btnBack);
+    wrap.appendChild(bottomRow);
     this._root.appendChild(wrap);
   }
 
