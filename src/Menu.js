@@ -3158,7 +3158,7 @@ export class Menu {
 
     const planeDropdown = document.createElement('div');
     Object.assign(planeDropdown.style, {
-      position: 'absolute', top: 'calc(100% + 6px)',
+      position: 'fixed', top: '58px',
       left: '50%', transform: 'translateX(-50%)',
       background: 'rgba(8,8,6,0.97)', border: `1px solid ${M.border}`,
       borderRadius: '6px', minWidth: '220px', display: 'none',
