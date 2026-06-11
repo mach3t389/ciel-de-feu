@@ -3285,14 +3285,21 @@ export class Menu {
 
     document.addEventListener('click', closePlaneDropdown);
 
-    // Badge point rouge positionné en haut à droite du bouton avion
+    planeSelWrap.appendChild(planeBtn);
+    planeSelWrap.appendChild(planeDropdown);
+
+    // Injecter le sélecteur dans le bloc gauche, juste après les crédits
+    left.appendChild(planeSep);
+    left.appendChild(planeSelWrap);
+
+    // Badge point rouge en haut à droite de tout le bloc profil
     const newDot = document.createElement('span');
     newDot.className = 'pb-badge';
     Object.assign(newDot.style, {
       display      : 'none',
       position     : 'absolute',
-      top          : '-4px',
-      right        : '-4px',
+      top          : '2px',
+      right        : '2px',
       width        : '9px',
       height       : '9px',
       borderRadius : '50%',
@@ -3300,13 +3307,7 @@ export class Menu {
       boxShadow    : `0 0 6px ${M.accent}`,
       pointerEvents: 'none',
     });
-    planeSelWrap.appendChild(planeBtn);
-    planeSelWrap.appendChild(planeDropdown);
-    planeSelWrap.appendChild(newDot);
-
-    // Injecter le sélecteur dans le bloc gauche, juste après les crédits
-    left.appendChild(planeSep);
-    left.appendChild(planeSelWrap);
+    left.appendChild(newDot);
 
     bar.appendChild(left);
     bar.appendChild(right);
