@@ -371,6 +371,7 @@ export class Menu {
 
     // Topbar persistante (profil + bouton langue + paramètres) — survit à _clear
     this._buildProfileBar();
+    this._buildDevConsole();
     this._config = {
       mode        : 'solo',
       map         : 4,
@@ -2972,6 +2973,98 @@ export class Menu {
     } else if (this._previewModelRoot) {
       this._attachPreviewMissiles(this._previewModelRoot, idx);
     }
+  }
+
+  // ── Console dev (touche ` pour ouvrir) ───────────────────────────────────
+  _buildDevConsole() {
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', bottom: '0', left: '0', right: '0',
+      background: 'rgba(5,4,2,0.96)', borderTop: '1px solid #6b4a1e',
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#cc8833',
+      padding: '10px 16px 12px', zIndex: '99999',
+      display: 'none', flexDirection: 'column', gap: '6px',
+      backdropFilter: 'blur(4px)',
+    });
+
+    const log = document.createElement('div');
+    Object.assign(log.style, { maxHeight: '100px', overflowY: 'auto', marginBottom: '4px' });
+    const addLog = (text, color = '#cc8833') => {
+      const line = document.createElement('div');
+      line.textContent = text;
+      line.style.color = color;
+      line.style.lineHeight = '1.6';
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    };
+    addLog('DEV CONSOLE  --  type "help" for available commands', '#6b4a1e');
+
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px' });
+    const prompt = document.createElement('span');
+    prompt.textContent = '>';
+    prompt.style.cssText = 'color:#6b4a1e;font-size:14px;font-weight:bold;';
+    const inp = document.createElement('input');
+    Object.assign(inp.style, {
+      flex: '1', background: 'transparent', border: 'none', outline: 'none',
+      color: '#e8d48a', fontFamily: 'Courier New, monospace', fontSize: '13px',
+      caretColor: '#cc8833',
+    });
+    inp.setAttribute('autocomplete', 'off');
+    inp.setAttribute('spellcheck', 'false');
+    row.appendChild(prompt); row.appendChild(inp);
+    overlay.appendChild(log); overlay.appendChild(row);
+    document.body.appendChild(overlay);
+
+    const COMMANDS = {
+      help: () => {
+        addLog('  levels [n]   -- add n levels (default: 10)', '#aa9944');
+        addLog('  credits [n]  -- add n credits (default: 50000)', '#aa9944');
+        addLog('  reset        -- wipe progression data', '#aa9944');
+        addLog('  clear        -- clear console', '#aa9944');
+      },
+      levels: (args) => {
+        const n = parseInt(args[0]) || 10;
+        const p = this._progression;
+        for (let i = 0; i < n; i++) { const xp = xpToNextLevel(p.level) - p.levelInfo.xpInLevel; p.addRewards(xp + 1, 0); }
+        this._refreshProfileBar?.();
+        addLog(`  +${n} niveaux  → NIV ${p.level}`, '#88cc44');
+      },
+      credits: (args) => {
+        const n = parseInt(args[0]) || 50000;
+        this._progression.addRewards(0, n);
+        this._refreshProfileBar?.();
+        addLog(`  +${n.toLocaleString('fr-FR')} credits`, '#88cc44');
+      },
+      reset: () => {
+        if (!confirm(t('resetConfirm'))) return;
+        localStorage.removeItem('cielDeFeu_progression');
+        this._progression = new ProgressionSystem();
+        this._refreshProfileBar?.();
+        addLog('  Progression reset.', '#cc4422');
+      },
+      clear: () => { log.innerHTML = ''; },
+    };
+
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { overlay.style.display = 'none'; return; }
+      if (e.key !== 'Enter') return;
+      const raw = inp.value.trim();
+      inp.value = '';
+      if (!raw) return;
+      addLog(`> ${raw}`, '#e8d48a');
+      const [cmd, ...args] = raw.toLowerCase().split(/\s+/);
+      if (COMMANDS[cmd]) COMMANDS[cmd](args);
+      else addLog(`  Commande inconnue: "${cmd}". Tape "help".`, '#cc4422');
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== '`' && e.key !== '²') return;
+      e.preventDefault();
+      const open = overlay.style.display === 'none';
+      overlay.style.display = open ? 'flex' : 'none';
+      if (open) setTimeout(() => inp.focus(), 0);
+    });
   }
 
   // ── Topbar persistante : profil + boutons utilitaires ─────────────────────
