@@ -3160,61 +3160,36 @@ export class Menu {
 
     document.addEventListener('click', closePlaneDropdown);
 
+    // Badge point rouge positionné en haut à droite du bouton avion
+    const newDot = document.createElement('span');
+    newDot.className = 'pb-badge';
+    Object.assign(newDot.style, {
+      display      : 'none',
+      position     : 'absolute',
+      top          : '-4px',
+      right        : '-4px',
+      width        : '9px',
+      height       : '9px',
+      borderRadius : '50%',
+      background   : M.accent,
+      boxShadow    : `0 0 6px ${M.accent}`,
+      pointerEvents: 'none',
+    });
     planeSelWrap.appendChild(planeBtn);
     planeSelWrap.appendChild(planeDropdown);
+    planeSelWrap.appendChild(newDot);
 
     // Injecter le sélecteur dans le bloc gauche, juste après les crédits
     left.appendChild(planeSep);
     left.appendChild(planeSelWrap);
 
-    // Bouton de notification de nouveaux déblocages — séparé, à droite du sélecteur d'avion
-    const unlockBtn = document.createElement('button');
-    Object.assign(unlockBtn.style, {
-      pointerEvents: 'auto',
-      background   : 'rgba(8,8,6,0.6)',
-      border       : `1px solid ${M.border}`,
-      color        : M.dimCream,
-      fontFamily   : 'Rajdhani, sans-serif',
-      fontSize     : '14px',
-      padding      : '4px 10px',
-      cursor       : 'pointer',
-      borderRadius : '4px',
-      display      : 'flex',
-      alignItems   : 'center',
-      gap          : '6px',
-      transition   : 'all 0.15s',
-      flexShrink   : '0',
-      position     : 'relative',
-    });
-    unlockBtn.title = t('myPlane') || 'Mon avion';
-    unlockBtn.innerHTML = `
-      <span style="font-size:13px;">🔓</span>
-      <span class="pb-badge" style="
-        display:none; align-items:center; justify-content:center;
-        background:${M.accent}; color:#fff;
-        border-radius:50%; min-width:16px; height:16px; padding:0 3px;
-        font-size:9px; font-weight:bold; font-family:sans-serif;
-        box-shadow:0 0 6px ${M.accent}88;
-      "></span>
-    `;
-    unlockBtn.addEventListener('mouseover', () => {
-      unlockBtn.style.color = M.cream;
-      unlockBtn.style.borderColor = M.yellow;
-    });
-    unlockBtn.addEventListener('mouseout', () => {
-      unlockBtn.style.color = M.dimCream;
-      unlockBtn.style.borderColor = M.border;
-    });
-    unlockBtn.addEventListener('click', () => this._showMyPlane());
-
     bar.appendChild(left);
-    bar.appendChild(unlockBtn);
     bar.appendChild(right);
     document.body.appendChild(bar);
     this._profileBar       = bar;
     this._profileLangBtn   = langBtn;
     this._planeSelectorBtn = planeBtn;
-    this._unlockBtn        = unlockBtn;
+    this._unlockBtn        = null;
     this._refreshProfileBar();
   }
 
@@ -3235,22 +3210,10 @@ export class Menu {
     bar.querySelector('.pb-xp').style.width    = `${xpPct}%`;
     bar.querySelector('.pb-xpnum').textContent = xpStr.replace(/ | /g, ' ');
     bar.querySelector('.pb-cred').textContent  = `✦ ${credFmt}`;
-    // Badge "nouvelles options débloquées non vues"
+    // Point rouge sur le sélecteur d'avion si nouvelles options débloquées
     const badge = bar.querySelector('.pb-badge');
     const n = prog.newOptionCount?.() ?? 0;
-    if (badge) {
-      if (n > 0) {
-        badge.textContent = String(n);
-        badge.style.display = 'flex';
-      } else {
-        badge.style.display = 'none';
-      }
-    }
-    if (this._unlockBtn) {
-      this._unlockBtn.style.borderColor = n > 0 ? M.accent : M.border;
-      this._unlockBtn.style.color       = n > 0 ? M.cream  : M.dimCream;
-      this._unlockBtn.style.boxShadow   = n > 0 ? `0 0 8px ${M.accent}66` : 'none';
-    }
+    if (badge) badge.style.display = n > 0 ? 'block' : 'none';
     if (this._profileLangBtn) this._profileLangBtn.textContent = getLang() === 'fr' ? 'EN' : 'FR';
     if (this._planeSelectorBtn && this._progression) {
       const idx  = this._progression.activePlane;
