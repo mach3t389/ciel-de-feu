@@ -3806,7 +3806,7 @@ export class Menu {
     wrap.appendChild(topBar);
 
     // ── BARRE DE DÉTAIL (bas gauche, 72% large) ───────────────────────────────
-    const DETAIL_H = 186;
+    const DETAIL_H = 220;
     const detailBar = el('div', { style:{
       position:'absolute', bottom:'0', left:'0', width:'72%', height:`${DETAIL_H}px`,
       background:'rgba(7,7,6,0.98)', borderTop:`2px solid ${M.border}`,
@@ -4007,6 +4007,126 @@ export class Menu {
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         document.body.appendChild(overlay);
       };
+
+      // ── Défense active : 2 lignes de pastilles (type puis niveau) ───────────
+      if (activeSlotKey === 'active_defense') {
+        const AD_TYPES = [
+          { key:'none',         label:t('adNone'),          icon:'○'  },
+          { key:'leurres',      label:t('adLeurres'),       icon:'◉'  },
+          { key:'ecm',          label:t('adEcmLabel'),      icon:'⊡'  },
+          { key:'shield_front', label:t('adShieldFrontSh'), icon:'◭'  },
+          { key:'shield_rear',  label:t('adShieldRearSh'),  icon:'◬'  },
+          { key:'shield_full',  label:t('adShield360Sh'),   icon:'⊙'  },
+        ];
+        const parseType = id => {
+          if (!id || id === 'none') return { type:'none', level:0 };
+          const p = id.split('_');
+          if (p[0] === 'shield') return { type:`shield_${p[1]}`, level:parseInt(p[2]) };
+          return { type:p[0], level:parseInt(p[1]) };
+        };
+        const current = parseType(loadout[activeSlotKey] ?? 'none');
+        let selType = current.type, selLevel = current.level;
+
+        const AD_CZ = 44;
+        const mkCircle = (icon, label, isEquipped, isUnlocked, isOwned, cost, onClick, onOver, onOut) => {
+          let borderCol, bgCol, textCol;
+          if (isEquipped)       { borderCol = catColor;       bgCol = `${catColor}33`; textCol = catColor; }
+          else if (!isUnlocked) { borderCol = '#553322';      bgCol = 'rgba(14,11,8,0.9)'; textCol = '#8a6a4a'; }
+          else if (!isOwned)    { borderCol = M.yellow+'88';  bgCol = 'rgba(20,18,10,0.95)'; textCol = M.yellow; }
+          else                  { borderCol = M.border+'aa';  bgCol = 'rgba(22,20,15,0.95)'; textCol = M.cream; }
+
+          const item = el('div', { style:{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', cursor:'pointer', flexShrink:'0' }});
+          const wrap = el('div', { style:{ position:'relative', width:`${AD_CZ}px`, height:`${AD_CZ}px` }});
+          const circle = el('div', { style:{
+            width:`${AD_CZ}px`, height:`${AD_CZ}px`, borderRadius:'50%',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize: !isUnlocked ? '14px' : '20px', transition:'all 0.1s',
+            border:`2px solid ${borderCol}`, background:bgCol, color:textCol,
+          }});
+          circle.textContent = !isUnlocked ? '⊘' : (!isOwned ? '✦' : icon);
+          wrap.appendChild(circle);
+          if (isEquipped) {
+            const b = el('div', { style:{ position:'absolute', top:'-4px', right:'-4px', width:'16px', height:'16px', borderRadius:'50%', background:catColor, color:'#000', fontWeight:'900', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'9px', border:'2px solid rgba(7,7,6,0.95)' }});
+            b.textContent = '✓'; wrap.appendChild(b);
+          } else if (!isOwned && isUnlocked && cost > 0) {
+            const b = el('div', { text:`${(cost/1000).toFixed(0)}k✦`, style:{ position:'absolute', bottom:'-6px', left:'50%', transform:'translateX(-50%)', background:'#1a1700', color:M.yellow, fontWeight:'800', fontSize:'7px', padding:'1px 4px', borderRadius:'4px', border:`1px solid ${M.yellow}66`, whiteSpace:'nowrap' }});
+            wrap.appendChild(b);
+          }
+          item.appendChild(wrap);
+          item.appendChild(el('div', { text:label, style:{ fontSize:'9px', color: isEquipped ? catColor : isOwned ? M.cream : isUnlocked ? M.yellow : '#9a7a5a', textAlign:'center', maxWidth:'52px', lineHeight:'1.2', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}));
+          item.addEventListener('click', onClick);
+          item.addEventListener('mouseover', () => { if (!isEquipped) { circle.style.borderColor=`${catColor}cc`; circle.style.background=`${catColor}1c`; } onOver?.(); });
+          item.addEventListener('mouseout',  () => { circle.style.borderColor=borderCol; circle.style.background=bgCol; onOut?.(); });
+          return item;
+        };
+
+        const adCol = el('div', { style:{ display:'flex', flexDirection:'column', gap:'10px', padding:'10px 18px', height:'100%', justifyContent:'center', overflowX:'auto', borderRight:`1px solid ${M.border}66` }});
+
+        const row1 = el('div', { style:{ display:'flex', alignItems:'center', gap:'10px' }});
+        const row2 = el('div', { style:{ display:'flex', alignItems:'center', gap:'10px' }});
+
+        const renderAdRows = () => {
+          row1.innerHTML = ''; row2.innerHTML = '';
+          // Ligne 1 — types
+          AD_TYPES.forEach(({ key, label, icon }) => {
+            const opt1Id = key === 'none' ? 'none' : `${key}_1`;
+            const opt1   = slot.options.find(o => o.id === opt1Id);
+            const isEquipped  = selType === key;
+            const isUnlocked  = key === 'none' || (opt1 && level >= opt1.levelReq);
+            const isOwned     = key === 'none' || (opt1 && (prog.ownsOption(activeSlotKey, opt1.id)));
+            const cost        = key === 'none' ? 0 : (OPTION_COSTS[`active_defense:${opt1Id}`] ?? 0);
+            row1.appendChild(mkCircle(icon, label, isEquipped, isUnlocked, isOwned, cost,
+              () => {
+                if (!isUnlocked) return;
+                if (key === 'none') { selType='none'; selLevel=0; prog.setLoadoutItem(selectedSlot, activeSlotKey, 'none'); }
+                else if (key !== selType) {
+                  if (!isOwned) { showBuyDialog(opt1, cost); return; }
+                  selType=key; selLevel=1; prog.setLoadoutItem(selectedSlot, activeSlotKey, `${key}_1`);
+                }
+                renderAdRows(); renderTable(); renderStatBars();
+                renderInfo(slot.options.find(o=>o.id===(loadout[activeSlotKey]??'none'))??slot.options[0]);
+              },
+              () => { this._playHoverSound(); if (opt1) { renderInfo(opt1); renderStatBars(activeSlotKey, opt1.id); } },
+              () => { const cur=slot.options.find(o=>o.id===(loadout[activeSlotKey]??'none'))??slot.options[0]; renderInfo(cur); renderStatBars(); }
+            ));
+          });
+          // Ligne 2 — niveaux (masquée si none)
+          if (selType !== 'none') {
+            const ROMAN = ['','I','II','III'];
+            [1,2,3].forEach(lv => {
+              const optId = `${selType}_${lv}`;
+              const opt   = slot.options.find(o => o.id === optId);
+              if (!opt) return;
+              const isEquipped2 = selLevel === lv && selType !== 'none';
+              const isUnlocked2 = level >= opt.levelReq;
+              const isOwned2    = prog.ownsOption(activeSlotKey, opt.id);
+              const cost2       = OPTION_COSTS[`active_defense:${optId}`] ?? 0;
+              row2.appendChild(mkCircle(ROMAN[lv], opt.name, isEquipped2, isUnlocked2, isOwned2, cost2,
+                () => {
+                  if (!isUnlocked2) { renderInfo(opt); return; }
+                  if (!isOwned2) { showBuyDialog(opt, cost2); return; }
+                  selLevel=lv; prog.setLoadoutItem(selectedSlot, activeSlotKey, optId);
+                  if (this._previewModelRoot) this._attachPreviewMissiles(this._previewModelRoot, selectedSlot);
+                  renderAdRows(); renderTable(); renderStatBars(); renderInfo(opt);
+                },
+                () => { this._playHoverSound(); renderInfo(opt); renderStatBars(activeSlotKey, opt.id); },
+                () => { const cur=slot.options.find(o=>o.id===(loadout[activeSlotKey]??'none'))??slot.options[0]; renderInfo(cur); renderStatBars(); }
+              ));
+            });
+          }
+        };
+
+        renderAdRows();
+        adCol.appendChild(row1);
+        adCol.appendChild(row2);
+        optsScroll.appendChild(adCol);
+        detailBar.appendChild(optsScroll);
+
+        _infoCol = el('div', { style:{ flex:'1', minWidth:'0', padding:'14px 18px', overflowY:'auto', display:'flex', flexDirection:'column', justifyContent:'center' }});
+        detailBar.appendChild(_infoCol);
+        renderInfo(slot.options.find(o=>o.id===(loadout[activeSlotKey]??'none'))??slot.options[0]);
+        return;
+      }
 
       slot.options.forEach(opt => {
         const isEquipped = loadout[activeSlotKey] === opt.id;
