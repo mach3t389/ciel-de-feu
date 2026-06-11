@@ -3104,7 +3104,6 @@ export class Menu {
           <span class="pb-plane-icon" style="font-size:13px;color:${M.yellow}55;transition:color 0.15s;">✈</span>
           <span class="pb-name" style="font-size:14px;letter-spacing:2px;color:${M.cream};font-weight:700;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;"></span>
           <span class="pb-lvl" style="font-size:12px;letter-spacing:2px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
-          <span class="pb-plane-name" style="font-size:10px;letter-spacing:1.5px;color:${M.dimCream};white-space:nowrap;opacity:0.7;"></span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="width:160px;height:5px;background:rgba(212,200,138,0.14);border-radius:2px;overflow:hidden;">
@@ -3118,33 +3117,111 @@ export class Menu {
         <span style="font-size:8px;letter-spacing:2px;color:${M.dimCream};">${t('creditsLabel')}</span>
         <span class="pb-cred" style="font-size:15px;letter-spacing:1.5px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
       </div>
-      <div class="pb-myplane-hint" style="
-        display:none;flex-direction:column;align-items:center;justify-content:center;
-        padding:0 6px;opacity:0;transition:opacity 0.15s;
-      ">
-        <span style="font-size:18px;color:${M.yellow};">›</span>
-      </div>
+      <span class="pb-arrow" style="font-size:10px;color:${M.dimCream};align-self:center;transition:color 0.15s;">▾</span>
     `;
     left.addEventListener('mouseover', () => {
       left.style.background = 'rgba(212,200,138,0.06)';
       left.style.borderColor = `${M.yellow}88`;
       const icon = left.querySelector('.pb-plane-icon');
       if (icon) icon.style.color = M.yellow;
-      const hint = left.querySelector('.pb-myplane-hint');
-      if (hint) { hint.style.display = 'flex'; requestAnimationFrame(() => { hint.style.opacity = '1'; }); }
+      const arr = left.querySelector('.pb-arrow');
+      if (arr) arr.style.color = M.yellow;
     });
     left.addEventListener('mouseout', () => {
       left.style.background = 'transparent';
       left.style.borderColor = 'transparent';
       const icon = left.querySelector('.pb-plane-icon');
       if (icon) icon.style.color = `${M.yellow}55`;
-      const hint = left.querySelector('.pb-myplane-hint');
-      if (hint) { hint.style.opacity = '0'; setTimeout(() => { hint.style.display = 'none'; }, 150); }
+      const arr = left.querySelector('.pb-arrow');
+      if (arr) arr.style.color = M.dimCream;
     });
-    left.addEventListener('click', () => {
-      // Ouvre Mon Avion. _myPlaneReturn est tenu à jour par chaque _show* via _setCurrentScreen
-      this._showMyPlane();
+
+    // Dropdown avion — centré sous le bloc profil
+    const planeDropdown = document.createElement('div');
+    planeDropdown.className = 'pb-dropdown';
+    Object.assign(planeDropdown.style, {
+      position: 'absolute', top: 'calc(100% + 4px)',
+      left: '50%', transform: 'translateX(-50%)',
+      background: 'rgba(8,8,6,0.97)', border: `1px solid ${M.border}`,
+      borderRadius: '6px', minWidth: '220px', display: 'none',
+      flexDirection: 'column', overflow: 'hidden',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.8)', zIndex: '2100',
+      pointerEvents: 'auto',
     });
+
+    const buildDropdown = () => {
+      planeDropdown.innerHTML = '';
+      const prog = this._progression;
+      for (let i = 0; i < 3; i++) {
+        const planeData = prog?.getPlane(i);
+        const isActive  = prog?.activePlane === i;
+        const row = document.createElement('div');
+        Object.assign(row.style, {
+          display: 'flex', alignItems: 'center', gap: '12px',
+          padding: '10px 16px', cursor: 'pointer',
+          background: isActive ? `${M.yellow}18` : 'transparent',
+          borderLeft: isActive ? `3px solid ${M.yellow}` : `3px solid transparent`,
+          transition: 'background 0.1s',
+        });
+        row.addEventListener('mouseover', () => { if (!isActive) row.style.background = 'rgba(212,200,138,0.06)'; });
+        row.addEventListener('mouseout',  () => { if (!isActive) row.style.background = 'transparent'; });
+        const icon = document.createElement('span');
+        icon.textContent = '✈';
+        icon.style.cssText = `font-size:14px;color:${isActive ? M.yellow : M.dimCream};flex-shrink:0;`;
+        const nameEl = document.createElement('span');
+        nameEl.textContent = (planeData?.name || `AVION ${i + 1}`).toUpperCase();
+        nameEl.style.cssText = `font-size:12px;letter-spacing:2px;font-weight:${isActive ? '700' : '500'};color:${isActive ? M.yellow : M.cream};font-family:Rajdhani,sans-serif;flex:1;`;
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✎';
+        editBtn.style.cssText = `background:transparent;border:none;color:${M.dimCream};cursor:pointer;font-size:13px;padding:0 4px;opacity:0.5;transition:opacity 0.15s;`;
+        editBtn.addEventListener('mouseover', () => editBtn.style.opacity = '1');
+        editBtn.addEventListener('mouseout',  () => editBtn.style.opacity = '0.5');
+        editBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const inp = document.createElement('input');
+          inp.value = planeData?.name || '';
+          inp.style.cssText = `background:rgba(30,30,20,0.95);border:1px solid ${M.yellow};color:${M.yellow};font-family:Rajdhani,sans-serif;font-size:12px;letter-spacing:2px;padding:2px 6px;border-radius:3px;width:120px;outline:none;`;
+          nameEl.replaceWith(inp);
+          editBtn.style.display = 'none';
+          inp.focus(); inp.select();
+          const commit = () => {
+            const val = inp.value.trim().toUpperCase().slice(0, 20) || planeData?.name;
+            prog?.renamePlane(i, val);
+            this._refreshProfileBar();
+            planeDropdown.style.display = 'none';
+          };
+          inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { planeDropdown.style.display = 'none'; } });
+          inp.addEventListener('blur', commit);
+        });
+        row.appendChild(icon); row.appendChild(nameEl); row.appendChild(editBtn);
+        row.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          prog?.setActivePlane(i);
+          planeDropdown.style.display = 'none';
+          this._refreshProfileBar();
+          this._syncPreviewPlane?.(i);
+          this._myPlaneReturn?.();
+        });
+        planeDropdown.appendChild(row);
+        if (i < 2) {
+          const sep = document.createElement('div');
+          sep.style.cssText = `height:1px;background:${M.border}55;margin:0 10px;`;
+          planeDropdown.appendChild(sep);
+        }
+      }
+    };
+
+    left.addEventListener('click', (e) => {
+      if (e.target.closest('.pb-dropdown')) return;
+      const isOpen = planeDropdown.style.display === 'flex';
+      if (isOpen) { planeDropdown.style.display = 'none'; return; }
+      buildDropdown();
+      planeDropdown.style.display = 'flex';
+    });
+    document.addEventListener('click', (e) => {
+      if (!left.contains(e.target)) planeDropdown.style.display = 'none';
+    });
+    left.appendChild(planeDropdown);
 
     // Boutons utilitaires (droite)
     const right = document.createElement('div');
@@ -3237,11 +3314,6 @@ export class Menu {
     const n = prog.newOptionCount?.() ?? 0;
     if (badge) badge.style.display = n > 0 ? 'block' : 'none';
     if (this._profileLangBtn) this._profileLangBtn.textContent = getLang() === 'fr' ? 'EN' : 'FR';
-    const planeNameEl = bar.querySelector('.pb-plane-name');
-    if (planeNameEl && this._progression) {
-      const idx = this._progression.activePlane;
-      planeNameEl.textContent = (this._progression.getPlane(idx)?.name || `AVION ${idx + 1}`).toUpperCase();
-    }
   }
 
   // Mémorise l'écran courant pour que le bouton retour de Mon Avion y revienne
