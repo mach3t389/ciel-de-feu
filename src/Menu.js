@@ -4035,7 +4035,7 @@ export class Menu {
           else if (!isOwned)    { borderCol = M.yellow+'88';  bgCol = 'rgba(20,18,10,0.95)'; textCol = M.yellow; }
           else                  { borderCol = M.border+'aa';  bgCol = 'rgba(22,20,15,0.95)'; textCol = M.cream; }
 
-          const item = el('div', { style:{ display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', cursor:'pointer', flexShrink:'0' }});
+          const item = el('div', { style:{ display:'flex', flexDirection:'column', alignItems:'center', gap:'12px', cursor:'pointer', flexShrink:'0' }});
           const wrap = el('div', { style:{ position:'relative', width:`${AD_CZ}px`, height:`${AD_CZ}px` }});
           const circle = el('div', { style:{
             width:`${AD_CZ}px`, height:`${AD_CZ}px`, borderRadius:'50%',
@@ -4143,7 +4143,7 @@ export class Menu {
         else                    { borderCol = M.border+'aa';   bgCol = 'rgba(22,20,15,0.95)';    textCol = M.cream;     }
 
         const item = el('div', { style:{
-          display:'flex', flexDirection:'column', alignItems:'center', gap:'5px',
+          display:'flex', flexDirection:'column', alignItems:'center', gap:'12px',
           cursor:'pointer', minWidth:`${CZ}px`, flexShrink:'0',
         }});
 
