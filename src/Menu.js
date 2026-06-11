@@ -1845,75 +1845,99 @@ export class Menu {
     this._clear();
     this._showPreview('settings');
     this._syncPreviewPlane();
-    const wrap = mkPanelLeft('640px');
-    wrap.appendChild(mkSectionTitle(t('settings')));
+    const wrap = mkPanelLeft('580px');
+
+    // ── Titre avec détecteur de clics pour panneau dev ────────────────────────
+    const titleEl = mkSectionTitle(t('settings'));
+    titleEl.style.cursor = 'default';
+    wrap.appendChild(titleEl);
     wrap.appendChild(mkDivider());
 
-    // ── 2 colonnes ────────────────────────────────────────────────────────────
-    const cols = el('div', { style: { display: 'flex', gap: '32px', alignItems: 'flex-start' }});
-    const colL = el('div', { style: { flex: '1', minWidth: '0' }});
-    const colR = el('div', { style: { flex: '1', minWidth: '0' }});
+    // Helper : carte de section avec titre et contenu
+    const mkCard = (labelText) => {
+      const card = el('div', { style: {
+        border: `1px solid ${M.border}44`,
+        borderRadius: '6px',
+        padding: '14px 16px',
+        marginBottom: '10px',
+        background: 'rgba(212,200,138,0.02)',
+      }});
+      const lbl = el('div', { text: labelText, style: {
+        fontSize: '8px', letterSpacing: '3px', color: M.dimCream,
+        fontFamily: 'Rajdhani, sans-serif', fontWeight: '700',
+        marginBottom: '10px', textTransform: 'uppercase',
+      }});
+      card.appendChild(lbl);
+      return card;
+    };
 
-    // ── Colonne gauche : Audio ────────────────────────────────────────────────
-    colL.appendChild(mkLabel(t('audio')));
-    colL.appendChild(this._mkAudioSection(this._audio ?? null));
+    const mkSecBtn = (label, onClick, danger = false) => {
+      const b = el('button', { text: label, style: {
+        padding: '6px 14px', background: 'transparent',
+        border: `1px solid ${danger ? '#883322' : M.border}`,
+        borderRadius: '4px',
+        color: danger ? '#cc5533' : M.dimCream,
+        fontFamily: 'Rajdhani, sans-serif',
+        fontSize: '11px', letterSpacing: '2px',
+        cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
+      }});
+      const hoverC = danger ? '#ee7755' : M.cream;
+      const hoverB = danger ? '#aa4422' : M.cream;
+      b.addEventListener('mouseover', () => { b.style.color = hoverC; b.style.borderColor = hoverB; if (danger) b.style.background = '#44110a18'; });
+      b.addEventListener('mouseout',  () => { b.style.color = danger ? '#cc5533' : M.dimCream; b.style.borderColor = danger ? '#883322' : M.border; b.style.background = 'transparent'; });
+      b.addEventListener('click', onClick);
+      return b;
+    };
 
-    // ── Colonne droite : Qualité graphique + Mode de contrôle ─────────────────
+    // ── SECTION 1 : Audio ─────────────────────────────────────────────────────
+    const cardAudio = mkCard(t('audio'));
+    cardAudio.appendChild(this._mkAudioSection(this._audio ?? null));
+    wrap.appendChild(cardAudio);
+
+    // ── SECTION 2 : Affichage ─────────────────────────────────────────────────
     const GFX_MODES = [
-      { value: 0, label: t('gfxHigh'), color: M.cream,    desc: t('gfxHighDesc') },
-      { value: 1, label: t('gfxMed'),  color: '#ccaa33',  desc: t('gfxMedDesc')  },
-      { value: 2, label: t('gfxLow'),  color: '#dd6633',  desc: t('gfxLowDesc')  },
+      { value: 0, label: t('gfxHigh'), color: M.cream,   desc: t('gfxHighDesc') },
+      { value: 1, label: t('gfxMed'),  color: '#ccaa33', desc: t('gfxMedDesc')  },
+      { value: 2, label: t('gfxLow'),  color: '#dd6633', desc: t('gfxLowDesc')  },
     ];
-    const curGfx = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
-    const gfxDesc = el('div', { style: {
-      fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6',
-      marginTop: '4px', minHeight: '28px',
-    }});
+    const curGfx  = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
+    const gfxDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6', marginTop: '6px', minHeight: '24px' }});
     gfxDesc.textContent = GFX_MODES.find(m => m.value === curGfx)?.desc ?? '';
 
-    colR.appendChild(mkLabel(t('graphicsQuality')));
-    colR.appendChild(mkChoiceGroup(
+    const cardGfx = mkCard(t('graphicsQuality'));
+    cardGfx.appendChild(mkChoiceGroup(
       GFX_MODES.map(({ value, label, color }) => ({ value, label, color })),
       curGfx,
-      v => {
-        localStorage.setItem('lowGraphics', String(v));
-        gfxDesc.textContent = GFX_MODES.find(m => m.value === v)?.desc ?? '';
-      }
+      v => { localStorage.setItem('lowGraphics', String(v)); gfxDesc.textContent = GFX_MODES.find(m => m.value === v)?.desc ?? ''; }
     ));
-    colR.appendChild(gfxDesc);
-    colR.appendChild(mkDivider());
+    cardGfx.appendChild(gfxDesc);
+    wrap.appendChild(cardGfx);
 
+    // ── SECTION 3 : Contrôles ─────────────────────────────────────────────────
     const CTRL_MODES = [
-      { value: 'standard',  label: t('ctrlStd'), color: M.cream,    desc: t('ctrlStdDesc') },
-      { value: 'simulator', label: t('ctrlSim'), color: '#88aacc',  desc: t('ctrlSimDesc') },
+      { value: 'standard',  label: t('ctrlStd'), color: M.cream,   desc: t('ctrlStdDesc') },
+      { value: 'simulator', label: t('ctrlSim'), color: '#88aacc', desc: t('ctrlSimDesc') },
     ];
-    const curCtrl = localStorage.getItem('ctrlMode') || 'standard';
-    const ctrlDesc = el('div', { style: {
-      fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6',
-      marginTop: '4px', minHeight: '28px',
-    }});
+    const curCtrl  = localStorage.getItem('ctrlMode') || 'standard';
+    const ctrlDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6', marginTop: '6px', minHeight: '24px' }});
     ctrlDesc.textContent = CTRL_MODES.find(m => m.value === curCtrl)?.desc ?? '';
 
-    colR.appendChild(mkLabel(t('ctrlMode')));
-    colR.appendChild(mkChoiceGroup(
-      CTRL_MODES.map(({ value, label, color, disabled }) => ({ value, label, color, disabled })),
+    const cardCtrl = mkCard(t('ctrlMode'));
+    cardCtrl.appendChild(mkChoiceGroup(
+      CTRL_MODES.map(({ value, label, color }) => ({ value, label, color })),
       curCtrl,
-      v => {
-        localStorage.setItem('ctrlMode', v);
-        ctrlDesc.textContent = CTRL_MODES.find(m => m.value === v)?.desc ?? '';
-      }
+      v => { localStorage.setItem('ctrlMode', v); ctrlDesc.textContent = CTRL_MODES.find(m => m.value === v)?.desc ?? ''; }
     ));
-    colR.appendChild(ctrlDesc);
+    cardCtrl.appendChild(ctrlDesc);
 
-    cols.appendChild(colL);
-    cols.appendChild(colR);
-    wrap.appendChild(cols);
-    wrap.appendChild(mkDivider());
+    // Bouton Commandes intégré dans la section Contrôles
+    const ctrlBtnRow = el('div', { style: { marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${M.border}44` }});
+    const btnControls = mkSecBtn(t('controls') || 'COMMANDES', () => this._showControls());
+    ctrlBtnRow.appendChild(btnControls);
+    cardCtrl.appendChild(ctrlBtnRow);
+    wrap.appendChild(cardCtrl);
 
-    // ── Export / Import sauvegarde ────────────────────────────────────────────
-    wrap.appendChild(mkDivider());
-    wrap.appendChild(mkLabel('SAUVEGARDE'));
-
+    // ── SECTION 4 : Sauvegarde ────────────────────────────────────────────────
     const SAVE_KEYS = [
       'cielDeFeu_progression', 'cielDeFeu_tutorialDisabled',
       'pilotName', 'lang', 'ctrlMode', 'lowGraphics', 'audio_music', 'audio_sfx',
@@ -1927,29 +1951,12 @@ export class Menu {
       return keys;
     };
 
-    const mkSecondaryBtn = (label, onClick) => {
-      const b = el('button', { text: label, style: {
-        padding: '6px 14px', background: 'transparent',
-        border: `1px solid ${M.border}`, borderRadius: '4px',
-        color: M.dimCream, fontFamily: 'Rajdhani, sans-serif',
-        fontSize: '11px', letterSpacing: '2px',
-        cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
-      }});
-      b.addEventListener('mouseover', () => { b.style.borderColor = M.cream; b.style.color = M.cream; });
-      b.addEventListener('mouseout',  () => { b.style.borderColor = M.border; b.style.color = M.dimCream; });
-      b.addEventListener('click', onClick);
-      return b;
-    };
+    const cardSave = mkCard(t('exportDesc') ? 'SAUVEGARDE' : 'SAUVEGARDE');
+    const saveHint = el('div', { text: t('exportDesc'), style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6', opacity: '0.7', marginBottom: '10px' }});
+    cardSave.appendChild(saveHint);
 
-    const saveDesc = el('div', { style: {
-      fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6',
-      opacity: '0.7', marginBottom: '8px',
-    }});
-    saveDesc.textContent = t('exportDesc');
-    wrap.appendChild(saveDesc);
-
-    const saveRow = el('div', { style: { display: 'flex', gap: '8px' }});
-    saveRow.appendChild(mkSecondaryBtn(t('exportSave') || '↓  EXPORTER', () => {
+    const saveRow = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' }});
+    saveRow.appendChild(mkSecBtn(t('exportSave') || '↓  EXPORTER', () => {
       const data = {};
       allSaveKeys().forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; });
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1959,13 +1966,11 @@ export class Menu {
       a.click();
       URL.revokeObjectURL(a.href);
     }));
-    saveRow.appendChild(mkSecondaryBtn(t('importSave') || '↑  IMPORTER', () => {
+    saveRow.appendChild(mkSecBtn(t('importSave') || '↑  IMPORTER', () => {
       const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json,application/json';
+      input.type = 'file'; input.accept = '.json,application/json';
       input.addEventListener('change', () => {
-        const file = input.files?.[0];
-        if (!file) return;
+        const file = input.files?.[0]; if (!file) return;
         const reader = new FileReader();
         reader.onload = (ev) => {
           try {
@@ -1976,47 +1981,34 @@ export class Menu {
             this._progression = new ProgressionSystem();
             alert(t('importSuccess'));
             this._showSettings();
-          } catch {
-            alert(t('importError'));
-          }
+          } catch { alert(t('importError')); }
         };
         reader.readAsText(file);
       });
       input.click();
     }));
-    wrap.appendChild(saveRow);
+    cardSave.appendChild(saveRow);
 
-    // ── Reset progression (visible, non-triche) ────────────────────────────────
-    wrap.appendChild(mkDivider());
-    const resetBtn = el('button', { text: t('cheatReset'), style: {
-      padding: '6px 14px', background: 'transparent',
-      border: `1px solid #883322`, borderRadius: '4px',
-      color: '#cc5533', fontFamily: 'Rajdhani, sans-serif',
-      fontSize: '11px', letterSpacing: '2px',
-      cursor: 'pointer', transition: 'all 0.15s', alignSelf: 'flex-start',
-    }});
-    resetBtn.addEventListener('mouseover', () => { resetBtn.style.background = '#44110a22'; resetBtn.style.color = '#ee7755'; });
-    resetBtn.addEventListener('mouseout',  () => { resetBtn.style.background = 'transparent'; resetBtn.style.color = '#cc5533'; });
-    resetBtn.addEventListener('click', () => {
+    // Reset — zone danger séparée dans la même section
+    const resetSep = el('div', { style: { marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${M.border}44`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }});
+    const resetHint = el('div', { text: t('resetConfirm') ? '' : '', style: { fontSize: '9px', color: '#aa4422', letterSpacing: '1px', opacity: '0.8' }});
+    resetSep.appendChild(resetHint);
+    resetSep.appendChild(mkSecBtn(t('cheatReset'), () => {
       if (confirm(t('resetConfirm'))) {
         localStorage.removeItem('cielDeFeu_progression');
         this._progression = new ProgressionSystem();
         this._showSettings();
       }
-    });
-    wrap.appendChild(resetBtn);
+    }, true));
+    cardSave.appendChild(resetSep);
+    wrap.appendChild(cardSave);
 
     // ── Panneau dev caché : 5 clics rapides sur le titre ─────────────────────
-    const devPanel = el('div', { style: { display: 'none', marginTop: '8px', padding: '8px', border: `1px dashed #553300`, borderRadius: '4px', background: '#0a0700' }});
-    const devLabel = el('div', { text: '⚠ DEV', style: { fontSize: '8px', color: '#aa6633', letterSpacing: '3px', marginBottom: '6px' }});
-    const devRow   = el('div', { style: { display: 'flex', gap: '8px' }});
+    const devPanel = el('div', { style: { display: 'none', marginBottom: '10px', padding: '10px 14px', border: `1px dashed #553300`, borderRadius: '6px', background: '#0a0700' }});
+    devPanel.appendChild(el('div', { text: '⚠  DEV PANEL', style: { fontSize: '8px', color: '#aa6633', letterSpacing: '3px', marginBottom: '8px' }}));
+    const devRow = el('div', { style: { display: 'flex', gap: '8px' }});
     const mkDevBtn = (label, fn) => {
-      const b = el('button', { text: label, style: {
-        padding: '4px 10px', background: 'transparent',
-        border: `1px solid #553300`, color: '#aa6633',
-        fontFamily: 'Rajdhani, sans-serif', fontSize: '9px', letterSpacing: '1px',
-        cursor: 'pointer', borderRadius: '4px', transition: 'all 0.1s',
-      }});
+      const b = el('button', { text: label, style: { padding: '4px 10px', background: 'transparent', border: `1px solid #553300`, color: '#aa6633', fontFamily: 'Rajdhani, sans-serif', fontSize: '9px', letterSpacing: '1px', cursor: 'pointer', borderRadius: '4px', transition: 'all 0.1s' }});
       b.addEventListener('click', fn);
       b.addEventListener('mouseover', () => { b.style.color = '#cc8844'; b.style.borderColor = '#cc8844'; });
       b.addEventListener('mouseout',  () => { b.style.color = '#aa6633'; b.style.borderColor = '#553300'; });
@@ -2024,55 +2016,27 @@ export class Menu {
     };
     devRow.appendChild(mkDevBtn(t('cheatLevels'), () => {
       const p = this._progression;
-      for (let i = 0; i < 10; i++) {
-        const xp = xpToNextLevel(p.level) - p.levelInfo.xpInLevel;
-        p.addRewards(xp + 1, 0);
-      }
+      for (let i = 0; i < 10; i++) { const xp = xpToNextLevel(p.level) - p.levelInfo.xpInLevel; p.addRewards(xp + 1, 0); }
       this._showSettings();
     }));
-    devRow.appendChild(mkDevBtn(t('cheatCredits'), () => {
-      this._progression.addRewards(0, 50000);
-      this._showSettings();
-    }));
-    devPanel.appendChild(devLabel);
+    devRow.appendChild(mkDevBtn(t('cheatCredits'), () => { this._progression.addRewards(0, 50000); this._showSettings(); }));
     devPanel.appendChild(devRow);
     wrap.appendChild(devPanel);
 
-    // Activer le panneau dev : cliquer 5× sur le titre principal en moins de 3 s
-    const titleEl = wrap.querySelector('[data-settings-title]') ?? wrap.firstElementChild;
+    // 5 clics rapides sur le titre pour révéler le panneau dev
     let devClicks = 0, devTimer = 0;
-    titleEl?.addEventListener('click', () => {
+    titleEl.addEventListener('click', () => {
       devClicks++;
       clearTimeout(devTimer);
       devTimer = setTimeout(() => { devClicks = 0; }, 3000);
-      if (devClicks >= 5) {
-        devPanel.style.display = devPanel.style.display === 'none' ? 'block' : 'none';
-        devClicks = 0;
-      }
+      if (devClicks >= 5) { devPanel.style.display = devPanel.style.display === 'none' ? 'block' : 'none'; devClicks = 0; }
     });
-    if (titleEl) titleEl.style.cursor = 'default';
 
+    // ── Retour ─────────────────────────────────────────────────────────────────
     wrap.appendChild(mkDivider());
-
-    // ── Bouton Commandes (secondaire) + bouton Retour (principal) ─────────────
-    const bottomRow = el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' }});
-    const btnControls = el('button', { text: t('controls') || 'COMMANDES', style: {
-      padding: '7px 16px', background: 'transparent',
-      border: `1px solid ${M.border}`, borderRadius: '4px',
-      color: M.dimCream, fontFamily: 'Rajdhani, sans-serif',
-      fontSize: '11px', letterSpacing: '2px', fontWeight: '600',
-      cursor: 'pointer', transition: 'all 0.15s',
-    }});
-    btnControls.addEventListener('mouseover', () => { btnControls.style.borderColor = M.cream; btnControls.style.color = M.cream; });
-    btnControls.addEventListener('mouseout',  () => { btnControls.style.borderColor = M.border; btnControls.style.color = M.dimCream; });
-    btnControls.addEventListener('click', () => this._showControls());
-
     const btnBack = mkBtn(t('back'), M.dimCream);
     btnBack.addEventListener('click', () => returnFn());
-
-    bottomRow.appendChild(btnControls);
-    bottomRow.appendChild(btnBack);
-    wrap.appendChild(bottomRow);
+    wrap.appendChild(btnBack);
     this._root.appendChild(wrap);
   }
 
