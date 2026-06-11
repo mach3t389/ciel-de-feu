@@ -222,6 +222,7 @@ const LANGS = {
     resetConfirm   : 'Réinitialiser toute la progression ?',
     tutHide        : '× Ne plus afficher',
     tutSkip        : '[ ENTRÉE ]  PASSER',
+    tutClose       : 'Fermer',
 
     // ── Astuces ──────────────────────────────────────────────────────────────
     tipsTitle   : '— ASTUCE —',
@@ -649,6 +650,7 @@ const LANGS = {
     resetConfirm   : 'Reset all progression?',
     tutHide        : "× Don't show again",
     tutSkip        : '[ ENTER ]  SKIP',
+    tutClose       : 'Close',
 
     // ── Tips ─────────────────────────────────────────────────────────────────
     tipsTitle   : '— TIP —',

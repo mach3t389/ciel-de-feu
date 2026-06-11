@@ -173,25 +173,41 @@ export class MissileSystem {
   }
 
   // ── Tir missile ───────────────────────────────────────────────────────────
-  fire(playerPivot, type = 'aa') {
-    if (!this._lockDone || !this._lockTarget) return false;
+  // Toujours possible si des missiles sont disponibles.
+  // Sans lock → dumb-fire (guidageStrength=0). Avec lock partiel → guidage réduit.
+  fire(playerPivot) {
     if (!this._lockParams) return false;
 
-    // Premier slot du bon type encore disponible
+    // Détermine le type selon la cible lockée, puis fallback AA→AG
+    let type = null;
+    if (this._lockTarget) {
+      type = (this._lockTarget.isGround && this.missilesRemainingAG > 0) ? 'ag' : 'aa';
+    }
+    if (!type || (this._wingSlots ?? []).every(s => !s?.mesh || s.type !== type)) {
+      // Fallback : AA d'abord, puis AG
+      if (this.missilesRemainingAA > 0) type = 'aa';
+      else if (this.missilesRemainingAG > 0) type = 'ag';
+      else return false;
+    }
+
     const slotIdx = (this._wingSlots ?? []).findIndex(s => s?.mesh && s.type === type);
     if (slotIdx < 0) return false;
 
     this._lastFiredIdx = slotIdx;
     const slot = this._wingSlots[slotIdx];
-    this._spawnMissile(playerPivot, this._lockTarget, type, slot.side);
 
+    // guidanceStrength : 0 = dumb-fire, 0..1 = lock partiel, 1 = lock complet
+    const guidanceStrength = this._lockDone ? 1.0 : this._lockProgress;
+    this._spawnMissile(playerPivot, this._lockTarget ?? null, type, slot.side, guidanceStrength);
+
+    // Réinitialise le lock pour le prochain tir
     this._lockDone     = false;
     this._lockProgress = 0;
     return true;
   }
 
-  _spawnMissile(playerPivot, target, type, side = 0) {
-    if (DEBUG_MISSILES) console.log(`[MISSILE] FIRED type=${type} side=${side > 0 ? 'R' : 'L'} target=${target ? 'yes' : 'none'}`);
+  _spawnMissile(playerPivot, target, type, side = 0, guidanceStrength = 1.0) {
+    if (DEBUG_MISSILES) console.log(`[MISSILE] FIRED type=${type} side=${side > 0 ? 'R' : 'L'} target=${target ? 'yes' : 'none'} guidance=${guidanceStrength.toFixed(2)}`);
     const template = type === 'ag' ? (this._modelAG ?? this._modelAA) : this._modelAA;
     const mesh = template ? template.clone() : this._mkFallbackMesh();
 
@@ -210,19 +226,21 @@ export class MissileSystem {
     const baseTrackTime   = this._lockParams?.trackTime ?? 4.0;
     const trackingLevel   = this._lockParams?.trackingLevel ?? 0;
     const trackTime       = baseTrackTime + (TRACK_TIME_BONUS[trackingLevel] ?? 0);
+    const baseTurnSpeed = TURN_SPEED_LEVELS[trackingLevel] ?? TURN_SPEED_LEVELS[0];
     const missileData = {
       mesh,
       target,
       type,
-      velocity: new THREE.Vector3(0, 0, -1).applyQuaternion(playerPivot.quaternion).multiplyScalar(MISSILE_SPEED),
-      trackRemaining: trackTime,
-      trackTimeBase : trackTime,
-      life          : 10.0,
-      exploded      : false,
-      frameCount    : 0,
+      velocity        : new THREE.Vector3(0, 0, -1).applyQuaternion(playerPivot.quaternion).multiplyScalar(MISSILE_SPEED),
+      trackRemaining  : target ? trackTime * guidanceStrength : 0,
+      trackTimeBase   : trackTime,
+      life            : 10.0,
+      exploded        : false,
+      frameCount      : 0,
       trackingLevel,
-      turnSpeed     : TURN_SPEED_LEVELS[trackingLevel] ?? TURN_SPEED_LEVELS[0],
-      reengaged     : false,
+      turnSpeed       : baseTurnSpeed * guidanceStrength,
+      guidanceStrength,
+      reengaged       : false,
     };
     this._missiles.push(missileData);
     if (DEBUG_MISSILES) console.log(`[MISSILE] Spawned — trackTime=${trackTime}s life=10s speed=${MISSILE_SPEED}`);

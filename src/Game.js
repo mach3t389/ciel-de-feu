@@ -376,21 +376,18 @@ export class Game {
       if (msParams) {
         this._missileSystem.setParams(msParams);
         this.player.onFireMissile = () => {
-          if (this.player.missileCount <= 0) {
+          if (this._missileSystem.missilesRemaining <= 0) {
             this._audio?.playNoAmmo();
             return;
           }
-          if (this._missileSystem.isLocked) {
-            const type = (this._missileSystem.lockTarget?.isGround && msParams.hasAG) ? 'ag' : 'aa';
-            if (this._missileSystem.fire(this.player.pivot, type)) {
-              this.player.missileCount--;
-              this._updateMissileLoadMods();
-              this._missileSystem.removeWingMissile();
-              this.ui.setMissileCount(
-                this._missileSystem.missilesRemainingAA, this._initAACount,
-                this._missileSystem.missilesRemainingAG, this._initAGCount
-              );
-            }
+          if (this._missileSystem.fire(this.player.pivot)) {
+            this._missileSystem.removeWingMissile();
+            this.player.missileCount = this._missileSystem.missilesRemaining;
+            this._updateMissileLoadMods();
+            this.ui.setMissileCount(
+              this._missileSystem.missilesRemainingAA, this._initAACount,
+              this._missileSystem.missilesRemainingAG, this._initAGCount
+            );
           }
         };
       }
@@ -655,7 +652,7 @@ export class Game {
         team: i === 0 ? 'ally' : 'enemy',
       }));
       this._groundDefense = new GroundDefense(this.scene, this.getTerrainHeight, isPractice);
-      this._groundDefense.build(villages, runways, this._groundModelCache, isPractice);
+      this._groundDefense.build(villages, runways, this._groundModelCache, isPractice, this._villageMap.buildingPositions ?? []);
     }
 
     // Mode multijoueur : initialiser le gestionnaire de joueurs distants

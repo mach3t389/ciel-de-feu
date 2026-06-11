@@ -144,78 +144,142 @@ export class UI {
   showTip(text, duration = 5, opts = {}) {
     const dismissible = opts.dismissible ?? true;
     if (!this._tipEl) {
-      this._tipEl = document.createElement('div');
-      Object.assign(this._tipEl.style, {
-        position     : 'absolute',
-        top          : '18%',
-        left         : '50%',
-        transform    : 'translateX(-50%)',
+      // Inséré comme dernier enfant de _topCenter (flex-column) → toujours en dessous
+      // du score, timer, alertes carburant/santé, statut moteur.
+      // Si _topCenter n'existe pas encore (menu), fallback sur _root avec position absolue.
+      const wrap = document.createElement('div');
+      Object.assign(wrap.style, {
+        display      : 'none',
+        opacity      : '0',
+        transition   : 'opacity 0.45s ease',
+        pointerEvents: 'none',
+        marginTop    : '6px',
+        width        : 'min(360px, 88vw)',
+        alignSelf    : 'center',
+      });
+      this._tipEl = wrap;
+
+      const inner = document.createElement('div');
+      Object.assign(inner.style, {
+        background    : 'rgba(6,6,4,0.88)',
+        border        : '1px solid rgba(212,200,138,0.18)',
+        borderLeft    : '3px solid rgba(212,200,138,0.55)',
+        borderRadius  : '3px',
+        padding       : '9px 14px 9px 12px',
+        backdropFilter: 'blur(2px)',
+      });
+      wrap.appendChild(inner);
+
+      this._tipText = document.createElement('div');
+      Object.assign(this._tipText.style, {
         color        : '#d4c88a',
         fontFamily   : '"Courier New", monospace',
-        fontSize     : '13px',
-        letterSpacing: '2px',
-        textTransform: 'uppercase',
-        pointerEvents: 'none',
-        zIndex       : '150',
-        textShadow   : '0 0 10px rgba(212,200,138,0.5)',
-        background   : 'rgba(10,10,6,0.78)',
-        border       : '1px solid rgba(212,200,138,0.22)',
-        padding      : '10px 26px',
-        display      : 'none',
-        transition   : 'opacity 0.6s ease',
-        textAlign    : 'center',
-        maxWidth     : '520px',
-        lineHeight   : '1.6',
-        whiteSpace   : 'pre',
+        fontSize     : '11px',
+        letterSpacing: '1.5px',
+        lineHeight   : '1.7',
+        whiteSpace   : 'pre-wrap',
+        wordBreak    : 'break-word',
+        textShadow   : '0 0 8px rgba(212,200,138,0.3)',
       });
-      this._tipText = document.createElement('div');
-      this._tipEl.appendChild(this._tipText);
-      // Bouton "Ne plus afficher" — seul élément cliquable
+      inner.appendChild(this._tipText);
+
+      // Barre basse : raccourci + bouton "Ne plus afficher"
+      const footer = document.createElement('div');
+      Object.assign(footer.style, {
+        display      : 'flex',
+        alignItems   : 'center',
+        justifyContent: 'space-between',
+        marginTop    : '8px',
+        gap          : '10px',
+      });
+
+      this._tipSkip = document.createElement('div');
+      Object.assign(this._tipSkip.style, {
+        fontSize     : '9px',
+        letterSpacing: '1.5px',
+        color        : 'rgba(212,200,138,0.38)',
+        fontFamily   : '"Courier New", monospace',
+        display      : 'none',
+        textTransform: 'uppercase',
+        flexShrink   : '0',
+      });
+      this._tipSkip.textContent = t('tutSkip');
+
+      // Raccourci clavier [T] pour fermer
+      const shortcut = document.createElement('div');
+      Object.assign(shortcut.style, {
+        fontSize     : '9px',
+        letterSpacing: '1.5px',
+        color        : 'rgba(212,200,138,0.3)',
+        fontFamily   : '"Courier New", monospace',
+        textTransform: 'uppercase',
+        flexShrink   : '0',
+      });
+      shortcut.textContent = IS_MOBILE ? '' : '[ T ] ' + t('tutClose');
+
       this._tipHide = document.createElement('button');
       Object.assign(this._tipHide.style, {
-        marginTop    : '8px',
         background   : 'transparent',
-        border       : '1px solid rgba(212,200,138,0.4)',
-        color        : '#a89c66',
+        border       : '1px solid rgba(212,200,138,0.28)',
+        borderRadius : '2px',
+        color        : 'rgba(212,200,138,0.55)',
         fontFamily   : '"Courier New", monospace',
-        fontSize     : '10px',
-        letterSpacing: '2px',
-        padding      : '4px 12px',
+        fontSize     : '9px',
+        letterSpacing: '1.5px',
+        padding      : '3px 10px',
         cursor       : 'pointer',
         pointerEvents: 'auto',
         textTransform: 'uppercase',
+        transition   : 'border-color 0.15s, color 0.15s',
+        flexShrink   : '0',
       });
       this._tipHide.textContent = t('tutHide');
+      this._tipHide.addEventListener('mouseover', () => {
+        this._tipHide.style.borderColor = 'rgba(212,200,138,0.6)';
+        this._tipHide.style.color = '#d4c88a';
+      });
+      this._tipHide.addEventListener('mouseout', () => {
+        this._tipHide.style.borderColor = 'rgba(212,200,138,0.28)';
+        this._tipHide.style.color = 'rgba(212,200,138,0.55)';
+      });
       this._tipHide.addEventListener('click', () => {
         try { localStorage.setItem('cielDeFeu_tutorialDisabled', '1'); } catch (_) {}
-        this._tipEl.style.display = 'none';
+        this._hideTip();
         if (this._onTutorialDisabled) this._onTutorialDisabled();
       });
-      this._tipEl.appendChild(this._tipHide);
-      // Indicateur touche rapide (mode entraînement) — ne persiste pas dans localStorage
-      this._tipSkip = document.createElement('div');
-      Object.assign(this._tipSkip.style, {
-        marginTop    : '8px',
-        fontSize     : '9px',
-        letterSpacing: '2px',
-        color        : 'rgba(212,200,138,0.45)',
-        display      : 'none',
-        textTransform: 'uppercase',
-      });
-      this._tipSkip.textContent = t('tutSkip');
-      this._tipEl.appendChild(this._tipSkip);
-      this._root.appendChild(this._tipEl);
+
+      footer.appendChild(shortcut);
+      footer.appendChild(this._tipSkip);
+      footer.appendChild(this._tipHide);
+      inner.appendChild(footer);
+      // Inséré dans _topCenter si disponible, sinon dans _root
+      (this._topCenter ?? this._root).appendChild(wrap);
+
+      // Raccourci clavier T pour fermer le conseil en cours
+      this._tipKeyHandler = (e) => {
+        if (e.key === 't' || e.key === 'T') {
+          if (this._tipEl && this._tipEl.style.display !== 'none') {
+            e.preventDefault();
+            this._hideTip();
+          }
+        }
+      };
+      window.addEventListener('keydown', this._tipKeyHandler);
     }
     clearTimeout(this._tipTimeout);
     this._tipText.textContent = text;
     this._tipHide.style.display = dismissible ? 'inline-block' : 'none';
     this._tipSkip.style.display = (!dismissible && (opts.skippable ?? false)) ? 'block' : 'none';
-    this._tipEl.style.opacity = '1';
     this._tipEl.style.display = 'block';
-    this._tipTimeout = setTimeout(() => {
-      this._tipEl.style.opacity = '0';
-      setTimeout(() => { if (this._tipEl) this._tipEl.style.display = 'none'; }, 650);
-    }, duration * 1000);
+    requestAnimationFrame(() => { if (this._tipEl) this._tipEl.style.opacity = '1'; });
+    this._tipTimeout = setTimeout(() => this._hideTip(), duration * 1000);
+  }
+
+  _hideTip() {
+    clearTimeout(this._tipTimeout);
+    if (!this._tipEl) return;
+    this._tipEl.style.opacity = '0';
+    setTimeout(() => { if (this._tipEl) this._tipEl.style.display = 'none'; }, 450);
   }
 
   showPause(visible, onQuit = null, onResume = null, onRespawn = null, isSurvival = null) {
@@ -1216,6 +1280,12 @@ export class UI {
       whiteSpace   : 'nowrap',
     });
     this._topCenter.appendChild(this._engineStatus);
+
+    // Si showTip() a été appelé avant _build(), migre le tip dans _topCenter
+    if (this._tipEl && this._tipEl.parentNode !== this._topCenter) {
+      this._tipEl.parentNode?.removeChild(this._tipEl);
+      this._topCenter.appendChild(this._tipEl);
+    }
 
     // Dessins initiaux
     this._drawSpeedDial(0);

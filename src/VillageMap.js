@@ -489,16 +489,15 @@ export class VillageMap {
     const counts = Object.fromEntries(Object.keys(paths).map(k => [k, 0]));
     // placed est global inter-villages pour éviter les superpositions entre deux villages voisins
     const placed = [];
-    const MIN_D2 = 40 * 40;
 
     for (const v of VILLAGES) {
       for (const [dx, dz, type, targetH, rotY] of this._makeVillageLayout()) {
         const g = groups[type];
         if (!g || counts[type] >= MAX_PER_TYPE || g.naturalHeight <= 0) continue;
         const wx = v.x + dx, wz = v.z + dz;
-        // Ne pas placer sur une piste ou dans sa zone d'approche
         if (this._nearAirport(wx, wz, 80)) continue;
-        if (placed.some(([px, pz]) => (wx-px)**2 + (wz-pz)**2 < MIN_D2)) continue;
+        const halfFp = (g.naturalFootprint ?? 20) * (targetH / g.naturalHeight) / 2;
+        if (placed.some(([px, pz, hr]) => (wx-px)**2 + (wz-pz)**2 < (halfFp + hr + 3) ** 2)) continue;
         const scale = Math.max(0.3, Math.min(4.0, targetH / g.naturalHeight));
         // Validation 4 coins — rejette si la pente est trop forte (B2)
         const c0 = this.getTerrainHeight(wx - 14, wz - 14);
@@ -518,7 +517,7 @@ export class VillageMap {
         }
         counts[type]++;
         g.recordInstance(wx, wz, dummy.matrix);
-        placed.push([wx, wz]);
+        placed.push([wx, wz, halfFp]);
       }
     }
 
@@ -526,6 +525,7 @@ export class VillageMap {
       if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
     }
     this._bldgLODGroups = Object.values(groups).filter(Boolean);
+    this.buildingPositions = placed;
     return Object.values(counts).reduce((a, b) => a + b, 0);
   }
 
@@ -672,7 +672,7 @@ export class VillageMap {
           const h   = this.getTerrainHeight(wx, wz);
           if (h < 5) continue;
           if (this._nearLake(wx, wz, 15)) continue;
-          if (this._nearAirport(wx, wz, 22)) continue;
+          if (this._nearAirport(wx, wz, 80)) continue;
 
           const ti = Math.floor(Math.random() * 4);
           const g  = groups[ti];

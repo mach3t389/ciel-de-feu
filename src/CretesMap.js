@@ -426,7 +426,6 @@ export class CretesMap {
     const dummy  = new THREE.Object3D();
     const counts = Object.fromEntries(Object.keys(paths).map(k => [k, 0]));
     const placed = [];
-    const MIN_D2 = 50 * 50;
 
     for (const v of VILLAGES) {
       const square = new THREE.Mesh(
@@ -443,7 +442,8 @@ export class CretesMap {
         if (!g || counts[type] >= MAX_PER_TYPE || g.naturalHeight <= 0) continue;
         const wx = v.x + dx, wz = v.z + dz;
         if (this._nearAirport(wx, wz, 80)) continue;
-        if (placed.some(([px, pz]) => (wx-px)**2 + (wz-pz)**2 < MIN_D2)) continue;
+        const halfFp = (g.naturalFootprint ?? 20) * (targetH / g.naturalHeight) / 2;
+        if (placed.some(([px, pz, hr]) => (wx-px)**2 + (wz-pz)**2 < (halfFp + hr + 3) ** 2)) continue;
         const scale = targetH / g.naturalHeight;
         // Validation 4 coins — rejette si la pente est trop forte (B2)
         const c0 = this.getTerrainHeight(wx - 14, wz - 14);
@@ -463,12 +463,13 @@ export class CretesMap {
         }
         counts[type]++;
         g.recordInstance(wx, wz, dummy.matrix);
-        placed.push([wx, wz]);
+        placed.push([wx, wz, halfFp]);
       }
     }
     for (const g of Object.values(groups))
       if (g) for (const inst of g.instances) inst.instanceMatrix.needsUpdate = true;
     this._bldgLODGroups = Object.values(groups).filter(Boolean);
+    this.buildingPositions = placed;
     return Object.values(counts).reduce((a, b) => a + b, 0);
   }
 
@@ -595,7 +596,7 @@ export class CretesMap {
           const h   = this.getTerrainHeight(wx, wz);
           if (h < 5) continue;
           if (this._nearLake(wx, wz, 15)) continue;
-          if (this._nearAirport(wx, wz, 22)) continue;
+          if (this._nearAirport(wx, wz, 80)) continue;
           const ti = Math.floor(Math.random() * 4);
           const g  = groups[ti];
           if (!g || placed[ti] >= MAX) continue;

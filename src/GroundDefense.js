@@ -47,7 +47,7 @@ export class GroundDefense {
   // airports : [{ x, z, ang, team:'ally'|'enemy' }]
   // preloadedModels : résultat de GroundDefense.preloadModels() (optionnel)
   // decorative : true en training — props passifs, sans marqueur d'équipe
-  async build(villages, airports = [], preloadedModels = null, decorative = false) {
+  async build(villages, airports = [], preloadedModels = null, decorative = false, buildingPositions = []) {
     this._decorative = decorative;
     if (preloadedModels) {
       this._models = preloadedModels;
@@ -58,6 +58,10 @@ export class GroundDefense {
       this._models = { tank: tank?.scene, truck: truck?.scene, mg: mg?.scene };
     }
 
+    const _nearBuilding = (x, z, unitR) => buildingPositions.some(
+      ([bx, bz, bHalf]) => (x - bx) ** 2 + (z - bz) ** 2 < (bHalf + unitR + 2) ** 2
+    );
+
     for (const v of villages) {
       const layout = [
         ['tank', 0.00], ['tank', 0.5],
@@ -65,11 +69,19 @@ export class GroundDefense {
         ['mg', 0.33], ['mg', 0.83], ['mg', 0.1],
       ];
       layout.forEach(([kind, frac], i) => {
-        const ang = frac * Math.PI * 2 + (i * 0.3);
-        const r   = (kind === 'mg') ? 130 + Math.random() * 40 : 150 + Math.random() * 50;
-        const x = v.x + Math.cos(ang) * r;
-        const z = v.z + Math.sin(ang) * r;
-        this._spawnUnit(kind, x, z, v.team, ang);
+        const baseAng = frac * Math.PI * 2 + (i * 0.3);
+        const baseR   = (kind === 'mg') ? 130 : 150;
+        // Tente jusqu'à 8 positions aléatoires autour de l'angle cible pour éviter les bâtiments
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const ang = baseAng + (Math.random() - 0.5) * 0.4;
+          const r   = baseR + Math.random() * (kind === 'mg' ? 40 : 50);
+          const x = v.x + Math.cos(ang) * r;
+          const z = v.z + Math.sin(ang) * r;
+          if (!_nearBuilding(x, z, SIZE[kind] * 0.6)) {
+            this._spawnUnit(kind, x, z, v.team, ang);
+            return;
+          }
+        }
       });
     }
 

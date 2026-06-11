@@ -52,6 +52,7 @@ export class InstancedLOD {
     const bbox          = new THREE.Box3().setFromObject(modelScene);
     this.baseOffset     = -bbox.min.y;
     this.naturalHeight  = bbox.max.y - bbox.min.y;
+    this.naturalFootprint = Math.max(bbox.max.x - bbox.min.x, bbox.max.z - bbox.min.z);
     this.maxCount       = maxCount;
     this.category       = category;
 
