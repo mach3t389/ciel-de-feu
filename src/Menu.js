@@ -1845,99 +1845,86 @@ export class Menu {
     this._clear();
     this._showPreview('settings');
     this._syncPreviewPlane();
-    const wrap = mkPanelLeft('580px');
+    // Panneau élargi pour tenir en 2×2 sans scroll
+    const wrap = mkPanelLeft('min(820px, 88vw)');
+    wrap.style.gap = '8px';
 
-    // ── Titre avec détecteur de clics pour panneau dev ────────────────────────
+    // ── Titre ─────────────────────────────────────────────────────────────────
     const titleEl = mkSectionTitle(t('settings'));
     titleEl.style.cursor = 'default';
     wrap.appendChild(titleEl);
     wrap.appendChild(mkDivider());
 
-    // Helper : carte de section avec titre et contenu
+    // ── Helpers ───────────────────────────────────────────────────────────────
     const mkCard = (labelText) => {
       const card = el('div', { style: {
-        border: `1px solid ${M.border}44`,
-        borderRadius: '6px',
-        padding: '14px 16px',
-        marginBottom: '10px',
-        background: 'rgba(212,200,138,0.02)',
+        border: `1px solid ${M.border}44`, borderRadius: '6px',
+        padding: '12px 14px', background: 'rgba(212,200,138,0.02)',
+        display: 'flex', flexDirection: 'column', gap: '0',
       }});
-      const lbl = el('div', { text: labelText, style: {
+      card.appendChild(el('div', { text: labelText, style: {
         fontSize: '8px', letterSpacing: '3px', color: M.dimCream,
         fontFamily: 'Rajdhani, sans-serif', fontWeight: '700',
-        marginBottom: '10px', textTransform: 'uppercase',
-      }});
-      card.appendChild(lbl);
+        marginBottom: '8px', textTransform: 'uppercase',
+      }}));
       return card;
     };
 
     const mkSecBtn = (label, onClick, danger = false) => {
       const b = el('button', { text: label, style: {
         padding: '6px 14px', background: 'transparent',
-        border: `1px solid ${danger ? '#883322' : M.border}`,
-        borderRadius: '4px',
+        border: `1px solid ${danger ? '#883322' : M.border}`, borderRadius: '4px',
         color: danger ? '#cc5533' : M.dimCream,
-        fontFamily: 'Rajdhani, sans-serif',
-        fontSize: '11px', letterSpacing: '2px',
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
         cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
       }});
-      const hoverC = danger ? '#ee7755' : M.cream;
-      const hoverB = danger ? '#aa4422' : M.cream;
-      b.addEventListener('mouseover', () => { b.style.color = hoverC; b.style.borderColor = hoverB; if (danger) b.style.background = '#44110a18'; });
+      b.addEventListener('mouseover', () => { b.style.color = danger ? '#ee7755' : M.cream; b.style.borderColor = danger ? '#aa4422' : M.cream; if (danger) b.style.background = '#44110a18'; });
       b.addEventListener('mouseout',  () => { b.style.color = danger ? '#cc5533' : M.dimCream; b.style.borderColor = danger ? '#883322' : M.border; b.style.background = 'transparent'; });
       b.addEventListener('click', onClick);
       return b;
     };
 
-    // ── SECTION 1 : Audio ─────────────────────────────────────────────────────
+    // ── GRILLE 2×2 ────────────────────────────────────────────────────────────
+    const grid = el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }});
+
+    // Cellule 1 — Audio
     const cardAudio = mkCard(t('audio'));
     cardAudio.appendChild(this._mkAudioSection(this._audio ?? null));
-    wrap.appendChild(cardAudio);
+    grid.appendChild(cardAudio);
 
-    // ── SECTION 2 : Affichage ─────────────────────────────────────────────────
+    // Cellule 2 — Affichage
     const GFX_MODES = [
       { value: 0, label: t('gfxHigh'), color: M.cream,   desc: t('gfxHighDesc') },
       { value: 1, label: t('gfxMed'),  color: '#ccaa33', desc: t('gfxMedDesc')  },
       { value: 2, label: t('gfxLow'),  color: '#dd6633', desc: t('gfxLowDesc')  },
     ];
     const curGfx  = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
-    const gfxDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6', marginTop: '6px', minHeight: '24px' }});
+    const gfxDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.5', marginTop: '6px', minHeight: '22px' }});
     gfxDesc.textContent = GFX_MODES.find(m => m.value === curGfx)?.desc ?? '';
-
     const cardGfx = mkCard(t('graphicsQuality'));
-    cardGfx.appendChild(mkChoiceGroup(
-      GFX_MODES.map(({ value, label, color }) => ({ value, label, color })),
-      curGfx,
-      v => { localStorage.setItem('lowGraphics', String(v)); gfxDesc.textContent = GFX_MODES.find(m => m.value === v)?.desc ?? ''; }
-    ));
+    cardGfx.appendChild(mkChoiceGroup(GFX_MODES.map(({ value, label, color }) => ({ value, label, color })), curGfx,
+      v => { localStorage.setItem('lowGraphics', String(v)); gfxDesc.textContent = GFX_MODES.find(m => m.value === v)?.desc ?? ''; }));
     cardGfx.appendChild(gfxDesc);
-    wrap.appendChild(cardGfx);
+    grid.appendChild(cardGfx);
 
-    // ── SECTION 3 : Contrôles ─────────────────────────────────────────────────
+    // Cellule 3 — Contrôles
     const CTRL_MODES = [
       { value: 'standard',  label: t('ctrlStd'), color: M.cream,   desc: t('ctrlStdDesc') },
       { value: 'simulator', label: t('ctrlSim'), color: '#88aacc', desc: t('ctrlSimDesc') },
     ];
     const curCtrl  = localStorage.getItem('ctrlMode') || 'standard';
-    const ctrlDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6', marginTop: '6px', minHeight: '24px' }});
+    const ctrlDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.5', marginTop: '6px', minHeight: '22px' }});
     ctrlDesc.textContent = CTRL_MODES.find(m => m.value === curCtrl)?.desc ?? '';
-
     const cardCtrl = mkCard(t('ctrlMode'));
-    cardCtrl.appendChild(mkChoiceGroup(
-      CTRL_MODES.map(({ value, label, color }) => ({ value, label, color })),
-      curCtrl,
-      v => { localStorage.setItem('ctrlMode', v); ctrlDesc.textContent = CTRL_MODES.find(m => m.value === v)?.desc ?? ''; }
-    ));
+    cardCtrl.appendChild(mkChoiceGroup(CTRL_MODES.map(({ value, label, color }) => ({ value, label, color })), curCtrl,
+      v => { localStorage.setItem('ctrlMode', v); ctrlDesc.textContent = CTRL_MODES.find(m => m.value === v)?.desc ?? ''; }));
     cardCtrl.appendChild(ctrlDesc);
+    const ctrlBtnSep = el('div', { style: { marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${M.border}44` }});
+    ctrlBtnSep.appendChild(mkSecBtn(t('controls') || 'COMMANDES', () => this._showControls()));
+    cardCtrl.appendChild(ctrlBtnSep);
+    grid.appendChild(cardCtrl);
 
-    // Bouton Commandes intégré dans la section Contrôles
-    const ctrlBtnRow = el('div', { style: { marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${M.border}44` }});
-    const btnControls = mkSecBtn(t('controls') || 'COMMANDES', () => this._showControls());
-    ctrlBtnRow.appendChild(btnControls);
-    cardCtrl.appendChild(ctrlBtnRow);
-    wrap.appendChild(cardCtrl);
-
-    // ── SECTION 4 : Sauvegarde ────────────────────────────────────────────────
+    // Cellule 4 — Sauvegarde
     const SAVE_KEYS = [
       'cielDeFeu_progression', 'cielDeFeu_tutorialDisabled',
       'pilotName', 'lang', 'ctrlMode', 'lowGraphics', 'audio_music', 'audio_sfx',
@@ -1950,21 +1937,17 @@ export class Menu {
       }
       return keys;
     };
-
-    const cardSave = mkCard(t('exportDesc') ? 'SAUVEGARDE' : 'SAUVEGARDE');
-    const saveHint = el('div', { text: t('exportDesc'), style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6', opacity: '0.7', marginBottom: '10px' }});
+    const cardSave = mkCard('SAUVEGARDE');
+    const saveHint = el('div', { text: t('exportDesc'), style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.5', opacity: '0.7', marginBottom: '8px' }});
     cardSave.appendChild(saveHint);
-
     const saveRow = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' }});
     saveRow.appendChild(mkSecBtn(t('exportSave') || '↓  EXPORTER', () => {
       const data = {};
       allSaveKeys().forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; });
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
       a.download = `ciel-de-feu-save-${new Date().toISOString().slice(0,10)}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      a.click(); URL.revokeObjectURL(a.href);
     }));
     saveRow.appendChild(mkSecBtn(t('importSave') || '↑  IMPORTER', () => {
       const input = document.createElement('input');
@@ -1978,9 +1961,7 @@ export class Menu {
             if (typeof data !== 'object' || Array.isArray(data)) throw new Error();
             if (!confirm(t('importConfirm'))) return;
             Object.entries(data).forEach(([k, v]) => { if (typeof v === 'string') localStorage.setItem(k, v); });
-            this._progression = new ProgressionSystem();
-            alert(t('importSuccess'));
-            this._showSettings();
+            this._progression = new ProgressionSystem(); alert(t('importSuccess')); this._showSettings();
           } catch { alert(t('importError')); }
         };
         reader.readAsText(file);
@@ -1988,23 +1969,20 @@ export class Menu {
       input.click();
     }));
     cardSave.appendChild(saveRow);
-
-    // Reset — zone danger séparée dans la même section
-    const resetSep = el('div', { style: { marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${M.border}44`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }});
-    const resetHint = el('div', { text: t('resetConfirm') ? '' : '', style: { fontSize: '9px', color: '#aa4422', letterSpacing: '1px', opacity: '0.8' }});
-    resetSep.appendChild(resetHint);
+    const resetSep = el('div', { style: { marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${M.border}44`, display: 'flex', justifyContent: 'flex-end' }});
     resetSep.appendChild(mkSecBtn(t('cheatReset'), () => {
       if (confirm(t('resetConfirm'))) {
         localStorage.removeItem('cielDeFeu_progression');
-        this._progression = new ProgressionSystem();
-        this._showSettings();
+        this._progression = new ProgressionSystem(); this._showSettings();
       }
     }, true));
     cardSave.appendChild(resetSep);
-    wrap.appendChild(cardSave);
+    grid.appendChild(cardSave);
 
-    // ── Panneau dev caché : 5 clics rapides sur le titre ─────────────────────
-    const devPanel = el('div', { style: { display: 'none', marginBottom: '10px', padding: '10px 14px', border: `1px dashed #553300`, borderRadius: '6px', background: '#0a0700' }});
+    wrap.appendChild(grid);
+
+    // ── Panneau dev caché (pleine largeur, 5 clics sur le titre) ─────────────
+    const devPanel = el('div', { style: { display: 'none', padding: '10px 14px', border: `1px dashed #553300`, borderRadius: '6px', background: '#0a0700' }});
     devPanel.appendChild(el('div', { text: '⚠  DEV PANEL', style: { fontSize: '8px', color: '#aa6633', letterSpacing: '3px', marginBottom: '8px' }}));
     const devRow = el('div', { style: { display: 'flex', gap: '8px' }});
     const mkDevBtn = (label, fn) => {
@@ -2023,7 +2001,6 @@ export class Menu {
     devPanel.appendChild(devRow);
     wrap.appendChild(devPanel);
 
-    // 5 clics rapides sur le titre pour révéler le panneau dev
     let devClicks = 0, devTimer = 0;
     titleEl.addEventListener('click', () => {
       devClicks++;
@@ -2072,7 +2049,7 @@ export class Menu {
     titleArea.appendChild(mkStar2()); titleArea.appendChild(mkHLine());
     topBar.appendChild(titleArea);
 
-    const backBtn = el('button', { text: t('backToSettings') || '← PARAMÈTRES', style: {
+    const backBtn = el('button', { text: t('backToSettings'), style: {
       padding: '0 26px', background: M.accentDim, border: 'none',
       borderLeft: `1px solid ${M.border}`,
       color: M.cream, fontFamily: 'Rajdhani, sans-serif',
@@ -3069,7 +3046,7 @@ export class Menu {
       setLang(next);
       location.reload();
     });
-    const gearBtn = mkUtilBtn('⚙', t('settings') || 'Paramètres', () => this._showSettings());
+    const gearBtn = mkUtilBtn('⚙', t('settings'), () => this._showSettings());
     gearBtn.style.fontSize = '16px';
     gearBtn.style.padding = '4px 12px';
 
@@ -3085,7 +3062,7 @@ export class Menu {
       position: 'relative', display: 'flex', alignItems: 'center',
       pointerEvents: 'auto', flexShrink: '0',
     });
-    planeSelWrap.addEventListener('click', e => e.stopPropagation()); // évite d'ouvrir "Mon Avion"
+    planeSelWrap.addEventListener('click', e => e.stopPropagation());
 
     const planeBtn = document.createElement('button');
     Object.assign(planeBtn.style, {
