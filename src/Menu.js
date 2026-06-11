@@ -3135,21 +3135,43 @@ export class Menu {
       const arr = left.querySelector('.pb-arrow');
       if (arr) arr.style.color = M.dimCream;
     });
+    left.addEventListener('click', () => this._showMyPlane());
 
-    // Dropdown avion — centré sous le bloc profil
+    // Sélecteur d'avion — bouton séparé avec dropdown centré sous lui
+    const planeSelWrap = document.createElement('div');
+    Object.assign(planeSelWrap.style, {
+      position: 'relative', display: 'flex', alignItems: 'center',
+      pointerEvents: 'auto', flexShrink: '0',
+    });
+
+    const planeBtn = document.createElement('button');
+    Object.assign(planeBtn.style, {
+      background: 'transparent', border: `1px solid ${M.border}`,
+      color: M.cream, fontFamily: 'Rajdhani, sans-serif',
+      fontSize: '11px', letterSpacing: '2px', fontWeight: '700',
+      padding: '5px 10px', cursor: 'pointer', borderRadius: '4px',
+      display: 'flex', alignItems: 'center', gap: '6px',
+      transition: 'all 0.15s', whiteSpace: 'nowrap',
+    });
+    planeBtn.addEventListener('mouseover', () => { planeBtn.style.borderColor = M.yellow; planeBtn.style.color = M.yellow; });
+    planeBtn.addEventListener('mouseout',  () => { planeBtn.style.borderColor = M.border; planeBtn.style.color = M.cream; });
+
     const planeDropdown = document.createElement('div');
-    planeDropdown.className = 'pb-dropdown';
     Object.assign(planeDropdown.style, {
-      position: 'absolute', top: 'calc(100% + 4px)',
+      position: 'absolute', top: 'calc(100% + 6px)',
       left: '50%', transform: 'translateX(-50%)',
       background: 'rgba(8,8,6,0.97)', border: `1px solid ${M.border}`,
       borderRadius: '6px', minWidth: '220px', display: 'none',
       flexDirection: 'column', overflow: 'hidden',
       boxShadow: '0 8px 32px rgba(0,0,0,0.8)', zIndex: '2100',
-      pointerEvents: 'auto',
     });
 
-    const buildDropdown = () => {
+    const closePlaneDropdown = () => { planeDropdown.style.display = 'none'; };
+
+    planeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = planeDropdown.style.display === 'flex';
+      if (isOpen) { closePlaneDropdown(); return; }
       planeDropdown.innerHTML = '';
       const prog = this._progression;
       for (let i = 0; i < 3; i++) {
@@ -3160,7 +3182,7 @@ export class Menu {
           display: 'flex', alignItems: 'center', gap: '12px',
           padding: '10px 16px', cursor: 'pointer',
           background: isActive ? `${M.yellow}18` : 'transparent',
-          borderLeft: isActive ? `3px solid ${M.yellow}` : `3px solid transparent`,
+          borderLeft: isActive ? `3px solid ${M.yellow}` : '3px solid transparent',
           transition: 'background 0.1s',
         });
         row.addEventListener('mouseover', () => { if (!isActive) row.style.background = 'rgba(212,200,138,0.06)'; });
@@ -3188,16 +3210,15 @@ export class Menu {
             const val = inp.value.trim().toUpperCase().slice(0, 20) || planeData?.name;
             prog?.renamePlane(i, val);
             this._refreshProfileBar();
-            planeDropdown.style.display = 'none';
+            closePlaneDropdown();
           };
-          inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { planeDropdown.style.display = 'none'; } });
+          inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') closePlaneDropdown(); });
           inp.addEventListener('blur', commit);
         });
         row.appendChild(icon); row.appendChild(nameEl); row.appendChild(editBtn);
-        row.addEventListener('click', (ev) => {
-          ev.stopPropagation();
+        row.addEventListener('click', () => {
           prog?.setActivePlane(i);
-          planeDropdown.style.display = 'none';
+          closePlaneDropdown();
           this._refreshProfileBar();
           this._syncPreviewPlane?.(i);
           this._myPlaneReturn?.();
@@ -3209,19 +3230,12 @@ export class Menu {
           planeDropdown.appendChild(sep);
         }
       }
-    };
-
-    left.addEventListener('click', (e) => {
-      if (e.target.closest('.pb-dropdown')) return;
-      const isOpen = planeDropdown.style.display === 'flex';
-      if (isOpen) { planeDropdown.style.display = 'none'; return; }
-      buildDropdown();
       planeDropdown.style.display = 'flex';
     });
-    document.addEventListener('click', (e) => {
-      if (!left.contains(e.target)) planeDropdown.style.display = 'none';
-    });
-    left.appendChild(planeDropdown);
+
+    document.addEventListener('click', closePlaneDropdown);
+    planeSelWrap.appendChild(planeBtn);
+    planeSelWrap.appendChild(planeDropdown);
 
     // Boutons utilitaires (droite)
     const right = document.createElement('div');
@@ -3266,29 +3280,26 @@ export class Menu {
     right.appendChild(langBtn);
     right.appendChild(gearBtn);
 
-    // Badge point rouge en haut à droite de tout le bloc profil
+    // Badge point rouge en haut à droite du bloc profil
     const newDot = document.createElement('span');
     newDot.className = 'pb-badge';
     Object.assign(newDot.style, {
-      display      : 'none',
-      position     : 'absolute',
-      top          : '2px',
-      right        : '2px',
-      width        : '9px',
-      height       : '9px',
-      borderRadius : '50%',
-      background   : M.accent,
-      boxShadow    : `0 0 6px ${M.accent}`,
+      display: 'none', position: 'absolute',
+      top: '2px', right: '2px',
+      width: '9px', height: '9px', borderRadius: '50%',
+      background: M.accent, boxShadow: `0 0 6px ${M.accent}`,
       pointerEvents: 'none',
     });
     left.appendChild(newDot);
 
     bar.appendChild(left);
+    bar.appendChild(planeSelWrap);
     bar.appendChild(right);
     document.body.appendChild(bar);
-    this._profileBar     = bar;
-    this._profileLangBtn = langBtn;
-    this._unlockBtn      = null;
+    this._profileBar       = bar;
+    this._profileLangBtn   = langBtn;
+    this._planeSelectorBtn = planeBtn;
+    this._unlockBtn        = null;
     this._refreshProfileBar();
   }
 
@@ -3314,6 +3325,17 @@ export class Menu {
     const n = prog.newOptionCount?.() ?? 0;
     if (badge) badge.style.display = n > 0 ? 'block' : 'none';
     if (this._profileLangBtn) this._profileLangBtn.textContent = getLang() === 'fr' ? 'EN' : 'FR';
+    if (this._planeSelectorBtn && this._progression) {
+      const idx  = this._progression.activePlane;
+      const pname = (this._progression.getPlane(idx)?.name || `AVION ${idx + 1}`).toUpperCase();
+      this._planeSelectorBtn.innerHTML = '';
+      const icon = document.createElement('span'); icon.textContent = '✈'; icon.style.color = M.yellow;
+      const lbl  = document.createElement('span'); lbl.textContent = pname;
+      const arr  = document.createElement('span'); arr.textContent = '▾'; arr.style.cssText = `font-size:10px;color:${M.dimCream};`;
+      this._planeSelectorBtn.appendChild(icon);
+      this._planeSelectorBtn.appendChild(lbl);
+      this._planeSelectorBtn.appendChild(arr);
+    }
   }
 
   // Mémorise l'écran courant pour que le bouton retour de Mon Avion y revienne
