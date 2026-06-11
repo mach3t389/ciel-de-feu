@@ -14,15 +14,18 @@ const INTERP_DELAY = 0.10;
 class RemotePlayer {
   // isEnemy : true si ce joueur est dans l'équipe adverse (TDM) ou en FFA
   constructor(scene, id, info, isEnemy = false) {
-    this.id       = id;
-    this.name     = info.name || 'UNKNOWN';
-    this.team     = info.team || 'rouge';
-    this.isEnemy  = isEnemy;
-    this.isDead   = false;
-    this.hp       = 100;
-    this.speed    = 40;
-    this.kills    = 0;   // synchronisé via score_update
-    this.deaths   = 0;
+    this.id          = id;
+    this.name        = info.name || 'UNKNOWN';
+    this.team        = info.team || 'rouge';
+    this.isEnemy     = isEnemy;
+    this.isDead      = false;
+    this.hp          = 100;
+    this.speed       = 40;
+    this.kills       = 0;   // synchronisé via score_update
+    this.deaths      = 0;
+    this.shieldActive = false;
+    this.shieldType   = null;
+    this._shieldMesh  = null;
 
     this.pivot = new THREE.Object3D();
     scene.add(this.pivot);
@@ -105,9 +108,33 @@ class RemotePlayer {
     this.pivot.add(this._marker);
   }
 
+  _updateShieldMesh() {
+    if (this.shieldActive) {
+      if (!this._shieldMesh) {
+        const col = this.shieldType === 'shield_rear' ? 0xff8844
+                  : this.shieldType === 'shield_front' ? 0x4488ff
+                  : 0x44ccff;
+        const mat = new THREE.MeshBasicMaterial({
+          color: col, transparent: true, opacity: 0.22,
+          side: THREE.DoubleSide, depthWrite: false,
+        });
+        this._shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(12, 10, 7), mat);
+        this.pivot.add(this._shieldMesh);
+      }
+      this._shieldMesh.visible = true;
+    } else if (this._shieldMesh) {
+      this._shieldMesh.visible = false;
+    }
+  }
+
   // Applique l'état reçu du réseau → empile un snapshot horodaté pour l'interpolation
   applyState(state) {
     if (state.speed !== undefined) this.speed = state.speed;
+    if (state.shieldActive !== undefined) {
+      this.shieldActive = state.shieldActive;
+      this.shieldType   = state.shieldType ?? null;
+      this._updateShieldMesh();
+    }
     if (state.position && state.quaternion) {
       const now = performance.now() / 1000;
       const p = state.position, q = state.quaternion;
@@ -223,11 +250,177 @@ class RemotePlayer {
       const lit = this._flashTimer > 0;
       if (this._mats) for (const m of this._mats) m.emissiveIntensity = lit ? 1.6 : 0.18;
     }
+
+    // Pulse du bouclier
+    if (this._shieldMesh?.visible) {
+      this._shieldMesh.material.opacity = 0.12 + 0.18 * Math.abs(Math.sin(performance.now() / 280));
+    }
   }
 
   remove(scene) {
     scene.remove(this.pivot);
   }
+}
+
+// ── RemoteBot ─────────────────────────────────────────────────────────────────
+// Bot IA host-authoritative : rendu côté client, positions reçues du réseau.
+class RemoteBot {
+  constructor(scene, netId) {
+    this.netId    = netId;
+    this.isEnemy  = true;
+    this.isDead   = false;
+    this.hp       = 100;
+    this._killSent = false;
+
+    this.pivot = new THREE.Object3D();
+    scene.add(this.pivot);
+
+    this._buffer      = [];
+    this._initialized = false;
+    this._velocity    = new THREE.Vector3();
+    this.mesh         = null;
+    this._deathTimer  = 0;
+
+    this._load(scene);
+    this._buildMarker();
+  }
+
+  _load(scene) {
+    new GLTFLoader().load('/SK_Veh_Plane_Stunt_01.glb', (gltf) => {
+      this.mesh = gltf.scene;
+      const box = new THREE.Box3().setFromObject(this.mesh);
+      const sz  = new THREE.Vector3(); box.getSize(sz);
+      const maxDim = Math.max(sz.x, sz.y, sz.z);
+      this.mesh.scale.setScalar(maxDim > 0 ? 4 / maxDim : 1);
+      this.mesh.rotation.y = Math.PI;
+      this.mesh.traverse(node => {
+        if (node.isMesh && node.material) {
+          const mats = Array.isArray(node.material) ? node.material : [node.material];
+          mats.forEach(m => {
+            if (m.emissive !== undefined) {
+              m.emissive = new THREE.Color(ENEMY_COLOR);
+              m.emissiveIntensity = 0.18;
+              this._mats = this._mats ?? [];
+              this._mats.push(m);
+            }
+          });
+        }
+      });
+      this.pivot.add(this.mesh);
+    });
+  }
+
+  _buildMarker() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 192; canvas.height = 48;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, 192, 48);
+    ctx.strokeStyle = '#cc2222';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, 190, 46);
+    ctx.fillStyle = '#cc2222';
+    ctx.font = 'bold 20px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('BOT', 96, 24);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+    this._marker = new THREE.Sprite(mat);
+    this._marker.scale.set(14, 3.5, 1);
+    this._marker.position.set(0, 8, 0);
+    this.pivot.add(this._marker);
+  }
+
+  applyState(state) {
+    if (state.hp   !== undefined) this.hp = state.hp;
+    if (state.dead && !this.isDead)        this._die();
+    if (state.dead === false && this.isDead) this._revive(state.pos);
+    if (state.pos && state.quat) {
+      const now = performance.now() / 1000;
+      const p = state.pos, q = state.quat;
+      const entry = {
+        t   : now,
+        pos : new THREE.Vector3(p.x, p.y, p.z),
+        quat: new THREE.Quaternion(q.x, q.y, q.z, q.w),
+      };
+      this._buffer.push(entry);
+      while (this._buffer.length > 2 && now - this._buffer[0].t > 1.0) this._buffer.shift();
+      if (!this._initialized) {
+        this.pivot.position.copy(entry.pos);
+        this.pivot.quaternion.copy(entry.quat);
+        this._initialized = true;
+      }
+      this._velocity.set(0, 0, -1).applyQuaternion(entry.quat).multiplyScalar(60);
+    }
+  }
+
+  applyLocalHit(dmg) {
+    if (this.isDead) return;
+    this.hp = Math.max(0, this.hp - dmg);
+  }
+
+  _die() {
+    this.isDead = true;
+    this._deathTimer = 3;
+    this._killSent   = false;
+    if (this.mesh)    this.mesh.visible    = false;
+    if (this._marker) this._marker.visible = false;
+  }
+
+  _revive(pos) {
+    this.isDead  = false;
+    this.hp      = 100;
+    this._killSent = false;
+    this._buffer.length = 0;
+    this._initialized   = false;
+    if (pos) this.pivot.position.set(pos.x, pos.y, pos.z);
+    if (this.mesh)    this.mesh.visible    = true;
+    if (this._marker) this._marker.visible = true;
+  }
+
+  get position()    { return this.pivot.position; }
+  get quaternion()  { return this.pivot.quaternion; }
+  get aimPosition() {
+    const buf = this._buffer;
+    if (buf.length === 0) return this.pivot.position;
+    const last  = buf[buf.length - 1];
+    const ahead = Math.min(performance.now() / 1000 - last.t, 0.3);
+    return last.pos.clone().addScaledVector(this._velocity, ahead);
+  }
+
+  update(delta) {
+    if (this.isDead) { this._deathTimer -= delta; return; }
+    const buf = this._buffer;
+    if (buf.length === 0) return;
+    const now     = performance.now() / 1000;
+    const renderT = now - INTERP_DELAY;
+    const last    = buf[buf.length - 1];
+    if (buf.length === 1 || renderT <= buf[0].t) {
+      this.pivot.position.lerp(buf[0].pos, 1 - Math.exp(-18 * delta));
+      this.pivot.quaternion.slerp(buf[0].quat, 1 - Math.exp(-16 * delta));
+    } else if (renderT >= last.t) {
+      const ahead     = Math.min(renderT - last.t, 0.3);
+      const predicted = last.pos.clone().addScaledVector(this._velocity, ahead);
+      this.pivot.position.lerp(predicted, 1 - Math.exp(-18 * delta));
+      this.pivot.quaternion.slerp(last.quat, 1 - Math.exp(-16 * delta));
+    } else {
+      let i = 0;
+      while (i < buf.length - 1 && buf[i + 1].t < renderT) i++;
+      const a = buf[i], b = buf[i + 1];
+      const span = b.t - a.t;
+      const f    = span > 1e-4 ? (renderT - a.t) / span : 0;
+      this.pivot.position.lerpVectors(a.pos, b.pos, f);
+      this.pivot.quaternion.copy(a.quat).slerp(b.quat, f);
+    }
+    if (this._flashTimer > 0) {
+      this._flashTimer -= delta;
+      const lit = this._flashTimer > 0;
+      if (this._mats) for (const m of this._mats) m.emissiveIntensity = lit ? 1.6 : 0.18;
+    }
+  }
+
+  remove(scene) { scene.remove(this.pivot); }
 }
 
 // ── MultiplayerManager ───────────────────────────────────────────────────────
@@ -237,6 +430,8 @@ export class MultiplayerManager {
     this._network = networkManager;
     this._config  = config;   // { mode, playerTeam, friendlyFire }
     this._players = new Map();
+    this._bots    = new Map();  // netId → RemoteBot (FFA host-authoritative)
+    this._botsEnabled = false;
 
     if (this._network) this._bindNetwork();
   }
@@ -284,6 +479,19 @@ export class MultiplayerManager {
       this._emit('enemy_killed', { netId });
     });
 
+    // Positions des bots IA (FFA host-authoritative) — hôte → tous les clients
+    this._network.on('bot_state', ({ bots }) => {
+      if (!this._botsEnabled || !bots) return;
+      for (const state of bots) {
+        let bot = this._bots.get(state.netId);
+        if (!bot) {
+          bot = new RemoteBot(this._scene, state.netId);
+          this._bots.set(state.netId, bot);
+        }
+        bot.applyState(state);
+      }
+    });
+
     // Scores des autres joueurs (kills / deaths) pour le tableau des scores
     this._network.on('score_update', ({ id, kills, deaths, name }) => {
       const p = this._players.get(id);
@@ -309,16 +517,18 @@ export class MultiplayerManager {
     if (p) { p.remove(this._scene); this._players.delete(id); }
   }
 
-  // Envoie l'état local au réseau
-  sendLocalState(player) {
+  // Envoie l'état local au réseau (extra : { shieldActive, shieldType })
+  sendLocalState(player, extra = {}) {
     if (!this._network) return;
     this._network.send('player_update', {
       state: {
-        position  : { x: player.position.x, y: player.position.y, z: player.position.z },
-        quaternion: { x: player.quaternion.x, y: player.quaternion.y, z: player.quaternion.z, w: player.quaternion.w },
-        speed     : player.speed,
-        hp        : player.health,
-        dead      : player.isDead,
+        position    : { x: player.position.x, y: player.position.y, z: player.position.z },
+        quaternion  : { x: player.quaternion.x, y: player.quaternion.y, z: player.quaternion.z, w: player.quaternion.w },
+        speed       : player.speed,
+        hp          : player.health,
+        dead        : player.isDead,
+        shieldActive: extra.shieldActive ?? false,
+        shieldType  : extra.shieldType  ?? null,
       },
     });
   }
@@ -347,12 +557,33 @@ export class MultiplayerManager {
     this._network.send('enemy_killed', { netId });
   }
 
+  // Diffuse les états des bots IA (appelé par l'hôte toutes les 100 ms)
+  sendBotStates(states) {
+    if (!this._network) return;
+    this._network.send('bot_state', { bots: states });
+  }
+
+  // Active la réception des bot_state (clients FFA uniquement)
+  enableBotReceive() {
+    this._botsEnabled = true;
+  }
+
   getRemotePlayers() {
     return Array.from(this._players.values());
   }
 
+  getRemoteBots() {
+    return Array.from(this._bots.values());
+  }
+
+  removeAllBots() {
+    this._bots.forEach(b => b.remove(this._scene));
+    this._bots.clear();
+  }
+
   update(delta) {
     this._players.forEach(p => p.update(delta));
+    this._bots.forEach(b => b.update(delta));
   }
 
   // Mini event bus interne

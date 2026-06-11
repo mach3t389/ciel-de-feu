@@ -8,6 +8,16 @@ import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.j
 //  PRIORITÉ ABSOLUE : éviter le terrain (look-ahead), peu importe l'état.
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Objets scratch pour _death() — évite des allocations par frame (A4)
+const _dQY   = new THREE.Quaternion();
+const _dQP   = new THREE.Quaternion();
+const _dQR   = new THREE.Quaternion();
+const _dQTmp = new THREE.Quaternion();
+const _dAxisY = new THREE.Vector3(0, 1, 0);
+const _dAxisX = new THREE.Vector3(1, 0, 0);
+const _dAxisZ = new THREE.Vector3(0, 0, 1);
+const _dFwd   = new THREE.Vector3();
+
 // États
 const PATROL = 'PATROL';
 const FOLLOW = 'FOLLOW';
@@ -77,6 +87,8 @@ export class Enemy {
     this._fireCos   = sk.fireCos;
     this._fireCdBase = sk.fireCd;
     this._aimErr    = sk.aimErr;
+    this.playerEvasion  = 0;  // bonus d'erreur ajouté par Game.js selon les manœuvres joueur
+    this._underAllyFire = 0;  // timer : sous le feu des tourelles alliées
 
     // Mémoire d'engagement : une fois la cible vue, on la poursuit ce temps même hors de vue
     this._engage     = 0;
@@ -233,10 +245,16 @@ export class Enemy {
   }
 
   // ── Boucle principale ───────────────────────────────────────────────────────
+  // Appelé par Game.js quand une balle alliée (tourelle) touche cet ennemi
+  notifyAllyFire() {
+    this._underAllyFire = 6.0; // reste réactif 6s après le dernier hit
+  }
+
   update(delta, playerPos, allyGroundTargets = []) {
     if (!this._loaded) return;
     if (this.isDead) { this._death(delta); return; }
 
+    if (this._underAllyFire > 0) this._underAllyFire -= delta;
     this._allyGroundTargets = allyGroundTargets;
     this._think(delta, playerPos);   // FSM + choix du but de navigation
     this._avoidTerrain();            // PRIORITÉ : relève le but au-dessus du relief
@@ -293,6 +311,23 @@ export class Enemy {
     if (detected) this._engage = this._engageTime;
     else          this._engage = Math.max(0, this._engage - delta);
     const engaged = this._engage > 0;
+
+    // ── Réaction aux tirs des tourelles alliées (quand pas engagé sur le joueur) ──
+    if (this._underAllyFire > 0 && !engaged) {
+      const nearestGT = this._nearestAllyGround();
+      const fleeHp = this._maxHp * 0.35;
+      if (nearestGT && this.hp > fleeHp) {
+        // Attaque la tourelle qui tire
+        this._goal.set(nearestGT.pos.x, 0, nearestGT.pos.z);
+        this._goalY = nearestGT.pos.y + 60;
+        this._desiredSpeed = SPD_ATTACK;
+        this._setDebug(dist, dHome);
+        return;
+      } else {
+        // Fuit si trop endommagé ou pas de cible au sol
+        if (this._state !== FLEE) this._state = FLEE;
+      }
+    }
 
     // ── Transitions ──────────────────────────────────────────────────────────
     // FLEE prioritaire : santé critique
@@ -559,10 +594,11 @@ export class Enemy {
             playerPos.clone().addScaledVector(vel, travelTime),
             this.pivot.position
           ).normalize();
-          if (this._aimErr > 0) {
-            aimDir.x += (Math.random() - 0.5) * 2 * this._aimErr;
-            aimDir.y += (Math.random() - 0.5) * 2 * this._aimErr;
-            aimDir.z += (Math.random() - 0.5) * 2 * this._aimErr;
+          const totalErr = this._aimErr + (this.playerEvasion ?? 0);
+          if (totalErr > 0) {
+            aimDir.x += (Math.random() - 0.5) * 2 * totalErr;
+            aimDir.y += (Math.random() - 0.5) * 2 * totalErr;
+            aimDir.z += (Math.random() - 0.5) * 2 * totalErr;
             aimDir.normalize();
           }
           const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), aimDir);
@@ -601,6 +637,17 @@ export class Enemy {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
+  _nearestAllyGround() {
+    if (!this._allyGroundTargets?.length) return null;
+    let best = null, bestD = Infinity;
+    for (const gt of this._allyGroundTargets) {
+      if (gt.isDead) continue;
+      const d = this.pivot.position.distanceTo(gt.pos);
+      if (d < bestD) { bestD = d; best = gt; }
+    }
+    return best;
+  }
+
   _gnd(x, z)  { return this.getTerrainHeight?.(x, z) ?? 0; }
   _distHome() { return Math.hypot(this.pivot.position.x - this._home.x, this.pivot.position.z - this._home.z); }
   _forward()  {
@@ -619,12 +666,18 @@ export class Enemy {
     this._roll += (0.8 + this._deathTimer * 0.6) * delta;
     this.speed  = Math.max(8, this.speed - 12 * delta);
 
-    const qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), this._yaw);
-    const qP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), this._pitch);
-    const qR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), this._roll);
-    this.pivot.quaternion.copy(qY).multiply(qP).multiply(qR);
-    const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(new THREE.Quaternion().copy(qY).multiply(qP));
-    this.pivot.position.addScaledVector(fwd, this.speed * delta);
-    if (this._deathTimer > 6) { this.scene.remove(this.pivot); this.mesh = null; }
+    _dQY.setFromAxisAngle(_dAxisY, this._yaw);
+    _dQP.setFromAxisAngle(_dAxisX, this._pitch);
+    _dQR.setFromAxisAngle(_dAxisZ, this._roll);
+    this.pivot.quaternion.copy(_dQY).multiply(_dQP).multiply(_dQR);
+    _dFwd.set(0, 0, -1).applyQuaternion(_dQTmp.copy(_dQY).multiply(_dQP));
+    this.pivot.position.addScaledVector(_dFwd, this.speed * delta);
+    if (this._deathTimer > 6) {
+      this.scene.remove(this.pivot);
+      this._meshNodes?.forEach(n => { n.material?.dispose(); });
+      this._meshNodes = [];
+      this._labelTex?.dispose();
+      this.mesh = null;
+    }
   }
 }

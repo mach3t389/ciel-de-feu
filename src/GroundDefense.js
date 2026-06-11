@@ -21,8 +21,10 @@ const MG_FIRE_CD = 0.7;   // cadence lente (rafales espacées)
 const MG_BURST   = 3;     // balles par rafale
 const MG_BURST_GAP = 0.09;
 const MG_MIN_ALT = 25;    // ne tire que sur des cibles assez hautes
-const MG_AIM_ERR = 0.06;  // dispersion de base (× facteur de distance)
+const MG_AIM_ERR = 0.14;  // dispersion de base (× facteur de distance)
 const MG_DMG     = 5;     // dégâts par balle (vs 12 pour les avions)
+
+const ALLY_RESPAWN_CD = 45; // secondes avant réapparition d'une tourelle alliée détruite
 
 export class GroundDefense {
   // Précharge les 3 modèles GLB — appeler dans preload() avant de créer l'instance
@@ -133,6 +135,20 @@ export class GroundDefense {
   // ctx : { playerPos, playerAlive, enemies, enemyFire(pos,quat), alliedFire(pos,quat) }
   update(delta, ctx) {
     if (this._passive) return; // mode pratique : aucun tir
+
+    // Réapparition des tourelles alliées après cooldown
+    for (const u of this.units) {
+      if (!u.isDead || u.team !== 'ally' || !u.respawnCd) continue;
+      u.respawnCd -= delta;
+      if (u.respawnCd <= 0) {
+        u.isDead = false;
+        u.hp = u.maxHp;
+        u.root.visible = true;
+        u.fireCd = Math.random() * MG_FIRE_CD;
+        u.respawnCd = 0;
+      }
+    }
+
     for (const u of this.units) {
       if (u.isDead || u.kind !== 'mg') continue;
 
@@ -201,7 +217,7 @@ export class GroundDefense {
       const dx = point.x - u.pos.x, dy = point.y - (u.pos.y + 3), dz = point.z - u.pos.z;
       if (dx*dx + dy*dy + dz*dz < (radius + u.radius) ** 2) {
         u.hp -= dmg;
-        if (u.hp <= 0) { u.isDead = true; u.root.visible = false; }
+        if (u.hp <= 0) { u.isDead = true; u.root.visible = false; u.respawnCd = ALLY_RESPAWN_CD; }
         return u;
       }
     }
@@ -222,14 +238,23 @@ export class GroundDefense {
     return null;
   }
 
-  // Cibles au sol ennemies vivantes (pour le HUD) — aucune en décor (training)
+  // Cibles au sol ennemies vivantes — inclut le mode training (passif mais destructible)
   getEnemyGroundTargets() {
-    if (this._decorative) return [];
     return this.units.filter(u => !u.isDead && u.team === 'enemy');
   }
 
   allEnemiesDead() {
     return this.units.every(u => u.team !== 'enemy' || u.isDead);
+  }
+
+  respawnEnemies() {
+    for (const u of this.units) {
+      if (u.team !== 'enemy') continue;
+      u.isDead = false;
+      u.hp = u.maxHp;
+      u.root.visible = true;
+      u.fireCd = Math.random() * 3;
+    }
   }
 
   getEnemyCount() {

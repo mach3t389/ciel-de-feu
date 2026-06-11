@@ -22,30 +22,30 @@ while (true) {
   await game.preload(p => loading.setProgress(p));
 
   if (config.networkManager) {
-    loading.setStatus(t('waitingForPlayers'));
-    await new Promise(resolve => {
-      let done = false;
-      const finish = () => { if (!done) { done = true; resolve(); } };
+    config.networkManager.send('player_loaded', {});
+    const hasRemotePlayers = config.remotePlayers?.length > 0;
+    if (hasRemotePlayers) {
+      loading.setStatus(t('waitingForPlayers'));
+      await new Promise(resolve => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
 
-      config.networkManager.once('all_players_loaded', finish);
+        config.networkManager.once('all_players_loaded', finish);
 
-      // Secondary trigger: progress message shows all ready
-      const onProgress = ({ loaded, total }) => {
-        if (loaded >= total) {
+        const onProgress = ({ loaded, total }) => {
+          if (loaded >= total) {
+            config.networkManager.off('player_load_progress', onProgress);
+            finish();
+          }
+        };
+        config.networkManager.on('player_load_progress', onProgress);
+
+        setTimeout(() => {
           config.networkManager.off('player_load_progress', onProgress);
           finish();
-        }
-      };
-      config.networkManager.on('player_load_progress', onProgress);
-
-      // Safety fallback: never block forever
-      setTimeout(() => {
-        config.networkManager.off('player_load_progress', onProgress);
-        finish();
-      }, 12000);
-
-      config.networkManager.send('player_loaded', {});
-    });
+        }, 12000);
+      });
+    }
   }
 
   loading.hide();

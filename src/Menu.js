@@ -1,8 +1,11 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CursorFX } from './CursorFX.js';
 import { AudioManager } from './AudioManager.js';
-import { t, tTips, tModeInfo, getLang, setLang } from './i18n.js';
+import { t, tTips, tModeInfo, tModeBullets, tCtrlKb, tCtrlGp, getLang, setLang, tEquip } from './i18n.js';
+import { ProgressionSystem, xpToNextLevel, calcRewards } from './ProgressionSystem.js';
+import { UPGRADES, CAT_ORDER, CAT_LABELS, BASE_STATS, computeStats, loadModifiers, serviceTimeMult, EQUIPMENT_CATALOG, DEFAULT_LOADOUT, loadoutToUpgradeIds, interleaveSlots, OPTION_COSTS } from './UpgradeTree.js';
+import { IS_MOBILE } from './MobileControls.js';
 
 // ── Scrollbar cockpit — injectée une seule fois ───────────────────────────────
 (() => {
@@ -55,8 +58,9 @@ const TEAM_COLORS = {
     .choice-btn {
       background: transparent;
       border: 2px solid var(--cb-border);
+      border-radius: 4px;
       color: var(--cb-color);
-      font-family: "Courier New", Courier, monospace;
+      font-family: Rajdhani, 'Courier New', monospace;
       font-size: 11px;
       letter-spacing: 2px;
       padding: 6px 10px;
@@ -66,7 +70,8 @@ const TEAM_COLORS = {
       box-shadow: none;
       transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
     }
-    .choice-btn:hover {
+    .choice-btn:hover,
+    .choice-btn:active {
       background: var(--cb-hover);
     }
     /* focus manette/clavier : fond crème léger + bordure cream bien visible */
@@ -124,7 +129,7 @@ const BASE = {
   position: 'fixed', inset: '0',
   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
   background: '#5a8ab0',
-  fontFamily: '"Courier New", Courier, monospace',
+  fontFamily: 'Rajdhani, sans-serif',
   color: M.cream,
   zIndex: '1000',
   overflow: 'hidden',
@@ -147,8 +152,9 @@ function mkBtn(label, color = M.cream) {
   css(b, {
     background   : 'transparent',
     border       : `1px solid ${color}`,
+    borderRadius : '4px',
     color,
-    fontFamily   : '"Courier New", Courier, monospace',
+    fontFamily   : 'Rajdhani, sans-serif',
     fontSize     : '14px',
     letterSpacing: '3px',
     padding      : '13px 24px',
@@ -166,6 +172,10 @@ function mkBtn(label, color = M.cream) {
   b.addEventListener('mouseout',  onInactive);
   b.addEventListener('focus',     onActive);
   b.addEventListener('blur',      onInactive);
+  // Feedback tactile mobile : surbrillance pendant l'appui
+  b.addEventListener('touchstart', onActive,   { passive: true });
+  b.addEventListener('touchend',   onInactive, { passive: true });
+  b.addEventListener('touchcancel',onInactive, { passive: true });
   return b;
 }
 
@@ -184,7 +194,7 @@ function mkPanel(width = '400px') {
     zIndex       : '3', width,
     background   : 'rgba(6,8,4,0.84)',
     border       : '1px solid #3a3020',
-    borderRadius : '3px',
+    borderRadius : '8px',
     padding      : '28px 32px',
     boxShadow    : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
   }});
@@ -192,15 +202,18 @@ function mkPanel(width = '400px') {
 
 // Panel ancré à gauche — pour les écrans multijoueur
 function mkPanelLeft(width = '400px') {
+  // Centré dans l'espace SOUS la topbar (52px) pour éviter tout chevauchement.
+  // Le centre virtuel passe de 50vh à (52px + (100vh-52px)/2) = calc(50% + 26px).
+  // maxHeight réduit d'autant pour rester confortable.
   const d = el('div', { style: {
-    position     : 'absolute', left: '5%', top: '50%',
+    position     : 'absolute', left: '5%', top: 'calc(50% + 26px)',
     transform    : 'translateY(-50%)',
     display      : 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px',
     zIndex       : '3', width,
-    maxHeight    : '92vh', overflowY: 'auto',
+    maxHeight    : 'calc(100vh - 80px)', overflowY: 'auto',
     background   : 'rgba(6,8,4,0.88)',
     border       : '1px solid #3a3020',
-    borderRadius : '3px',
+    borderRadius : '8px',
     padding      : '28px 32px',
     boxShadow    : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
   }});
@@ -232,8 +245,9 @@ function mkInput(placeholder, value = '') {
   const i = el('input', { placeholder, type: 'text', style: {
     background  : M.panelMid,
     border      : `1px solid ${M.border}`,
+    borderRadius: '4px',
     color       : M.cream,
-    fontFamily  : '"Courier New", Courier, monospace',
+    fontFamily  : 'Rajdhani, sans-serif',
     fontSize    : '13px',
     letterSpacing: '2px',
     padding     : '10px 12px',
@@ -341,7 +355,7 @@ function buildLogo() {
     fontSize     : '10px',
     fontWeight   : 'bold',
     letterSpacing: '3px',
-    fontFamily   : '"Courier New", Courier, monospace',
+    fontFamily   : 'Rajdhani, sans-serif',
     marginTop    : '12px',
     opacity      : '0.7',
   }}));
@@ -354,6 +368,9 @@ export class Menu {
     this._root = el('div', { style: BASE });
     this._root.appendChild(buildScanlines());
     document.body.appendChild(this._root);
+
+    // Topbar persistante (profil + bouton langue + paramètres) — survit à _clear
+    this._buildProfileBar();
     this._config = {
       mode        : 'solo',
       map         : 4,
@@ -361,12 +378,23 @@ export class Menu {
       pilotName   : localStorage.getItem('pilotName') || '',
       maxPlayers  : 4,
       difficulty  : 'standard',
-      totalEnemies: 30,
+      totalEnemies: 40,
     };
     this._preview = null;
     this._cursor  = new CursorFX();
     this._cursor.start();
+    // Progression avant le preview 3D : l'avion d'accueil charge directement la
+    // couleur de l'avion actif (#1 par défaut), sans flash de la couleur par défaut.
+    this._progression = new ProgressionSystem();
+    this._config.team = this._progression.getPlane(this._progression.activePlane).color;
     this._init3DPreview();
+
+    // DEV : taper cheat() dans la console pour passer niveau 50 + crédits illimités
+    window.cheat = () => {
+      const r = this._progression.devUnlockAll();
+      console.log(`✓ Niveau ${r.level} — ${r.credits.toLocaleString()} crédits. Reviens dans Mon Avion pour rafraîchir.`);
+      return r;
+    };
   }
 
   // Point d'entrée → retourne une Promise résolue avec la config finale
@@ -401,6 +429,7 @@ export class Menu {
     this._cursor.stop();
     this._audio?.stopMenuMusic();
     this._root.remove();
+    if (this._profileBar) this._profileBar.style.display = 'none';
   }
 
   // ── Prévisualisation 3D de l'avion ─────────────────────────────────────────
@@ -455,12 +484,19 @@ export class Menu {
     // État souris + zoom caméra
     this._camOrbit        = { x: 0, y: 0 };
     this._camTarget       = { x: 0, y: 0 };
-    this._camRadius       = 7.2;   // rayon courant (lerpé)
+    this._camRadius       = 7.2;   // rayon courant (spring)
     this._camRadiusTarget = 7.2;   // rayon cible
     this._camLookX        = -1.8;  // décalage lookAt X courant
     this._camLookXTarget  = -1.8;  // décalage lookAt X cible
     this._camLookY        = -0.5;  // décalage lookAt Y courant
     this._camLookYTarget  = -0.5;  // décalage lookAt Y cible
+    this._camHeight       = 0;     // offset vertical caméra courant (spring)
+    this._camHeightTarget = 0;     // offset vertical cible (mode hangar = 2.4)
+    // Vitesses pour le système spring/damper (donne easeInOut naturel)
+    this._camVelRadius    = 0;
+    this._camVelLookX     = 0;
+    this._camVelLookY     = 0;
+    this._camVelHeight    = 0;
 
     this._mouseMoveHandler = (e) => {
       this._camTarget.x = (e.clientX / window.innerWidth  - 0.5) * 2;
@@ -472,6 +508,7 @@ export class Menu {
     let propBone = null, aileronL = null, aileronR = null, modelRoot = null;
 
     const loadPreviewModel = (path) => {
+      this._currentPreviewPath = path;
       if (modelRoot) { scene.remove(modelRoot); modelRoot = null; propBone = null; aileronL = null; aileronR = null; }
       new GLTFLoader().load(path, (gltf) => {
         modelRoot = gltf.scene;
@@ -499,6 +536,8 @@ export class Menu {
           }
         });
         scene.add(modelRoot);
+        this._previewModelRoot = modelRoot;
+        if (this._onPreviewModelLoaded) this._onPreviewModelLoaded(modelRoot);
         canvas.style.opacity = '1';
       });
     };
@@ -514,27 +553,53 @@ export class Menu {
       animId = requestAnimationFrame(loop);
       t += 0.016;
 
-      const lerpF = 0.025;
-      this._camOrbit.x  += (this._camTarget.x      - this._camOrbit.x)  * lerpF;
-      this._camOrbit.y  += (this._camTarget.y      - this._camOrbit.y)  * lerpF;
-      this._camRadius   += (this._camRadiusTarget  - this._camRadius)   * lerpF;
-      this._camLookX    += (this._camLookXTarget   - this._camLookX)    * lerpF;
-      this._camLookY    += (this._camLookYTarget   - this._camLookY)    * lerpF;
+      // Parallaxe souris : lerp rapide et réactif
+      this._camOrbit.x  += (this._camTarget.x - this._camOrbit.x) * 0.025;
+      this._camOrbit.y  += (this._camTarget.y - this._camOrbit.y) * 0.025;
+
+      // Springs de navigation — radius/height/lookX/lookY transitionnent en douceur
+      const SK = 0.010, SD = 0.88;
+      this._camVelRadius += (this._camRadiusTarget - this._camRadius) * SK; this._camVelRadius *= SD;
+      this._camVelLookX  += (this._camLookXTarget  - this._camLookX)  * SK; this._camVelLookX  *= SD;
+      this._camVelLookY  += (this._camLookYTarget  - this._camLookY)  * SK; this._camVelLookY  *= SD;
+      this._camVelHeight += (this._camHeightTarget  - this._camHeight) * SK; this._camVelHeight *= SD;
+      this._camRadius += this._camVelRadius;
+      this._camLookX  += this._camVelLookX;
+      this._camLookY  += this._camVelLookY;
+      this._camHeight += this._camVelHeight;
 
       const orbitH = this._camOrbit.x * (Math.PI / 10);
       const orbitV = this._camOrbit.y * (Math.PI / 22);
       const r      = this._camRadius;
       const BASE_Y = 1.8 + (7.2 - r) * 0.08;
-      camera.position.set(Math.sin(orbitH) * r, BASE_Y - orbitV * 2.2, Math.cos(orbitH) * r);
-      camera.lookAt(this._camLookX, this._camLookY, 0);
+
+      camera.position.set(Math.sin(orbitH) * r, BASE_Y - orbitV * 2.2 + this._camHeight, Math.cos(orbitH) * r);
+
+      // Deux modes de visée selon la page :
+      //  • _exactAim (Mon Avion) → visée DIRECTE exacte chaque frame : l'avion reste
+      //    cloué pile au centre de l'ancre DOM, pivot central parfait, mouvement calme.
+      //  • sinon (solo, multi, lobby, settings, stats…) → la cible est injectée dans
+      //    le spring lent : mouvement smooth uniforme, même easing pour toutes ces pages.
+      if (this._hangarOrbit && this._planeAnchor) {
+        if (this._exactAim) {
+          this._aimAtAnchor(camera);
+        } else {
+          this._updateAnchorTarget(camera);
+          camera.lookAt(this._camLookX, this._camLookY, 0);
+        }
+      } else {
+        camera.lookAt(this._camLookX, this._camLookY, 0);
+      }
 
       if (modelRoot) {
-        modelRoot.rotation.z = Math.sin(t * 0.31) * 0.018;
-        modelRoot.rotation.x = Math.sin(t * 0.19) * 0.012 + Math.sin(t * 0.47) * 0.008;
+        // Flottement lent et ample — deux sinusoïdes déphasées pour éviter la répétition
+        modelRoot.rotation.z = Math.sin(t * 0.18) * 0.022 + Math.sin(t * 0.11) * 0.008;
+        modelRoot.rotation.x = Math.sin(t * 0.13) * 0.014 + Math.sin(t * 0.29) * 0.006;
+        modelRoot.position.y += (Math.sin(t * 0.22) * 0.04 - modelRoot.position.y) * 0.02;
       }
       if (propBone) propBone.rotation.y += 0.42;
-      if (aileronL) aileronL.rotation.z =  Math.sin(t * 0.27) * 0.05;
-      if (aileronR) aileronR.rotation.z = -Math.sin(t * 0.27) * 0.05;
+      if (aileronL) aileronL.rotation.z =  Math.sin(t * 0.19) * 0.055;
+      if (aileronR) aileronR.rotation.z = -Math.sin(t * 0.19) * 0.055;
 
       this._updateMenuClouds(t, this._camOrbit.x, this._camOrbit.y);
 
@@ -617,19 +682,95 @@ export class Menu {
     });
   }
 
-  _showPreview(zoom = 'normal') {
+  _showPreview(zoom = 'normal', anchor = true) {
     if (this._previewCanvas) this._previewCanvas.style.opacity = '1';
-    this._camLookYTarget = -0.5; // hauteur par défaut (lobby la surcharge à -2.0)
-    if (zoom === 'close') {
-      this._camRadiusTarget = 4.2;
-      this._camLookXTarget  = -0.4; // légèrement à gauche pour l'accueil
-    } else if (zoom === 'settings') {
-      this._camRadiusTarget = 4.2;  // même taille que l'accueil
-      this._camLookXTarget  = -1.6; // décalé vers la droite (panneau large à gauche)
+    // Réinitialise les vélocités spring pour éviter l'overshoot en cas de grande différence
+    this._camVelRadius = 0;
+    this._camVelLookX  = 0;
+    this._camVelLookY  = 0;
+    this._camVelHeight = 0;
+    this._camLookYTarget  = -0.5;
+    this._camHeightTarget = 0;
+    if (zoom === 'hangar') {
+      this._camRadiusTarget = 9.5;
+      this._camHeightTarget = 2.2;   // vue plus haute, similaire à l'accueil
+      this._hangarOrbit     = true;
+      this._exactAim        = true;  // Mon Avion : visée directe exacte (_aimAtAnchor)
+      // L'ancre DOM est posée par _showMyPlane() elle-même
     } else {
-      this._camRadiusTarget = 7.2;
-      this._camLookXTarget  = -3.0; // légèrement à droite pour les sous-menus
+      this._exactAim = false;        // autres pages : visée smooth via spring
+      let anchorLeft = '30%';
+      if (zoom === 'settings') { this._camRadiusTarget = 6.0; anchorLeft = '42%'; }
+      else if (zoom === 'close') { this._camRadiusTarget = 4.2; anchorLeft = '22%'; }
+      else { this._camRadiusTarget = 6.5; anchorLeft = '46%'; } // normal
+      if (anchor) {
+        const anchorEl = el('div', { style:{
+          position:'absolute', left: anchorLeft, right:'0', top:'5%', bottom:'5%',
+          pointerEvents:'none',
+        }});
+        this._root.appendChild(anchorEl);
+        this._planeAnchor = anchorEl;
+        this._hangarOrbit = true;
+      } else {
+        // Page d'accueil : comportement classique lookAt fixe
+        if (zoom === 'close')    this._camLookXTarget = -0.4;
+        else if (zoom === 'settings') this._camLookXTarget = -1.6;
+        else                          this._camLookXTarget = -3.0;
+      }
     }
+  }
+
+  // Résout le point de visée (look) qui projette l'avion (origine monde) au centre
+  // EXACT de l'ancre DOM, quelle que soit la résolution (le NDC cible vient du DOM
+  // réel). Raffinement itératif type Newton : à chaque passe on projette l'avion avec
+  // l'orientation courante, on mesure l'erreur NDC, puis on décale le point visé dans
+  // le plan image (right/up) pour l'annuler. Converge en 4 passes même caméra plongeante.
+  // Remplit et retourne this._tmpLook (vecteur 3D complet, z inclus).
+  _solveAnchorLook(camera) {
+    const planeC = this._tmpPlaneC || (this._tmpPlaneC = new THREE.Vector3());
+    planeC.set(0, 0.1, 0);
+    const look  = this._tmpLook  || (this._tmpLook  = new THREE.Vector3());
+    look.copy(planeC); // départ : vise droit sur l'avion (centre écran)
+
+    const a = this._planeAnchor.getBoundingClientRect();
+    if (a.width === 0 || a.height === 0) return look;
+    const nx =  ((a.left + a.width  / 2) / window.innerWidth)  * 2 - 1;
+    const ny = -(((a.top + a.height / 2) / window.innerHeight) * 2 - 1);
+
+    const up0   = this._tmpUp0   || (this._tmpUp0   = new THREE.Vector3(0, 1, 0));
+    const fwd   = this._tmpFwd   || (this._tmpFwd   = new THREE.Vector3());
+    const right = this._tmpRight || (this._tmpRight = new THREE.Vector3());
+    const up    = this._tmpUp    || (this._tmpUp    = new THREE.Vector3());
+    const proj  = this._tmpProj  || (this._tmpProj  = new THREE.Vector3());
+
+    const tanHalf = Math.tan((camera.fov * Math.PI / 180) / 2);
+    for (let i = 0; i < 4; i++) {
+      camera.lookAt(look);
+      camera.updateMatrixWorld();
+      camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      proj.copy(planeC).project(camera);
+      const ex = nx - proj.x, ey = ny - proj.y;
+      if (Math.abs(ex) < 0.0008 && Math.abs(ey) < 0.0008) break;
+      fwd.copy(look).sub(camera.position);
+      const dist = fwd.length(); fwd.normalize();
+      right.crossVectors(fwd, up0).normalize();
+      up.crossVectors(right, fwd).normalize();
+      look.addScaledVector(right, -ex * dist * tanHalf * camera.aspect);
+      look.addScaledVector(up,    -ey * dist * tanHalf);
+    }
+    return look;
+  }
+
+  // Mon Avion : visée DIRECTE exacte chaque frame → pivot central parfait et calme.
+  _aimAtAnchor(camera) {
+    camera.lookAt(this._solveAnchorLook(camera));
+  }
+
+  // Autres pages : injecte la cible dans le spring lent → mouvement smooth uniforme.
+  _updateAnchorTarget(camera) {
+    const look = this._solveAnchorLook(camera);
+    this._camLookXTarget = look.x;
+    this._camLookYTarget = look.y;
   }
 
   _hidePreview() {
@@ -645,32 +786,15 @@ export class Menu {
   // ── Écran principal ─────────────────────────────────────────────────────────
   _showMain() {
     this._clear();
-    this._showPreview('close');
+    this._setCurrentScreen(() => this._showMain());
+    this._showPreview('close', false);
 
-    // ── Bouton FR / EN — haut droite ────────────────────────────────────────
-    const langBtn = el('button', { style: {
-      position     : 'absolute', top: '18px', right: '20px',
-      background   : 'rgba(6,8,4,0.70)',
-      border       : `1px solid ${M.cream}`,
-      color        : M.cream,
-      fontFamily   : '"Courier New", Courier, monospace',
-      fontSize     : '13px',
-      letterSpacing: '3px',
-      padding      : '10px 20px',
-      cursor       : 'pointer',
-      transition   : 'background 0.15s, color 0.15s',
-      zIndex       : '5',
-    }});
-    const curLang = getLang();
-    langBtn.textContent = curLang === 'fr' ? 'EN' : 'FR';
-    langBtn.title = curLang === 'fr' ? 'Switch to English' : 'Passer en français';
-    langBtn.addEventListener('click', () => {
-      setLang(curLang === 'fr' ? 'en' : 'fr');
-      this._showMain();
-    });
-    langBtn.addEventListener('mouseover', () => { langBtn.style.background = M.cream; langBtn.style.color = M.bg; });
-    langBtn.addEventListener('mouseout',  () => { langBtn.style.background = 'rgba(6,8,4,0.70)'; langBtn.style.color = M.cream; });
-    this._root.appendChild(langBtn);
+    // L'avion d'accueil = avion actif (avion #1 par défaut, ou celui sélectionné
+    // dans un lobby). Couleur ET loadout cohérents avec cet avion.
+    const homeIdx   = this._progression.activePlane;
+    const homePlane = this._progression.getPlane(homeIdx);
+    this._config.team = homePlane.color;
+    this._syncPreviewPlane(homeIdx);
 
     // Panel cockpit — encadré dark style jeu, ancré à gauche
     const panel = el('div', { style: {
@@ -686,7 +810,7 @@ export class Menu {
       width         : '340px',
       background    : 'rgba(6,8,4,0.84)',
       border        : '1px solid #3a3020',
-      borderRadius  : '3px',
+      borderRadius  : '8px',
       padding       : '28px 32px',
       boxShadow     : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
     }});
@@ -695,13 +819,15 @@ export class Menu {
 
     const btnSolo     = mkBtn(t('solo'),     M.cream);
     const btnMulti    = mkBtn(t('multi'),    M.cream);
+    const btnStats    = mkBtn(t('stats'), M.dimCream);
     const btnSettings = mkBtn(t('settings'), M.dimCream);
 
     btnSolo.addEventListener('click',     () => this._showSolo());
     btnMulti.addEventListener('click',    () => this._showMultiplayer());
+    btnStats.addEventListener('click',    () => this._showStats());
     btnSettings.addEventListener('click', () => this._showSettings());
 
-    [btnSolo, btnMulti, mkDivider(), btnSettings].forEach(b => panel.appendChild(b));
+    [btnSolo, btnMulti, mkDivider(), btnStats, mkDivider(), btnSettings].forEach(b => panel.appendChild(b));
     this._root.appendChild(panel);
 
     // Crédit bas-droite
@@ -767,7 +893,7 @@ export class Menu {
       width       : '440px',
       background  : 'rgba(212,200,138,0.18)',
       border      : '1px solid rgba(212,200,138,0.30)',
-      borderRadius: '3px',
+      borderRadius: '6px',
       padding     : '14px 24px',
       zIndex      : '3',
       backdropFilter: 'blur(2px)',
@@ -810,7 +936,9 @@ export class Menu {
   // ── Sous-menu Solo ──────────────────────────────────────────────────────────
   _showSolo() {
     this._clear();
+    this._setCurrentScreen(() => this._showSolo());
     this._showPreview('close');
+    this._syncPreviewPlane();
     const wrap = mkPanelLeft('340px');
     wrap.appendChild(mkSectionTitle(t('solo')));
     wrap.appendChild(mkDivider());
@@ -845,6 +973,7 @@ export class Menu {
   // ── Configuration de partie ─────────────────────────────────────────────────
   _showConfig() {
     this._clear();
+    this._setCurrentScreen(() => this._showConfig());
     this._showPreview();
 
     const modeLabels = { freeflight: t('training'), solo: t('mission'), coop: t('mMission'), multiplayer: t('multi') + ' PvP', survival: t('survival') };
@@ -857,10 +986,10 @@ export class Menu {
       position     : 'absolute', left: '5%', top: '50%',
       transform    : 'translateY(-50%)',
       display      : 'flex', flexDirection: 'column', gap: '10px',
-      zIndex       : '3', width: '700px',
+      zIndex       : '3', width: '760px',
       background   : 'rgba(6,8,4,0.84)',
       border       : '1px solid #3a3020',
-      borderRadius : '3px',
+      borderRadius : '8px',
       padding      : '16px 28px',
       boxShadow    : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
     }});
@@ -874,25 +1003,32 @@ export class Menu {
     // ── Colonne gauche ───────────────────────────────────────────────────────
     const colL = el('div', { style: { flex: '1', display: 'flex', flexDirection: 'column', gap: '8px' }});
 
-    colL.appendChild(mkLabel(t('pilotName')));
-    const nameInput = mkInput(t('pilotPlaceh'), this._config.pilotName);
-    nameInput.addEventListener('input', () => {
-      this._config.pilotName = nameInput.value.toUpperCase().slice(0, 12);
-    });
-    colL.appendChild(nameInput);
-    colL.appendChild(mkDivider());
+    const prog = this._progression;
+    const activeProg = prog.activePlane;
+    this._config.team = prog.getPlane(activeProg).color;
+    this._syncPreviewPlane(activeProg);
 
-    colL.appendChild(mkLabel(t('plane')));
-    colL.appendChild(mkChoiceGroup(
-      Object.entries(TEAM_COLORS).map(([k, v]) => ({ value: k, label: t('color_' + k), color: v.hex, borderColor: v.borderHex })),
-      this._config.team,
-      v => {
-        this._config.team = v;
-        if (this._loadPreviewModel && TEAM_COLORS[v]?.path) {
-          this._loadPreviewModel(TEAM_COLORS[v].path);
-        }
-      }
-    ));
+    // ── Description du mode ─────────────────────────────────────────────────
+    const mInfo = tModeBullets(this._config.mode);
+    if (mInfo) {
+      colL.appendChild(mkDivider());
+      colL.appendChild(mkLabel(t('descriptif')));
+      mInfo.bullets.forEach(b => {
+        const row = el('div', { style:{
+          fontSize:'10px', letterSpacing:'1px', color:M.cream,
+          lineHeight:'1.7', paddingLeft:'2px',
+        }});
+        row.textContent = b;
+        colL.appendChild(row);
+      });
+      colL.appendChild(mkDivider());
+      const noteEl = el('div', { style:{
+        fontSize:'9px', letterSpacing:'1px', color:M.dimCream,
+        fontStyle:'italic', lineHeight:'1.6', paddingLeft:'2px',
+      }});
+      noteEl.textContent = mInfo.note;
+      colL.appendChild(noteEl);
+    }
 
     if (hasPlayers) {
       colL.appendChild(mkDivider());
@@ -911,14 +1047,16 @@ export class Menu {
         easy    : t('easyDesc'),
         standard: t('standardDesc'),
         hard    : t('hardDesc'),
+        expert  : t('expertDesc'),
       };
       const diffDesc = el('div', { style: { fontSize: '9px', letterSpacing: '2px', color: M.dimCream, marginTop: '2px' }});
-      diffDesc.textContent = DIFF_LABELS[this._config.difficulty];
+      diffDesc.textContent = DIFF_LABELS[this._config.difficulty] ?? DIFF_LABELS.standard;
       colL.appendChild(mkChoiceGroup(
         [
           { value: 'easy',     label: t('easy'),     color: '#44aa44' },
           { value: 'standard', label: t('standard'), color: M.cream  },
           { value: 'hard',     label: t('hard'),     color: '#cc4422' },
+          { value: 'expert',   label: 'EXPERT',      color: '#cc22aa' },
         ],
         this._config.difficulty,
         v => { this._config.difficulty = v; diffDesc.textContent = DIFF_LABELS[v]; }
@@ -930,10 +1068,10 @@ export class Menu {
       colL.appendChild(mkLabel(t('enemyCount')));
       colL.appendChild(mkChoiceGroup(
         [
-          { value: 20, label: '20' },
           { value: 30, label: '30' },
           { value: 40, label: '40' },
           { value: 60, label: '60' },
+          { value: 100, label: '100' },
         ],
         this._config.totalEnemies,
         v => { this._config.totalEnemies = v; }
@@ -976,17 +1114,17 @@ export class Menu {
     wrap.appendChild(body);
 
     // ── Boutons bas ──────────────────────────────────────────────────────────
+    // (Mon Avion accessible depuis le bloc profil de la topbar)
     wrap.appendChild(mkDivider());
+
     const btnRow = el('div', { style: { display: 'flex', gap: '12px' }});
     const btnBack  = mkBtn(t('back'),    M.dimCream);
     const btnStart = mkBtn(t('takeoff'), M.accent);
     btnStart.style.fontWeight = 'bold';
     btnBack.addEventListener('click',  () => this._showSolo());
     btnStart.addEventListener('click', () => {
-      if (!this._config.pilotName.trim()) {
-        nameInput.style.borderColor = M.red;
-        nameInput.placeholder = t('pilotPlaceh');
-        nameInput.focus();
+      if (!this._config.pilotName?.trim()) {
+        this._showMyPlane();
         return;
       }
       localStorage.setItem('pilotName', this._config.pilotName);
@@ -1003,7 +1141,9 @@ export class Menu {
   // ── Écran multijoueur ───────────────────────────────────────────────────────
   _showMultiplayer() {
     this._clear();
+    this._setCurrentScreen(() => this._showMultiplayer());
     this._showPreview('close');
+    this._syncPreviewPlane();
     const wrap = mkPanelLeft('360px');
     wrap.appendChild(mkSectionTitle(t('multi')));
     wrap.appendChild(mkDivider());
@@ -1023,7 +1163,9 @@ export class Menu {
   // ── Héberger ───────────────────────────────────────────────────────────────
   _showHost() {
     this._clear();
+    this._setCurrentScreen(() => this._showHost());
     this._showPreview('close');
+    this._syncPreviewPlane();
     const wrap = mkPanelLeft('380px');
     wrap.appendChild(mkSectionTitle(t('host')));
     wrap.appendChild(mkDivider());
@@ -1034,11 +1176,11 @@ export class Menu {
     const codeRow = el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }});
     const codeDisplay = el('div', { text: code, style: {
       flex: '1', fontSize: '30px', letterSpacing: '12px', color: M.cream,
-      border: `1px solid ${M.border}`, padding: '10px 12px',
+      border: `1px solid ${M.border}`, borderRadius: '4px', padding: '10px 12px',
       background: M.panelMid, textAlign: 'center',
     }});
     const btnCopy = el('button', { text: '⎘', style: {
-      background: M.panelMid, border: `1px solid ${M.border}`, color: M.cream,
+      background: M.panelMid, border: `1px solid ${M.border}`, borderRadius: '4px', color: M.cream,
       fontSize: '18px', padding: '10px 14px', cursor: 'pointer', flexShrink: '0',
     }});
     btnCopy.title = t('copyCode');
@@ -1053,22 +1195,11 @@ export class Menu {
     wrap.appendChild(codeRow);
     wrap.appendChild(mkDivider());
 
-    wrap.appendChild(mkLabel(t('pilotName')));
-    const nameInput = mkInput(t('pilotPlaceh'), this._config.pilotName);
-    nameInput.addEventListener('input', () => {
-      this._config.pilotName = nameInput.value.toUpperCase().slice(0, 12);
-      nameErrHost.textContent = '';
-    });
-    wrap.appendChild(nameInput);
-    const nameErrHost = el('div', { text: '', style: { color: M.red, fontSize: '10px', letterSpacing: '2px', minHeight: '14px' }});
-    wrap.appendChild(nameErrHost);
-    wrap.appendChild(mkDivider());
-
     const btnLobby = mkBtn(t('openLobby'), M.accent);
     const btnBack  = mkBtn(t('back'),      M.dimCream);
 
     btnLobby.addEventListener('click', () => {
-      if (!this._config.pilotName.trim()) { nameErrHost.textContent = t('nameRequired'); return; }
+      if (!this._config.pilotName?.trim()) { this._showMyPlane(); return; }
       localStorage.setItem('pilotName', this._config.pilotName);
       this._config.isHost   = true;
       this._config.roomCode = code;
@@ -1085,7 +1216,9 @@ export class Menu {
   // ── Rejoindre ──────────────────────────────────────────────────────────────
   _showJoin() {
     this._clear();
+    this._setCurrentScreen(() => this._showJoin());
     this._showPreview('close');
+    this._syncPreviewPlane();
     const wrap = mkPanelLeft('360px');
     wrap.appendChild(mkSectionTitle(t('join')));
     wrap.appendChild(mkDivider());
@@ -1100,17 +1233,6 @@ export class Menu {
     wrap.appendChild(codeInput);
     wrap.appendChild(mkDivider());
 
-    wrap.appendChild(mkLabel(t('pilotName')));
-    const nameInput = mkInput(t('pilotPlaceh'), this._config.pilotName);
-    nameInput.addEventListener('input', () => {
-      this._config.pilotName = nameInput.value.toUpperCase().slice(0, 12);
-      nameErrJoin.textContent = '';
-    });
-    wrap.appendChild(nameInput);
-    const nameErrJoin = el('div', { text: '', style: { color: M.red, fontSize: '10px', letterSpacing: '2px', minHeight: '14px' }});
-    wrap.appendChild(nameErrJoin);
-    wrap.appendChild(mkDivider());
-
     // Couleur d'avion choisie dans le lobby (pas ici) — évite la redondance
 
     const errMsg = el('div', { text: '', style: { color: M.red, fontSize: '10px', letterSpacing: '2px', minHeight: '14px' }});
@@ -1121,7 +1243,7 @@ export class Menu {
 
     btnJoin.addEventListener('click', () => {
       const code = codeInput.value.trim();
-      if (!this._config.pilotName.trim()) { nameErrJoin.textContent = t('nameRequired'); return; }
+      if (!this._config.pilotName?.trim()) { this._showMyPlane(); return; }
       if (code.length !== 4) { errMsg.textContent = t('invalidCode'); return; }
       localStorage.setItem('pilotName', this._config.pilotName);
       this._config.isHost   = false;
@@ -1138,8 +1260,12 @@ export class Menu {
   // ── Lobby deux-colonnes ────────────────────────────────────────────────────
   _showLobby() {
     this._clear();
+    this._setCurrentScreen(() => this._showLobby());
     this._showPreview();
-    this._camLookXTarget = -4.4; // avion légèrement décalé à droite dans le lobby
+    this._camRadiusTarget = 10.0;
+    this._camHeightTarget = 2.4;
+    this._hangarOrbit     = true;
+    this._syncPreviewPlane();
 
     const isHost = this._config.isHost;
     const code   = this._config.roomCode || '????';
@@ -1177,53 +1303,34 @@ export class Menu {
     wrap.appendChild(el('div', { style: { height: '1px', background: M.border, marginBottom: '16px' }}));
 
     // ── Corps deux colonnes — flex: 1 pour que les colonnes s'étendent jusqu'en bas ──
-    const body = el('div', { style: { display: 'flex', gap: '24px', alignItems: 'stretch', flex: '1', minHeight: '0' }});
+    const body = el('div', { style: { display: 'flex', gap: '24px', alignItems: 'stretch', flex: '1', minHeight: '0', overflow: 'hidden' }});
 
     // Helpers
     const lbl = (txt) => el('div', { text: txt, style: {
-      fontSize: '9px', letterSpacing: '3px', color: M.dimCream, marginTop: '12px', marginBottom: '5px',
+      fontSize: '9px', letterSpacing: '3px', color: M.dimCream, marginTop: '8px', marginBottom: '4px',
     }});
-    const divider = () => el('div', { style: { height: '1px', background: M.border, margin: '10px 0' }});
+    const divider = () => el('div', { style: { height: '1px', background: M.border, margin: '7px 0' }});
 
     // ── Colonne gauche : avion + config hôte ──
-    const leftCol = el('div', { style: { flex: '1', display: 'flex', flexDirection: 'column' }});
-
-    leftCol.appendChild(lbl(t('plane')));
-    leftCol.appendChild(mkChoiceGroup(
-      Object.entries(TEAM_COLORS).map(([k, v]) => ({ value: k, label: t('color_' + k), color: v.hex, borderColor: v.borderHex })),
-      this._config.team,
-      v => {
-        this._config.team = v;
-        self.team = v;
-        renderPlayers();
-        if (this._loadPreviewModel && TEAM_COLORS[v]?.path) this._loadPreviewModel(TEAM_COLORS[v].path);
-        if (nm) nm.send('player_plane', { plane: v });
-      }
-    ));
-    leftCol.appendChild(divider());
+    const leftCol = el('div', { style: { flex: '1', display: 'flex', flexDirection: 'column', overflow: 'hidden' }});
 
     leftCol.appendChild(lbl(t('gameMode')));
 
-    // Bloc de description — hauteur fixe : 6 lignes × 9px × 1.65 + titre + padding
+    // Bloc de description — même style que colonne gauche de _showConfig
     const modeDesc = el('div', { style: {
-      marginTop: '8px', marginBottom: '4px',
-      padding: '8px 10px',
-      background: 'rgba(212,200,138,0.06)',
-      border: `1px solid rgba(212,200,138,0.15)`,
-      borderRadius: '2px',
-      fontSize: '9px',
-      lineHeight: '1.65',
-      color: M.dimCream,
-      letterSpacing: '0.5px',
-      height: '120px',        // fixe : ne change jamais de hauteur
-      overflow: 'hidden',
-      boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', gap: '4px',
     }});
     const renderModeDesc = (mode) => {
       const info = tModeInfo(mode);
-      modeDesc.innerHTML =
-        `<div style="color:${M.accent};font-size:8px;letter-spacing:2px;margin-bottom:4px;">${info.title}</div>` +
-        info.lines.map(l => `<div>· ${l}</div>`).join('');
+      modeDesc.innerHTML = '';
+      info.lines.forEach(l => {
+        const row = el('div', { style: {
+          fontSize: '10px', letterSpacing: '1px', color: M.cream,
+          lineHeight: '1.7', paddingLeft: '2px',
+        }});
+        row.textContent = '· ' + l;
+        modeDesc.appendChild(row);
+      });
     };
     renderModeDesc(this._config.mode ?? 'coop');
 
@@ -1244,6 +1351,9 @@ export class Menu {
         enemyCountSection.style.display = (v === 'coop') ? '' : 'none';
         timeLimitSection.style.display  = isCompetitive(v) ? '' : 'none';
         tdmAiSection.style.display      = v === 'tdm'  ? '' : 'none';
+        ffaBotSection.style.display     = v === 'ffa'  ? '' : 'none';
+        ffaBotDiffSection.style.display = (v === 'ffa' && (this._config.ffaBotCount ?? 0) > 0) ? '' : 'none';
+        ffSection.style.display         = ffVisible(v) ? '' : 'none';
         refreshLobbyStats();
         renderPlayers();
         if (nm) nm.send('config_update', { mode: v });
@@ -1251,10 +1361,11 @@ export class Menu {
     );
     if (!isHost) { modeGroup.style.pointerEvents = 'none'; modeGroup.style.opacity = '0.45'; }
     leftCol.appendChild(modeGroup);
+    leftCol.appendChild(el('div', { style: { height: '1px', background: M.border, margin: '10px 0 8px' }}));
+    leftCol.appendChild(lbl(t('descriptif')));
     leftCol.appendChild(modeDesc);
 
-    // Conteneur à hauteur fixe — évite le saut de layout quand on change de mode
-    const optionsWrap = el('div', { style: { minHeight: '64px', position: 'relative' } });
+    const optionsWrap = el('div', { style: { position: 'relative' } });
     leftCol.appendChild(optionsWrap);
 
     // Sélecteur de difficulté IA — visible uniquement en mode MISSION/SURVIE (host only)
@@ -1265,6 +1376,7 @@ export class Menu {
         { value: 'easy',     label: t('easy')     },
         { value: 'standard', label: t('standard') },
         { value: 'hard',     label: t('hard')     },
+        { value: 'expert',   label: 'EXPERT', color: '#cc22aa' },
       ],
       this._config.difficulty ?? 'standard',
       v => {
@@ -1280,8 +1392,8 @@ export class Menu {
     const enemyCountSection = el('div', { style: { display: this._config.mode === 'coop' ? '' : 'none' }});
     enemyCountSection.appendChild(lbl(t('enemyCount')));
     const enemyCountChoices = mkChoiceGroup(
-      [{ value: 20, label: '20' }, { value: 30, label: '30' }, { value: 40, label: '40' }, { value: 60, label: '60' }],
-      this._config.totalEnemies ?? 30,
+      [{ value: 40, label: '40' }, { value: 60, label: '60' }, { value: 80, label: '80' }, { value: 120, label: '120' }],
+      this._config.totalEnemies ?? 60,
       v => { this._config.totalEnemies = v; if (nm) nm.send('config_update', { totalEnemies: v }); }
     );
     if (!isHost) { enemyCountChoices.style.pointerEvents = 'none'; enemyCountChoices.style.opacity = '0.45'; }
@@ -1319,16 +1431,52 @@ export class Menu {
     tdmAiSection.appendChild(tdmAiChoices);
     optionsWrap.appendChild(tdmAiSection);
 
-    // Tir allié — dans colonne gauche, juste après options
-    leftCol.appendChild(divider());
-    leftCol.appendChild(lbl(t('friendlyFire')));
+    // Bots IA — Versus (ffa) uniquement, hôte seulement
+    let ffaBotDiffSection; // déclaré avant pour forward ref dans le callback
+    const ffaBotSection = el('div', { style: { display: this._config.mode === 'ffa' ? '' : 'none' }});
+    ffaBotSection.appendChild(lbl(t('ffaBotCount')));
+    const ffaBotChoices = mkChoiceGroup(
+      [{ value: 0, label: t('ffaBotNone') }, { value: 2, label: '2' }, { value: 4, label: '4' }, { value: 6, label: '6' }, { value: 8, label: '8' }],
+      this._config.ffaBotCount ?? 0,
+      v => {
+        this._config.ffaBotCount = v;
+        if (ffaBotDiffSection) ffaBotDiffSection.style.display = v > 0 ? '' : 'none';
+        if (nm) nm.send('config_update', { ffaBotCount: v });
+      }
+    );
+    if (!isHost) { ffaBotChoices.style.pointerEvents = 'none'; ffaBotChoices.style.opacity = '0.45'; }
+    ffaBotSection.appendChild(ffaBotChoices);
+    optionsWrap.appendChild(ffaBotSection);
+
+    ffaBotDiffSection = el('div', { style: { display: (this._config.mode === 'ffa' && (this._config.ffaBotCount ?? 0) > 0) ? '' : 'none' }});
+    ffaBotDiffSection.appendChild(lbl(t('ffaBotDiff')));
+    const ffaBotDiffChoices = mkChoiceGroup(
+      [
+        { value: 'easy',     label: t('easy')     },
+        { value: 'standard', label: t('standard') },
+        { value: 'hard',     label: t('hard')     },
+      ],
+      this._config.ffaBotDiff ?? 'standard',
+      v => { this._config.ffaBotDiff = v; if (nm) nm.send('config_update', { ffaBotDiff: v }); }
+    );
+    if (!isHost) { ffaBotDiffChoices.style.pointerEvents = 'none'; ffaBotDiffChoices.style.opacity = '0.45'; }
+    ffaBotDiffSection.appendChild(ffaBotDiffChoices);
+    optionsWrap.appendChild(ffaBotDiffSection);
+
+    // Tir allié — masqué en FFA (pas d'alliés)
+    const ffVisible = (v) => v !== 'ffa' && v !== 'freeflight';
+    const ffSection = el('div', { style: { display: ffVisible(this._config.mode) ? '' : 'none' }});
+    ffSection.appendChild(el('div', { style: { height: '1px', background: M.border, margin: '10px 0' }}));
+    ffSection.appendChild(lbl(t('friendlyFire')));
     const ffGroup = mkChoiceGroup(
       [{ value: false, label: t('disabled') }, { value: true, label: t('enabled') }],
       this._config.friendlyFire ?? false,
       v => { this._config.friendlyFire = v; if (nm) nm.send('config_update', { friendlyFire: v }); }
     );
     if (!isHost) { ffGroup.style.pointerEvents = 'none'; ffGroup.style.opacity = '0.45'; }
-    leftCol.appendChild(ffGroup);
+    ffSection.appendChild(ffGroup);
+    // ffSection intégré dans optionsWrap (hauteur fixe) pour éviter les sauts de layout
+    optionsWrap.appendChild(ffSection);
 
     if (!isHost) {
       leftCol.appendChild(el('div', { text: t('hostOnly'), style: {
@@ -1377,6 +1525,8 @@ export class Menu {
 
     const self = {
       id: 'local', name: this._config.pilotName, team: this._config.team,
+      planeName: this._progression.getPlane(this._progression.activePlane).name,
+      level: this._progression.level,
       playerTeam: this._config.playerTeam ?? 'team1', isReady: false, isHost,
     };
     const players = [self];
@@ -1395,9 +1545,17 @@ export class Menu {
           const tCol = p.playerTeam === 'team2' ? '#cc2222' : '#2266cc';
           const tLbl = p.playerTeam === 'team2' ? t('team2Short') : t('team1Short');
           row.appendChild(el('span', { text: tLbl, style: { color: tCol, fontSize: '9px', flexShrink: '0' }}));
-        } else {
-          row.appendChild(el('span', { text: p.team ? t('color_' + p.team) : '—', style: { color: TEAM_COLORS[p.team]?.hex || M.dimCream, fontSize: '9px', flexShrink: '0' }}));
         }
+        const pCol  = TEAM_COLORS[p.team]?.hex || M.dimCream;
+        // Pastille couleur de l'avion (très petite) + niveau du joueur
+        row.appendChild(el('span', { style: {
+          display:'inline-block', width:'8px', height:'8px', borderRadius:'50%',
+          background: pCol, flexShrink: '0',
+        }}));
+        const lvl = Number.isFinite(p.level) ? p.level : '?';
+        row.appendChild(el('span', { text: `${t('lvlReqPrefix')} ${lvl}`, style: {
+          color: M.yellow, fontSize: '9px', letterSpacing: '1px', flexShrink: '0', fontWeight: '600',
+        }}));
         row.appendChild(el('span', { text: p.isReady ? '■' : '□', style: { color: p.isReady ? M.green : M.dimCream, fontSize: '12px', flexShrink: '0' }}));
         playerList.appendChild(row);
       });
@@ -1407,7 +1565,7 @@ export class Menu {
     rightCol.appendChild(playerSection);
 
     // Statut de connexion (juste sous la liste, ne s'étire pas)
-    const statusEl = el('div', { text: 'Connexion...', style: {
+    const statusEl = el('div', { text: t('lobbyConnecting'), style: {
       color: M.dimCream, fontSize: '9px', letterSpacing: '1px',
       margin: '5px 0', flexShrink: '0',
     }});
@@ -1460,6 +1618,8 @@ export class Menu {
     const btnBack = mkBtn(t('lobbyQuit'), M.dimCream);
     btnBack.style.margin = '0';
 
+    // (Mon Avion accessible depuis le bloc profil de la topbar)
+
     let isReady = false;
     const btnReady = mkBtn(t('lobbyReady'), M.cream);
     btnReady.style.margin = '0';
@@ -1485,6 +1645,14 @@ export class Menu {
 
     this._root.appendChild(wrap);
 
+    // Ancre DOM (visée smooth via spring, _updateAnchorTarget) — zone à droite du panneau
+    const lobbyAnchor = el('div', { style:{
+      position:'absolute', left:'60%', right:'0', top:'10%', bottom:'10%',
+      pointerEvents:'none',
+    }});
+    this._root.appendChild(lobbyAnchor);
+    this._planeAnchor = lobbyAnchor;
+
     // ── Réseau ──
     const launchMultiplayer = (network, config) => {
       // Slot déterministe : tri des IDs → chaque client calcule le même index
@@ -1496,7 +1664,7 @@ export class Menu {
       // (pilotName / team / playerTeam), sinon tous les joueurs héritent du nom,
       // de la couleur et de l'équipe de l'hôte.
       const shared = {};
-      for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount']) {
+      for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount', 'ffaBotCount', 'ffaBotDiff']) {
         if (config[k] !== undefined) shared[k] = config[k];
       }
       this._config = {
@@ -1510,7 +1678,7 @@ export class Menu {
 
     // Applique un patch de config reçu du serveur et met à jour l'UI en conséquence
     const applyConfigPatch = (patch) => {
-      for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount']) {
+      for (const k of ['mode', 'map', 'maxPlayers', 'difficulty', 'totalEnemies', 'ffaTimeLimit', 'friendlyFire', 'tdmAiCount', 'ffaBotCount', 'ffaBotDiff']) {
         if (patch[k] !== undefined) this._config[k] = patch[k];
       }
       if (patch.mode !== undefined) {
@@ -1521,6 +1689,9 @@ export class Menu {
         enemyCountSection.style.display = patch.mode === 'coop' ? '' : 'none';
         timeLimitSection.style.display  = isCompetitive(patch.mode) ? '' : 'none';
         tdmAiSection.style.display      = patch.mode === 'tdm' ? '' : 'none';
+        ffaBotSection.style.display     = patch.mode === 'ffa' ? '' : 'none';
+        ffaBotDiffSection.style.display = (patch.mode === 'ffa' && (this._config.ffaBotCount ?? 0) > 0) ? '' : 'none';
+        ffSection.style.display         = ffVisible(patch.mode) ? '' : 'none';
         refreshLobbyStats();
       }
       if (patch.difficulty   !== undefined) diffChoices.setValue(patch.difficulty);
@@ -1529,6 +1700,8 @@ export class Menu {
       if (patch.friendlyFire !== undefined) ffGroup.setValue(patch.friendlyFire);
       if (patch.map          !== undefined) { mapGroup.setValue(patch.map); this._drawMapPreview(lobbyMapCanvas, patch.map); refreshLobbyStats(); }
       if (patch.tdmAiCount   !== undefined) tdmAiChoices.setValue(patch.tdmAiCount);
+      if (patch.ffaBotCount  !== undefined) { ffaBotChoices.setValue(patch.ffaBotCount); ffaBotDiffSection.style.display = (this._config.mode === 'ffa' && patch.ffaBotCount > 0) ? '' : 'none'; }
+      if (patch.ffaBotDiff   !== undefined) ffaBotDiffChoices.setValue(patch.ffaBotDiff);
       renderPlayers();
     };
 
@@ -1539,8 +1712,8 @@ export class Menu {
         await nm.connect();
 
         if (isHost) {
-          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, tdmAiCount: this._config.tdmAiCount ?? 0 });
-          statusEl.textContent = 'En attente de joueurs...';
+          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, level: self.level, tdmAiCount: this._config.tdmAiCount ?? 0 });
+          statusEl.textContent = t('lobbyWaiting');
           statusEl.style.color = M.green;
         } else {
           // Retry si la salle n'existe pas encore (hôte en train de créer la partie)
@@ -1548,7 +1721,7 @@ export class Menu {
           const MAX_RETRIES = 10, RETRY_MS = 3000;
           for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-              res = await nm.joinRoom(code, { name: self.name, team: self.team });
+              res = await nm.joinRoom(code, { name: self.name, team: self.team, level: self.level });
               break; // succès
             } catch (err) {
               const msg = err?.message ?? String(err);
@@ -1559,7 +1732,7 @@ export class Menu {
               await new Promise(r => setTimeout(r, RETRY_MS));
             }
           }
-          statusEl.textContent = `Connecté — ${code}`;
+          statusEl.textContent = `${t('lobbyConnected')} — ${code}`;
           statusEl.style.color = M.green;
           // Appliquer la config initiale reçue dans la réponse join_room
           if (res?.config) applyConfigPatch(res.config);
@@ -1582,12 +1755,15 @@ export class Menu {
               ffaTimeLimit: this._config.ffaTimeLimit, friendlyFire: this._config.friendlyFire,
               tdmAiCount: this._config.tdmAiCount,
             });
-            nm.send('player_plane', { plane: this._config.team });
+            nm.send('player_plane', { plane: this._config.team, planeName: self.planeName, level: self.level });
           }
+          // Diffuse aussi notre niveau (en cas d'absence côté serveur)
+          if (nm) nm.send('player_level', { level: self.level });
         });
         nm.on('player_left',    ({ id })               => { const i = players.findIndex(p => p.id === id); if (i > -1) players.splice(i, 1); renderPlayers(); });
         nm.on('player_ready',   ({ id, ready })        => { const p = players.find(p => p.id === id); if (p) { p.isReady = ready; renderPlayers(); } });
-        nm.on('player_plane',   ({ id, plane })        => { const p = players.find(p => p.id === id); if (p) { p.team = plane; renderPlayers(); } });
+        nm.on('player_plane',   ({ id, plane, planeName, level }) => { const p = players.find(p => p.id === id); if (p) { p.team = plane; if (planeName !== undefined) p.planeName = planeName; if (Number.isFinite(level)) p.level = level; renderPlayers(); } });
+        nm.on('player_level',   ({ id, level })        => { const p = players.find(p => p.id === id); if (p && Number.isFinite(level)) { p.level = level; renderPlayers(); } });
         nm.on('player_team',    ({ id, playerTeam })   => { const p = players.find(p => p.id === id); if (p) { p.playerTeam = playerTeam; renderPlayers(); } });
         nm.on('config_update',  applyConfigPatch);
         nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));
@@ -1600,7 +1776,7 @@ export class Menu {
 
         this._config.networkManager = nm;
       } catch {
-        statusEl.textContent = 'Serveur indisponible — hors-ligne';
+        statusEl.textContent = t('lobbyServerDown');
         statusEl.style.color = M.yellow;
       }
     };
@@ -1665,8 +1841,10 @@ export class Menu {
 
   // ── Paramètres ─────────────────────────────────────────────────────────────
   _showSettings() {
+    const returnFn = this._settingsReturn || (() => this._showMain());
     this._clear();
     this._showPreview('settings');
+    this._syncPreviewPlane();
     const wrap = mkPanelLeft('640px');
     wrap.appendChild(mkSectionTitle(t('settings')));
     wrap.appendChild(mkDivider());
@@ -1676,47 +1854,7 @@ export class Menu {
     const colL = el('div', { style: { flex: '1', minWidth: '0' }});
     const colR = el('div', { style: { flex: '1', minWidth: '0' }});
 
-    // ── Colonne gauche : Stats + Audio ────────────────────────────────────────
-    colL.appendChild(mkLabel(t('stats')));
-
-    const statKeys = [
-      { key: t('eliminations'), ls: 'stats_kills'   },
-      { key: t('morts'),        ls: 'stats_deaths'  },
-      { key: t('gamesPlayed'),  ls: 'stats_games'   },
-    ];
-    const valueEls = [];
-    statKeys.forEach(({ key, ls }) => {
-      const row = el('div', { style: {
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '6px 0', borderBottom: `1px solid ${M.border}`,
-      }});
-      row.appendChild(el('span', { text: key, style: { color: M.dimCream, fontSize: '10px', letterSpacing: '2px' }}));
-      const vEl = el('span', { text: localStorage.getItem(ls) || '0', style: { color: M.cream, fontSize: '13px', letterSpacing: '2px', fontWeight: 'bold' }});
-      row.appendChild(vEl);
-      valueEls.push({ el: vEl, ls });
-      colL.appendChild(row);
-    });
-
-    const survRow = el('div', { style: {
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '6px 0', borderBottom: `1px solid ${M.border}`,
-    }});
-    survRow.appendChild(el('span', { text: `${t('statsSurvival')} — ${t('bestWave')}`, style: { color: M.dimCream, fontSize: '10px', letterSpacing: '2px' }}));
-    const bestWaveEl = el('span', { text: localStorage.getItem('stats_bestWave') || '0', style: { color: '#cc9933', fontSize: '13px', letterSpacing: '2px', fontWeight: 'bold' }});
-    survRow.appendChild(bestWaveEl);
-    colL.appendChild(survRow);
-
-    const btnReset = mkBtn(t('resetStats'), M.red);
-    btnReset.style.marginTop = '6px';
-    btnReset.addEventListener('click', () => {
-      ['stats_kills','stats_deaths','stats_games','stats_bestWave'].forEach(k => localStorage.removeItem(k));
-      valueEls.forEach(({ el }) => { el.textContent = '0'; });
-      bestWaveEl.textContent = '0';
-      btnReset.textContent = '✓';
-      setTimeout(() => { btnReset.textContent = t('resetStats'); }, 1500);
-    });
-    colL.appendChild(btnReset);
-    colL.appendChild(mkDivider());
+    // ── Colonne gauche : Audio ────────────────────────────────────────────────
     colL.appendChild(mkLabel(t('audio')));
     colL.appendChild(this._mkAudioSection(this._audio ?? null));
 
@@ -1772,10 +1910,756 @@ export class Menu {
     wrap.appendChild(cols);
     wrap.appendChild(mkDivider());
 
+    // ── Export / Import sauvegarde ────────────────────────────────────────────
+    wrap.appendChild(mkDivider());
+    wrap.appendChild(mkLabel('SAUVEGARDE'));
+
+    const SAVE_KEYS = [
+      'cielDeFeu_progression', 'cielDeFeu_tutorialDisabled',
+      'pilotName', 'lang', 'ctrlMode', 'lowGraphics', 'audio_music', 'audio_sfx',
+    ];
+    const allSaveKeys = () => {
+      const keys = [...SAVE_KEYS];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('stats_') && !keys.includes(k)) keys.push(k);
+      }
+      return keys;
+    };
+
+    const mkSecondaryBtn = (label, onClick) => {
+      const b = el('button', { text: label, style: {
+        padding: '6px 14px', background: 'transparent',
+        border: `1px solid ${M.border}`, borderRadius: '4px',
+        color: M.dimCream, fontFamily: 'Rajdhani, sans-serif',
+        fontSize: '11px', letterSpacing: '2px',
+        cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
+      }});
+      b.addEventListener('mouseover', () => { b.style.borderColor = M.cream; b.style.color = M.cream; });
+      b.addEventListener('mouseout',  () => { b.style.borderColor = M.border; b.style.color = M.dimCream; });
+      b.addEventListener('click', onClick);
+      return b;
+    };
+
+    const saveDesc = el('div', { style: {
+      fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.6',
+      opacity: '0.7', marginBottom: '8px',
+    }});
+    saveDesc.textContent = t('exportDesc');
+    wrap.appendChild(saveDesc);
+
+    const saveRow = el('div', { style: { display: 'flex', gap: '8px' }});
+    saveRow.appendChild(mkSecondaryBtn(t('exportSave') || '↓  EXPORTER', () => {
+      const data = {};
+      allSaveKeys().forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `ciel-de-feu-save-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }));
+    saveRow.appendChild(mkSecondaryBtn(t('importSave') || '↑  IMPORTER', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result);
+            if (typeof data !== 'object' || Array.isArray(data)) throw new Error();
+            if (!confirm(t('importConfirm'))) return;
+            Object.entries(data).forEach(([k, v]) => { if (typeof v === 'string') localStorage.setItem(k, v); });
+            this._progression = new ProgressionSystem();
+            alert(t('importSuccess'));
+            this._showSettings();
+          } catch {
+            alert(t('importError'));
+          }
+        };
+        reader.readAsText(file);
+      });
+      input.click();
+    }));
+    wrap.appendChild(saveRow);
+
+    // ── Debug ──────────────────────────────────────────────────────────────────
+    wrap.appendChild(mkDivider());
+    const debugRow = el('div', { style: { display: 'flex', gap: '8px' }});
+    const mkDebugBtn = (label, fn) => {
+      const b = el('button', { text: label, style: {
+        padding: '5px 10px', background: 'transparent',
+        border: `1px solid #553300`, color: '#aa6633',
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '9px', letterSpacing: '1px',
+        cursor: 'pointer', borderRadius: '4px', transition: 'all 0.1s',
+      }});
+      b.addEventListener('click', fn);
+      b.addEventListener('mouseover', () => { b.style.background = '#55330022'; b.style.color = '#cc8844'; });
+      b.addEventListener('mouseout',  () => { b.style.background = 'transparent'; b.style.color = '#aa6633'; });
+      return b;
+    };
+    debugRow.appendChild(mkDebugBtn(t('cheatLevels'), () => {
+      const p = this._progression;
+      for (let i = 0; i < 10; i++) {
+        const xp = xpToNextLevel(p.level) - p.levelInfo.xpInLevel;
+        p.addRewards(xp + 1, 0);
+      }
+      this._showSettings();
+    }));
+    debugRow.appendChild(mkDebugBtn(t('cheatCredits'), () => {
+      this._progression.addRewards(0, 50000);
+      this._showSettings();
+    }));
+    debugRow.appendChild(mkDebugBtn(t('cheatReset'), () => {
+      if (confirm(t('resetConfirm'))) {
+        localStorage.removeItem('cielDeFeu_progression');
+        this._progression = new ProgressionSystem();
+        this._showSettings();
+      }
+    }));
+    wrap.appendChild(debugRow);
+
+    wrap.appendChild(mkDivider());
+
+    const btnControls = mkBtn(t('controls') || 'COMMANDES', M.dimCream);
+    btnControls.addEventListener('click', () => this._showControls());
+    wrap.appendChild(btnControls);
+
     const btnBack = mkBtn(t('back'), M.dimCream);
-    btnBack.addEventListener('click', () => this._showMain());
+    btnBack.addEventListener('click', () => returnFn());
     wrap.appendChild(btnBack);
     this._root.appendChild(wrap);
+  }
+
+  // ── Page commandes (clavier + manette) ───────────────────────────────────
+  _showControls() {
+    this._clear();
+    this._showPreview('settings');
+    this._syncPreviewPlane();
+
+    const wrap = el('div', { style: {
+      position: 'absolute', inset: '0',
+      background: 'rgba(4,4,3,0.97)',
+      display: 'flex', flexDirection: 'column',
+      fontFamily: 'Rajdhani, sans-serif', color: M.cream,
+    }});
+
+    // Top bar
+    const topBar = el('div', { style: {
+      height: '54px', flexShrink: '0',
+      background: 'rgba(6,6,5,0.98)',
+      borderBottom: `1px solid ${M.border}`,
+      display: 'flex', alignItems: 'stretch',
+    }});
+    const titleArea = el('div', { style: {
+      flex: '1', display: 'flex', alignItems: 'center', gap: '14px', padding: '0 32px',
+    }});
+    const mkHLine = () => el('div', { style: { flex: '1', height: '1px', background: M.border }});
+    const mkStar2 = () => el('div', { text: '✦', style: { color: M.accent, fontSize: '12px', flexShrink: '0' }});
+    titleArea.appendChild(mkHLine()); titleArea.appendChild(mkStar2());
+    titleArea.appendChild(el('div', { text: t('controls') || 'COMMANDES', style: {
+      fontSize: '18px', fontWeight: '800', letterSpacing: '6px', flexShrink: '0',
+    }}));
+    titleArea.appendChild(mkStar2()); titleArea.appendChild(mkHLine());
+    topBar.appendChild(titleArea);
+
+    const backBtn = el('button', { text: t('backToSettings') || '← PARAMÈTRES', style: {
+      padding: '0 26px', background: M.accentDim, border: 'none',
+      borderLeft: `1px solid ${M.border}`,
+      color: M.cream, fontFamily: 'Rajdhani, sans-serif',
+      fontSize: '13px', letterSpacing: '3px', cursor: 'pointer',
+      fontWeight: 'bold', flexShrink: '0', transition: 'background 0.1s',
+    }});
+    const backActive   = () => css(backBtn, { background: '#8a2200' });
+    const backInactive = () => css(backBtn, { background: M.accentDim });
+    backBtn.addEventListener('click',     () => this._showSettings());
+    backBtn.addEventListener('mouseover', backActive);
+    backBtn.addEventListener('mouseout',  backInactive);
+    backBtn.addEventListener('touchstart', backActive,   { passive: true });
+    backBtn.addEventListener('touchend',   backInactive, { passive: true });
+    topBar.appendChild(backBtn);
+    wrap.appendChild(topBar);
+
+    // ── Mode tabs ──
+    const TAB_KEYS = IS_MOBILE ? ['touch'] : ['std', 'sim', 'touch'];
+    let ctrlTabMode = IS_MOBILE ? 'touch'
+      : (localStorage.getItem('ctrlMode') === 'simulator' ? 'sim' : 'std');
+    const tabBar = el('div', { style: {
+      display: 'flex', flexShrink: '0',
+      borderBottom: `1px solid ${M.border}`,
+      background: 'rgba(8,8,6,0.95)',
+    }});
+    const refreshTabs = () => {
+      tabBar.querySelectorAll('button').forEach((tb, i) => {
+        const active = TAB_KEYS[i] === ctrlTabMode;
+        Object.assign(tb.style, {
+          background: active ? M.panelMid : 'transparent',
+          borderBottom: active ? `2px solid ${M.accent}` : '2px solid transparent',
+          color: active ? M.cream : M.dimCream,
+          fontWeight: active ? '800' : '600',
+        });
+      });
+    };
+    const mkCtrlTab = (label, key) => {
+      const b = el('button', { text: label, style: {
+        padding: '12px 32px', background: key === ctrlTabMode ? M.panelMid : 'transparent',
+        border: 'none', borderBottom: key === ctrlTabMode ? `2px solid ${M.accent}` : '2px solid transparent',
+        color: key === ctrlTabMode ? M.cream : M.dimCream,
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '13px', letterSpacing: '3px',
+        fontWeight: key === ctrlTabMode ? '800' : '600', cursor: 'pointer', transition: 'all 0.15s',
+      }});
+      b.addEventListener('click', () => { ctrlTabMode = key; rebuildMain(); refreshTabs(); });
+      return b;
+    };
+    if (!IS_MOBILE) {
+      tabBar.appendChild(mkCtrlTab(t('ctrlStd') || 'STANDARD',   'std'));
+      tabBar.appendChild(mkCtrlTab(t('ctrlSim') || 'SIMULATEUR', 'sim'));
+    }
+    tabBar.appendChild(mkCtrlTab(t('mobileCtrl') || 'TACTILE', 'touch'));
+    wrap.appendChild(tabBar);
+
+    // Two columns — clavier 60%, manette 40%
+    let main = el('div', { style: { flex: '1', display: 'flex', overflow: 'hidden' }});
+
+    const mkColumn = (titleKey, fallback, flex = '1') => {
+      const panel = el('div', { style: {
+        flex, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }});
+      const hdr = el('div', { style: {
+        padding: '16px 36px 14px', flexShrink: '0',
+        borderBottom: `1px solid ${M.border}44`,
+      }});
+      hdr.appendChild(el('div', { text: t(titleKey) || fallback, style: {
+        fontSize: '14px', letterSpacing: '4px', color: M.dimCream, fontWeight: '700',
+      }}));
+      panel.appendChild(hdr);
+      const scroll = el('div', { style: { flex: '1', overflowY: 'auto', padding: '24px 36px' }});
+      panel.appendChild(scroll);
+      return { panel, scroll };
+    };
+
+    const rebuildMain = () => {
+      main.remove();
+      main = el('div', { style: { flex: '1', display: 'flex', overflow: 'hidden' }});
+      if (ctrlTabMode === 'touch') {
+        const { panel: mobilePanel, scroll: mobileScroll } = mkColumn('mobileCtrl', 'TACTILE', '1');
+        mobileScroll.appendChild(this._buildMobileControlsPanel());
+        mobileScroll.appendChild(this._buildMobileGyroPanel());
+        main.appendChild(mobilePanel);
+      } else {
+        const { panel: kbPanel, scroll: kbScroll } = mkColumn('kbCtrl', 'CLAVIER', '3');
+        kbScroll.appendChild(ctrlTabMode === 'sim' ? this._buildKeyboardSVGSim() : this._buildKeyboardSVG());
+        main.appendChild(kbPanel);
+        main.appendChild(el('div', { style: { width: '1px', background: M.border, flexShrink: '0' }}));
+        const { panel: gpPanel, scroll: gpScroll } = mkColumn('xboxCtrl', 'MANETTE XBOX', '2');
+        gpScroll.appendChild(this._buildGamepadSVG());
+        main.appendChild(gpPanel);
+      }
+      wrap.appendChild(main);
+    };
+    rebuildMain();
+
+    this._root.appendChild(wrap);
+  }
+
+  _buildMobileControlsPanel() {
+    const wrap = el('div', { style: { maxWidth: '680px' }});
+
+    // Tip
+    const tipEl = el('div', { style: {
+      fontSize: '10px', letterSpacing: '2px', color: M.dimCream,
+      marginBottom: '28px', borderLeft: `3px solid ${M.border}`, paddingLeft: '12px',
+    }});
+    tipEl.textContent = t('mobileTip') || 'Disponible automatiquement sur appareil tactile';
+    wrap.appendChild(tipEl);
+
+    // Schéma SVG des contrôles mobiles
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 560 300');
+    svg.style.cssText = 'width:100%;max-width:560px;display:block;margin-bottom:28px;';
+
+    const mk = (tag, attrs, txt) => {
+      const e = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+      if (txt) e.textContent = txt;
+      svg.appendChild(e);
+      return e;
+    };
+
+    const cream = '#d4c88a'; const dim = '#7a7060'; const red = '#cc3820';
+
+    // Fond écran
+    mk('rect', { x:10, y:10, width:540, height:280, rx:14,
+      fill:'rgba(10,8,4,0.6)', stroke:'#3a3428', 'stroke-width':1.5 });
+
+    // Zone gauche (joystick)
+    mk('rect', { x:20, y:20, width:240, height:260, rx:8,
+      fill:'rgba(255,255,255,0.03)', stroke:'#3a3428', 'stroke-width':1 });
+    mk('text', { x:140, y:42, 'text-anchor':'middle', fill:dim,
+      'font-size':9, 'letter-spacing':2, 'font-family':'Courier New' },
+      '— ZONE GAUCHE —');
+
+    // Joystick base
+    mk('circle', { cx:140, cy:160, r:52, fill:'none',
+      stroke: cream, 'stroke-opacity':0.25, 'stroke-width':1.5 });
+    mk('circle', { cx:140, cy:160, r:52, fill:'rgba(212,200,138,0.05)' });
+    // Knob décalé (illustration d'un virage droite+monter)
+    mk('circle', { cx:162, cy:142, r:22, fill:'rgba(212,200,138,0.35)',
+      stroke:cream, 'stroke-width':1.5 });
+    // Flèches directionnelles
+    const arrow = (x, y, dx, dy) => {
+      const x2 = x + dx * 28, y2 = y + dy * 28;
+      mk('line', { x1:x, y1:y, x2, y2, stroke:cream, 'stroke-opacity':0.3, 'stroke-width':1 });
+      mk('polygon', {
+        points:`${x2},${y2} ${x2 - dy*4 - dx*5},${y2 + dx*4 - dy*5} ${x2 + dy*4 - dx*5},${y2 - dx*4 - dy*5}`,
+        fill:cream, 'fill-opacity':0.3,
+      });
+    };
+    arrow(140, 160, 0, -1); arrow(140, 160, 0, 1);
+    arrow(140, 160, -1, 0); arrow(140, 160, 1, 0);
+    mk('text', { x:140, y:228, 'text-anchor':'middle', fill:cream,
+      'font-size':10, 'letter-spacing':1, 'font-family':'Courier New' },
+      t('mobileJoy') || 'Joystick gauche');
+
+    // Zone droite
+    mk('rect', { x:280, y:20, width:270, height:260, rx:8,
+      fill:'rgba(255,255,255,0.03)', stroke:'#3a3428', 'stroke-width':1 });
+    mk('text', { x:415, y:42, 'text-anchor':'middle', fill:dim,
+      'font-size':9, 'letter-spacing':2, 'font-family':'Courier New' },
+      '— ZONE DROITE —');
+
+    // Bouton PAUSE (coin haut)
+    mk('rect', { x:498, y:56, width:38, height:38, rx:6,
+      fill:'rgba(10,8,4,0.6)', stroke:cream, 'stroke-opacity':0.6, 'stroke-width':1.2 });
+    mk('text', { x:517, y:80, 'text-anchor':'middle', fill:cream, 'font-size':13 }, '❚❚');
+    mk('text', { x:517, y:108, 'text-anchor':'middle', fill:dim,
+      'font-size':8, 'letter-spacing':1, 'font-family':'Courier New' },
+      t('mobilePause') || 'PAUSE');
+
+    // Bouton MISSILE
+    mk('circle', { cx:355, cy:138, r:22, fill:'rgba(10,8,4,0.6)',
+      stroke:cream, 'stroke-opacity':0.7, 'stroke-width':1.2 });
+    mk('text', { x:355, y:146, 'text-anchor':'middle', fill:cream, 'font-size':16 }, '🚀');
+    mk('text', { x:355, y:174, 'text-anchor':'middle', fill:dim,
+      'font-size':8, 'letter-spacing':1, 'font-family':'Courier New' },
+      t('mobileMiss') || 'MISSILE');
+
+    // Bouton LEURRE
+    mk('circle', { cx:425, cy:210, r:18, fill:'rgba(10,8,4,0.6)',
+      stroke:cream, 'stroke-opacity':0.7, 'stroke-width':1.2 });
+    mk('text', { x:425, y:217, 'text-anchor':'middle', fill:cream, 'font-size':13 }, '✦');
+    mk('text', { x:425, y:240, 'text-anchor':'middle', fill:dim,
+      'font-size':8, 'letter-spacing':1, 'font-family':'Courier New' },
+      t('mobileDecoy') || 'LEURRE');
+
+    // Bouton GAZ (allongé)
+    mk('rect', { x:480, y:152, width:42, height:80, rx:21,
+      fill:'rgba(10,8,4,0.6)', stroke:cream, 'stroke-opacity':0.7, 'stroke-width':1.2 });
+    mk('text', { x:501, y:188, 'text-anchor':'middle', fill:cream, 'font-size':14 }, '▲');
+    mk('text', { x:501, y:202, 'text-anchor':'middle', fill:dim,
+      'font-size':7, 'letter-spacing':2, 'font-family':'Courier New' }, 'GAZ');
+    mk('text', { x:501, y:248, 'text-anchor':'middle', fill:dim,
+      'font-size':8, 'letter-spacing':1, 'font-family':'Courier New' },
+      t('mobileThr') || 'GAZ');
+
+    // Bouton TIR (grand)
+    mk('circle', { cx:375, cy:232, r:34, fill:'rgba(160,30,10,0.35)',
+      stroke:red, 'stroke-opacity':0.8, 'stroke-width':1.5 });
+    mk('text', { x:375, y:248, 'text-anchor':'middle', fill:cream, 'font-size':26 }, '🔥');
+    mk('text', { x:375, y:278, 'text-anchor':'middle', fill:dim,
+      'font-size':8, 'letter-spacing':1, 'font-family':'Courier New' },
+      t('mobileFire') || 'TIR');
+
+    wrap.appendChild(svg);
+
+    // Tableau des actions
+    const rows = [
+      ['mobileJoy',    'mobileJoyDesc'],
+      ['mobileFire',   'mobileFireDesc'],
+      ['mobileThr',    'mobileThrDesc'],
+      ['mobileMiss',   'mobileMissDesc'],
+      ['mobileDecoy',  'mobileDecoyDesc'],
+      ['mobilePause',  'mobilePauseDesc'],
+    ];
+    const table = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' }});
+    rows.forEach(([nameKey, descKey]) => {
+      const row = el('div', { style: {
+        display: 'flex', gap: '12px', alignItems: 'center',
+        padding: '6px 0', borderBottom: `1px solid ${M.border}44`,
+      }});
+      row.appendChild(el('div', { text: t(nameKey) || nameKey, style: {
+        fontSize: '10px', letterSpacing: '2px', color: M.cream, fontFamily: 'Courier New',
+        minWidth: '160px', flexShrink: '0',
+      }}));
+      row.appendChild(el('div', { text: t(descKey) || descKey, style: {
+        fontSize: '10px', letterSpacing: '1px', color: M.dimCream, fontFamily: 'Courier New',
+      }}));
+      table.appendChild(row);
+    });
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  _buildMobileGyroPanel() {
+    const M2 = { cream:'#d4c88a', dim:'#8a8060', border:'#3a3020', panel:'rgba(10,8,4,0.5)' };
+    const wrap = el('div', { style: { maxWidth: '500px', marginTop: '32px' }});
+
+    const secLabel = (txt) => el('div', { text: txt, style: {
+      fontSize: '11px', letterSpacing: '4px', color: M2.dim,
+      fontFamily: 'Rajdhani, sans-serif', fontWeight: '700',
+      borderBottom: `1px solid ${M2.border}`, paddingBottom: '8px', marginBottom: '16px',
+    }});
+
+    wrap.appendChild(secLabel(t('mobileCtrlMode')));
+
+    // Toggle boutons
+    const toggleRow = el('div', { style: { display: 'flex', gap: '12px', marginBottom: '20px' }});
+
+    const mkModeBtn = (label, mode) => {
+      const isActive = () => (localStorage.getItem('mobileCtrlMode') || 'joystick') === mode;
+      const b = el('button', { text: label, style: {
+        flex: '1', padding: '14px 0', borderRadius: '4px', cursor: 'pointer',
+        border: `1px solid ${isActive() ? M2.cream : M2.border}`,
+        background: isActive() ? 'rgba(212,200,138,0.1)' : 'transparent',
+        color: isActive() ? M2.cream : M2.dim,
+        fontFamily: '"Courier New",monospace', fontSize: '12px', letterSpacing: '3px',
+        transition: 'all 0.15s',
+      }});
+      const refresh = () => {
+        const active = isActive();
+        b.style.border = `1px solid ${active ? M2.cream : M2.border}`;
+        b.style.background = active ? 'rgba(212,200,138,0.1)' : 'transparent';
+        b.style.color = active ? M2.cream : M2.dim;
+      };
+      b.addEventListener('click', () => {
+        localStorage.setItem('mobileCtrlMode', mode);
+        toggleRow.querySelectorAll('button').forEach(bt => bt.dispatchEvent(new Event('refresh')));
+        gyroSect.style.display = mode === 'gyro' ? '' : 'none';
+      });
+      b.addEventListener('refresh', refresh);
+      b.addEventListener('touchstart', (e) => { e.preventDefault(); b.click(); }, { passive: false });
+      return b;
+    };
+
+    toggleRow.appendChild(mkModeBtn(t('mobileJoystick'), 'joystick'));
+    toggleRow.appendChild(mkModeBtn(t('mobileGyro'), 'gyro'));
+    wrap.appendChild(toggleRow);
+
+    const isGyro = (localStorage.getItem('mobileCtrlMode') || 'joystick') === 'gyro';
+    const gyroSect = el('div', { style: { display: isGyro ? '' : 'none' }});
+
+    gyroSect.appendChild(secLabel(t('gyroSensitivity')));
+
+    const sliderRow = el('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }});
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = '0.3'; slider.max = '3.0'; slider.step = '0.1';
+    slider.value = localStorage.getItem('mobileGyroSens') || '1.0';
+    slider.style.cssText = `flex:1; accent-color:${M2.cream}; cursor:pointer;`;
+    const sensVal = el('div', {
+      text: Number(slider.value).toFixed(1) + '×',
+      style: { fontFamily: '"Courier New",monospace', fontSize: '13px', color: M2.cream, minWidth: '36px', textAlign: 'right' },
+    });
+    slider.addEventListener('input', () => {
+      localStorage.setItem('mobileGyroSens', slider.value);
+      sensVal.textContent = Number(slider.value).toFixed(1) + '×';
+    });
+    sliderRow.appendChild(slider);
+    sliderRow.appendChild(sensVal);
+    gyroSect.appendChild(sliderRow);
+
+    const gyroNote = el('div', { text: t('gyroCalibrateDesc'), style: {
+      fontSize: '11px', color: M2.dim, fontFamily: 'Rajdhani, sans-serif',
+      borderLeft: `3px solid ${M2.border}`, paddingLeft: '10px', lineHeight: '1.5',
+    }});
+    gyroSect.appendChild(gyroNote);
+    wrap.appendChild(gyroSect);
+
+    return wrap;
+  }
+
+  _buildKeyboardSVG() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const KB = tCtrlKb();
+    const spaceKey = getLang() === 'en' ? 'SPACE' : 'ESPACE';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 620 290');
+    svg.style.cssText = 'width:100%;max-width:620px;display:block;';
+
+    const mk = (tag, attrs) => {
+      const e = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+      return e;
+    };
+
+    // h=44, gap=4 between rows
+    const KEY_H = 44;
+    const key = (x, y, w, label, sub, bg = M.panel, fg = M.cream) => {
+      svg.appendChild(mk('rect', { x, y, width: w, height: KEY_H, rx: 5, fill: bg, stroke: M.border, 'stroke-width': 1.2 }));
+      svg.appendChild(mk('rect', { x: x+1.5, y: y+1.5, width: w-3, height: KEY_H-3, rx: 4, fill: 'none', stroke: 'rgba(212,200,138,0.06)', 'stroke-width': 1 }));
+      const fsz = label.length >= 6 ? 9 : label.length >= 4 ? 10 : label.length >= 3 ? 12 : 15;
+      const mainY = sub ? y + 16 : y + 22;
+      const tm = mk('text', { x: x + w/2, y: mainY, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        'font-family': 'Rajdhani,sans-serif', 'font-size': fsz, 'font-weight': 800, fill: fg });
+      tm.textContent = label;
+      svg.appendChild(tm);
+      if (sub) {
+        const sfg = (fg === M.accent) ? '#ee6644' : M.dimCream;
+        const ts = mk('text', { x: x + w/2, y: y + 33, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+          'font-family': 'Rajdhani,sans-serif', 'font-size': 10, fill: sfg });
+        ts.textContent = sub;
+        svg.appendChild(ts);
+      }
+    };
+
+    // Row 0 y=8: ESC + TAB
+    key(0,   8, 51, 'ESC',   KB.esc);
+    key(110, 8, 65, 'TAB',   KB.tab);
+
+    // Row 1 y=56: SHIFT + Q W E  R F G H V C
+    key(0,   56, 79, 'SHIFT', KB.shift);
+    key(83,  56, 51, 'Q',     KB.q);
+    key(138, 56, 51, 'W',     KB.w);
+    key(193, 56, 51, 'E',     KB.e);
+    key(274, 56, 51, 'R',     KB.r);
+    key(329, 56, 51, 'F',     KB.f, '#261a08', M.yellow);
+    key(384, 56, 51, 'G',     KB.g, '#0e1e0e', M.green);
+    key(439, 56, 51, 'H',     KB.h, M.panel,   M.dimCream);
+    key(494, 56, 51, 'V',     KB.v);
+    key(549, 56, 51, 'C',     KB.c);
+
+    // Row 2 y=104: CTRL + A S D
+    key(0,   104, 79, 'CTRL',  KB.ctrl);
+    key(83,  104, 51, 'A',     KB.a);
+    key(138, 104, 51, 'S',     KB.s);
+    key(193, 104, 51, 'D',     KB.d);
+
+    // Row 3 y=152: ESPACE
+    key(83, 152, 226, spaceKey, KB.space, '#2a1008', M.accent);
+
+    // Separator
+    svg.appendChild(mk('line', { x1: 0, y1: 208, x2: 620, y2: 208, stroke: M.border, 'stroke-width': '0.6' }));
+
+    // Notes (12px)
+    const note = (y, str, color = M.dimCream) => {
+      const tn = mk('text', { x: 0, y, 'text-anchor': 'start', 'dominant-baseline': 'middle',
+        'font-family': 'Rajdhani,sans-serif', 'font-size': 12, fill: color });
+      tn.textContent = str;
+      svg.appendChild(tn);
+    };
+    note(224, KB.noteMouse);
+    note(244, KB.noteClick);
+    note(266, KB.noteTurbo, M.yellow);
+    note(286, KB.noteDebug, '#4a4030');
+
+    return svg;
+  }
+
+  _buildKeyboardSVGSim() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const KB = tCtrlKb();
+    const spaceKey = getLang() === 'en' ? 'SPACE' : 'ESPACE';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 620 290');
+    svg.style.cssText = 'width:100%;max-width:620px;display:block;';
+
+    const mk = (tag, attrs) => {
+      const e = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+      return e;
+    };
+
+    const KEY_H = 44;
+    const key = (x, y, w, label, sub, bg = M.panel, fg = M.cream) => {
+      svg.appendChild(mk('rect', { x, y, width: w, height: KEY_H, rx: 5, fill: bg, stroke: M.border, 'stroke-width': 1.2 }));
+      svg.appendChild(mk('rect', { x: x+1.5, y: y+1.5, width: w-3, height: KEY_H-3, rx: 4, fill: 'none', stroke: 'rgba(212,200,138,0.06)', 'stroke-width': 1 }));
+      const fsz = label.length >= 6 ? 9 : label.length >= 4 ? 10 : label.length >= 3 ? 12 : 15;
+      const mainY = sub ? y + 16 : y + 22;
+      const tm = mk('text', { x: x + w/2, y: mainY, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        'font-family': 'Rajdhani,sans-serif', 'font-size': fsz, 'font-weight': 800, fill: fg });
+      tm.textContent = label;
+      svg.appendChild(tm);
+      if (sub) {
+        const sfg = (fg === M.accent) ? '#ee6644' : M.dimCream;
+        const ts = mk('text', { x: x + w/2, y: y + 33, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+          'font-family': 'Rajdhani,sans-serif', 'font-size': 10, fill: sfg });
+        ts.textContent = sub;
+        svg.appendChild(ts);
+      }
+    };
+
+    // Row 0 y=8: ESC + TAB
+    key(0,   8, 51, 'ESC',   KB.esc);
+    key(110, 8, 65, 'TAB',   KB.tab);
+
+    // Row 1 y=56: SHIFT + Q W E  R F G H V C  (same as standard)
+    key(0,   56, 79, 'SHIFT', KB.shift);
+    key(83,  56, 51, 'Q',     KB.q);
+    key(138, 56, 51, 'W',     KB.simW);
+    key(193, 56, 51, 'E',     KB.e);
+    key(274, 56, 51, 'R',     KB.r);
+    key(329, 56, 51, 'F',     KB.f, '#261a08', M.yellow);
+    key(384, 56, 51, 'G',     KB.g, '#0e1e0e', M.green);
+    key(439, 56, 51, 'H',     KB.h, M.panel,   M.dimCream);
+    key(494, 56, 51, 'V',     KB.v);
+    key(549, 56, 51, 'C',     KB.c);
+
+    // Row 2 y=104: CTRL + A S D
+    key(0,   104, 79, 'CTRL',  KB.ctrl);
+    key(83,  104, 51, 'A',     KB.simA);
+    key(138, 104, 51, 'S',     KB.simS);
+    key(193, 104, 51, 'D',     KB.simD);
+
+    // Row 3 y=152: ESPACE
+    key(83, 152, 226, spaceKey, KB.space, '#2a1008', M.accent);
+
+    // Separator
+    svg.appendChild(mk('line', { x1: 0, y1: 208, x2: 620, y2: 208, stroke: M.border, 'stroke-width': '0.6' }));
+
+    const note = (y, str, color = M.dimCream) => {
+      const tn = mk('text', { x: 0, y, 'text-anchor': 'start', 'dominant-baseline': 'middle',
+        'font-family': 'Rajdhani,sans-serif', 'font-size': 12, fill: color });
+      tn.textContent = str;
+      svg.appendChild(tn);
+    };
+    note(224, KB.noteSimRoll);
+    note(244, KB.noteSimPitch);
+    note(266, KB.noteClick);
+    note(286, KB.noteDebug, '#4a4030');
+
+    return svg;
+  }
+
+  _buildGamepadSVG() {
+    const NS = 'http://www.w3.org/2000/svg';
+
+    const mk = (tag, attrs) => {
+      const e = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+      return e;
+    };
+    const mkTxt = (x, y, str, size = 11, weight = 700, color = M.dimCream) => {
+      const tt = mk('text', { x, y, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        'font-family': 'Rajdhani,sans-serif', 'font-size': size, 'font-weight': weight, fill: color });
+      tt.textContent = str;
+      return tt;
+    };
+
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 460 275');
+    svg.style.cssText = 'width:100%;max-width:460px;display:block;';
+
+    // ── Silhouette Xbox controller ────────────────────────────────────────
+    // Path trace : shoulder/trigger top → right arc → right grip → waist bottom
+    //              → left grip → left arc → back to top. Forme caractéristique Xbox.
+    const BODY = 'M 110,62 L 162,57 L 167,74 L 293,74 L 298,57 L 350,62 ' +
+      'C 378,68 398,88 400,112 L 398,138 C 396,155 386,168 372,174 ' +
+      'L 360,190 C 358,210 355,232 354,248 ' +
+      'C 350,265 333,273 310,268 C 288,262 278,244 276,222 L 270,198 ' +
+      'L 190,198 L 184,222 C 182,244 172,262 150,268 ' +
+      'C 127,273 110,265 106,248 C 105,232 102,210 100,190 ' +
+      'L 88,174 C 74,168 64,155 62,138 L 60,112 C 62,88 82,68 110,62 Z';
+    svg.appendChild(mk('path', { d: BODY, fill: M.panel, stroke: M.border, 'stroke-width': 2 }));
+    // Bevel intérieur subtil
+    svg.appendChild(mk('path', { d: BODY, fill: 'none', stroke: 'rgba(212,200,138,0.05)', 'stroke-width': 4,
+      transform: 'translate(0,0) scale(0.976,0.976) translate(5.5,3.2)' }));
+
+    // LT / RT Triggers — trapèzes au-dessus du corps
+    svg.appendChild(mk('path', {
+      d: 'M 108,62 L 163,57 L 160,40 L 98,42 Z',
+      fill: M.panelMid, stroke: M.border, 'stroke-width': 1.5,
+    }));
+    svg.appendChild(mkTxt(130, 51, 'LT', 12, 800, M.cream));
+
+    svg.appendChild(mk('path', {
+      d: 'M 297,57 L 352,62 L 362,40 L 300,40 Z',
+      fill: M.panelMid, stroke: M.border, 'stroke-width': 1.5,
+    }));
+    svg.appendChild(mkTxt(330, 51, 'RT', 12, 800, M.cream));
+
+    // LB / RB Bumpers
+    svg.appendChild(mk('rect', { x: 97,  y: 66, width: 68, height: 14, rx: 3, fill: M.bg, stroke: M.border, 'stroke-width': 1.2 }));
+    svg.appendChild(mkTxt(131, 73, 'LB', 10, 700));
+    svg.appendChild(mk('rect', { x: 295, y: 66, width: 68, height: 14, rx: 3, fill: M.bg, stroke: M.border, 'stroke-width': 1.2 }));
+    svg.appendChild(mkTxt(329, 73, 'RB', 10, 700));
+
+    // Left stick (haut-gauche du corps)
+    svg.appendChild(mk('circle', { cx: 157, cy: 130, r: 25, fill: M.bg,      stroke: M.border, 'stroke-width': 1.8 }));
+    svg.appendChild(mk('circle', { cx: 157, cy: 130, r: 10, fill: '#2a2514', stroke: M.border, 'stroke-width': 1 }));
+    svg.appendChild(mkTxt(157, 131, 'L3', 9));
+
+    // Right stick (bas-droit du corps)
+    svg.appendChild(mk('circle', { cx: 292, cy: 158, r: 25, fill: M.bg,      stroke: M.border, 'stroke-width': 1.8 }));
+    svg.appendChild(mk('circle', { cx: 292, cy: 158, r: 10, fill: '#2a2514', stroke: M.border, 'stroke-width': 1 }));
+    svg.appendChild(mkTxt(292, 159, 'R3', 9));
+
+    // D-pad (bas-gauche)
+    svg.appendChild(mk('rect', { x: 128, y: 155, width: 14, height: 42, rx: 3, fill: M.bg, stroke: M.border, 'stroke-width': 1.2 }));
+    svg.appendChild(mk('rect', { x: 114, y: 169, width: 42, height: 14, rx: 3, fill: M.bg, stroke: M.border, 'stroke-width': 1.2 }));
+
+    // ABXY (haut-droit) — Y haut, B droite, X gauche, A bas
+    const mkAbxy = (cx, cy, lbl, bgFill, borderCol) => {
+      const g = document.createElementNS(NS, 'g');
+      g.appendChild(mk('circle', { cx, cy, r: 15, fill: bgFill, stroke: borderCol, 'stroke-width': 1.8 }));
+      const tt = mk('text', { x: cx, y: cy + 1, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        'font-family': 'Rajdhani,sans-serif', 'font-size': 12, 'font-weight': 900, fill: 'rgba(212,200,138,0.95)' });
+      tt.textContent = lbl;
+      g.appendChild(tt);
+      return g;
+    };
+    svg.appendChild(mkAbxy(318, 112, 'Y', '#282508', M.yellow));
+    svg.appendChild(mkAbxy(337, 130, 'B', '#280a0a', '#cc4444'));
+    svg.appendChild(mkAbxy(299, 130, 'X', '#0a1428', '#2255cc'));
+    svg.appendChild(mkAbxy(318, 148, 'A', '#0a2814', '#22aa44'));
+
+    // Boutons centraux SEL / MNU
+    svg.appendChild(mk('rect', { x: 196, y: 104, width: 20, height: 12, rx: 3, fill: M.bg, stroke: M.border, 'stroke-width': 1 }));
+    svg.appendChild(mkTxt(206, 110, 'SEL', 8));
+    svg.appendChild(mk('rect', { x: 244, y: 104, width: 20, height: 12, rx: 3, fill: M.bg, stroke: M.border, 'stroke-width': 1 }));
+    svg.appendChild(mkTxt(254, 110, 'MNU', 8));
+    // Bouton Xbox centre
+    svg.appendChild(mk('circle', { cx: 230, cy: 107, r: 9,  fill: '#1a1810', stroke: M.border, 'stroke-width': 1.2 }));
+    svg.appendChild(mk('circle', { cx: 230, cy: 107, r: 4,  fill: M.border, stroke: 'none' }));
+
+    // ── Légende ──────────────────────────────────────────────────────────
+    const legend = el('div', { style: {
+      display: 'grid', gridTemplateColumns: '1fr 1fr',
+      gap: '0px 16px', padding: '18px 0 0',
+    }});
+
+    const mkLegendRow = (btn, action, actColor = M.cream) => {
+      const row = el('div', { style: {
+        display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 0',
+        borderBottom: `1px solid ${M.border}44`,
+      }});
+      const chip = el('span', { text: btn, style: {
+        padding: '2px 8px', background: M.panelMid,
+        border: `1px solid ${M.border}`, borderRadius: '4px',
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '12px',
+        fontWeight: '700', letterSpacing: '1px', color: M.dimCream,
+        flexShrink: '0', whiteSpace: 'nowrap',
+      }});
+      const act = el('span', { text: action, style: {
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '12px',
+        color: actColor, letterSpacing: '0.3px',
+      }});
+      row.appendChild(chip);
+      row.appendChild(act);
+      return row;
+    };
+
+    tCtrlGp().forEach(([btn, action, color]) => {
+      const c = color === 'yellow' ? M.yellow : color;
+      legend.appendChild(mkLegendRow(btn, action, c));
+    });
+
+    const container = el('div', { style: { display: 'flex', flexDirection: 'column' }});
+    container.appendChild(svg);
+    container.appendChild(legend);
+    return container;
   }
 
   // ── Stats contextuelles par mode + carte ─────────────────────────────────
@@ -1802,6 +2686,7 @@ export class Menu {
         { key: 'easy',     color: '#88cc66', label: t('easy')     },
         { key: 'standard', color: '#cc9933', label: t('standard') },
         { key: 'hard',     color: '#dd5533', label: t('hard')     },
+        { key: 'expert',   color: '#cc22aa', label: 'EXPERT'      },
       ];
       for (const d of DIFFS) {
         const best = ls(`bestWave_${d.key}`);
@@ -1813,7 +2698,7 @@ export class Menu {
       wrap.appendChild(mkLabel(t('mapRecord')));
       const diff   = ls('highestDiff');
       const killed = ls('mostEnemies');
-      const DIFF_LABELS = { easy: 'FACILE', standard: 'STANDARD', hard: 'DIFFICILE' };
+      const DIFF_LABELS = { easy: t('easy'), standard: t('standard'), hard: t('hard') };
       wrap.appendChild(mkStat(t('highestDiff'), diff ? `${DIFF_LABELS[diff] || diff} ${t('diffCompleted')}` : t('noRecord'), '#a0d080'));
       wrap.appendChild(mkStat(t('mostEnemies'), killed ?? t('noRecord'), M.cream));
 
@@ -1834,7 +2719,7 @@ export class Menu {
     const MAPS = {
       1: {
         name  : t('mapName_1'),
-        desc  : ['2 bases · 4 villages · 7 massifs · lacs', 'Altitude max : 900 m · Grande carte'],
+        desc  : t('mapDesc_1'),
         sky   : ['#0c1820', '#1a3050'],
         water : '#1a4878', low: '#1e4010', forest: '#2a5a18', rock: '#6a5030', snow: '#d8dce0',
         peaks : [[0.60,0.32,0.09],[0.38,0.55,0.07],[0.65,0.62,0.06],[0.28,0.35,0.08],[0.52,0.70,0.05],[0.73,0.42,0.06],[0.42,0.22,0.07]],
@@ -1845,7 +2730,7 @@ export class Menu {
       },
       2: {
         name  : t('mapName_2'),
-        desc  : ['Haute altitude · 6 sommets · neige dense', 'Altitude max : 1 800 m'],
+        desc  : t('mapDesc_2'),
         sky   : ['#080c18', '#10203a'],
         water : '#0e2840', low: '#2a3a50', forest: '#304858', rock: '#5a5a70', snow: '#e8eaf0',
         peaks : [[0.42,0.30,0.12],[0.65,0.25,0.09],[0.25,0.45,0.10],[0.72,0.55,0.08],[0.38,0.68,0.07],[0.60,0.70,0.06]],
@@ -1853,7 +2738,7 @@ export class Menu {
       },
       3: {
         name  : t('mapName_3'),
-        desc  : ['Terrain plat · 2 sommets · grands lacs', 'Altitude max : 800 m'],
+        desc  : t('mapDesc_3'),
         sky   : ['#100808', '#281410'],
         water : '#1a3060', low: '#304820', forest: '#3a5a18', rock: '#786040', snow: '#c8b890',
         peaks : [[0.30,0.28,0.06],[0.72,0.60,0.05]],
@@ -1861,14 +2746,14 @@ export class Menu {
       },
       99: {
         name  : t('mapName_99'),
-        desc  : ['En développement', 'Bientôt disponible'],
+        desc  : t('mapDesc_99'),
         sky   : ['#060804', '#0a0e08'],
         water : '#0e1812', low: '#0a100a', forest: '#0c120c', rock: '#141210', snow: '#1e1c18',
         peaks : [], lakes : [],
       },
       5: {
         name  : t('mapName_5'),
-        desc  : ['2 îles · La Manche · 4 villages · 2 aéroports', 'Relief doux · Plages · Altitude max : 160 m'],
+        desc  : t('mapDesc_5'),
         sky   : ['#0c1824', '#1a3048'],
         water : '#1a4878',
         low   : '#2a5018', forest: '#1e4410', rock : '#6a5830', snow: '#c8c0a0',
@@ -1882,7 +2767,7 @@ export class Menu {
       },
       4: {
         name  : t('mapName_4'),
-        desc  : ['Villages · ravitaillement · lacs alpins', 'Altitude max : 1 250 m'],
+        desc  : t('mapDesc_4'),
         sky   : ['#0e1a0c', '#1c3018'],
         water : '#2a6a8c', low: '#2e5a1a', forest: '#1a4a0e', rock: '#5a4830', snow: '#d0d4cc',
         peaks : [[0.75,0.18,0.10],[0.85,0.38,0.08],[0.60,0.28,0.07],[0.20,0.20,0.08],[0.12,0.42,0.07]],
@@ -2041,12 +2926,12 @@ export class Menu {
       ctx.fillStyle = 'rgba(4,6,3,0.72)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#3a3020';
-      ctx.font = 'bold 11px "Courier New"';
+      ctx.font = 'bold 11px Rajdhani';
       ctx.textAlign = 'center';
-      ctx.fillText('EN DÉVELOPPEMENT', W/2, H/2 - 8);
-      ctx.font = '8px "Courier New"';
+      ctx.fillText(t('mapInDev'), W/2, H/2 - 8);
+      ctx.font = '8px Rajdhani';
       ctx.fillStyle = '#2a2018';
-      ctx.fillText('BIENTÔT DISPONIBLE', W/2, H/2 + 10);
+      ctx.fillText(t('mapComingSoon'), W/2, H/2 + 10);
     }
 
     // Cadre
@@ -2060,8 +2945,320 @@ export class Menu {
     ctx.beginPath(); ctx.moveTo(rx-6, ry); ctx.lineTo(rx+6, ry); ctx.stroke();
   }
 
+  // Sync le modèle preview avec l'avion actif (couleur + missiles). À appeler
+  // après _showPreview() dans chaque écran qui affiche le fond 3D.
+  _syncPreviewPlane(planeIdx) {
+    const idx = planeIdx ?? this._progression.activePlane;
+    const plane = this._progression.getPlane(idx);
+    const tc = TEAM_COLORS[plane.color] ?? TEAM_COLORS.blanc;
+    this._onPreviewModelLoaded = (m) => this._attachPreviewMissiles(m, idx);
+    if (this._loadPreviewModel && this._currentPreviewPath !== tc.path) {
+      this._loadPreviewModel(tc.path);
+    } else if (this._previewModelRoot) {
+      this._attachPreviewMissiles(this._previewModelRoot, idx);
+    }
+  }
+
+  // ── Topbar persistante : profil + boutons utilitaires ─────────────────────
+  _buildProfileBar() {
+    const bar = document.createElement('div');
+    Object.assign(bar.style, {
+      position      : 'fixed',
+      top           : '0', left: '0', right: '0',
+      zIndex        : '2000',
+      height        : '52px',
+      padding       : '0 20px',
+      display       : 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap           : '24px',
+      background    : 'rgba(8,8,6,0.92)',
+      borderBottom  : `1px solid ${M.border}`,
+      fontFamily    : 'Rajdhani, sans-serif',
+      color         : M.cream,
+      backdropFilter: 'blur(6px)',
+      pointerEvents : 'none',
+    });
+
+    // Bloc profil (gauche) — cliquable : ouvre Mon Avion depuis n'importe quel écran
+    const left = document.createElement('div');
+    Object.assign(left.style, {
+      display: 'flex', alignItems: 'center', gap: '18px', flex: '0 0 auto',
+      pointerEvents: 'auto', cursor: 'pointer',
+      padding: '6px 10px', margin: '0 -10px',
+      borderRadius: '5px',
+      border: '1px solid transparent',
+      transition: 'all 0.15s',
+      position: 'relative',
+    });
+    left.title = t('myPlane') || 'Mon avion';
+    left.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+        <div style="display:flex;align-items:baseline;gap:10px;">
+          <span class="pb-plane-icon" style="font-size:13px;color:${M.yellow}55;transition:color 0.15s;">✈</span>
+          <span class="pb-name" style="font-size:14px;letter-spacing:2px;color:${M.cream};font-weight:700;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;"></span>
+          <span class="pb-lvl" style="font-size:12px;letter-spacing:2px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:180px;height:5px;background:rgba(212,200,138,0.14);border-radius:2px;overflow:hidden;">
+            <div class="pb-xp" style="height:100%;width:0%;background:linear-gradient(90deg,${M.yellow},${M.cream});transition:width 0.4s;"></div>
+          </div>
+          <span class="pb-xpnum" style="font-size:9px;letter-spacing:1.2px;color:${M.dimCream};white-space:nowrap;"></span>
+        </div>
+      </div>
+      <div style="height:30px;width:1px;background:${M.border}77;"></div>
+      <div style="display:flex;flex-direction:column;gap:1px;line-height:1.1;">
+        <span style="font-size:8px;letter-spacing:2px;color:${M.dimCream};">${t('creditsLabel')}</span>
+        <span class="pb-cred" style="font-size:15px;letter-spacing:1.5px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
+      </div>
+      <span class="pb-badge" style="
+        position:absolute; top:2px; right:4px;
+        background:${M.accent}; color:#fff;
+        border-radius:50%; width:16px; height:16px;
+        display:none; align-items:center; justify-content:center;
+        font-size:9px; font-weight:bold; font-family:sans-serif;
+        box-shadow:0 0 6px ${M.accent}88;
+      "></span>
+    `;
+    left.addEventListener('mouseover', () => {
+      left.style.background = 'rgba(212,200,138,0.06)';
+      left.style.borderColor = `${M.yellow}88`;
+      const icon = left.querySelector('.pb-plane-icon');
+      if (icon) icon.style.color = M.yellow;
+    });
+    left.addEventListener('mouseout', () => {
+      left.style.background = 'transparent';
+      left.style.borderColor = 'transparent';
+      const icon = left.querySelector('.pb-plane-icon');
+      if (icon) icon.style.color = `${M.yellow}55`;
+    });
+    left.addEventListener('click', () => {
+      // Ouvre Mon Avion. _myPlaneReturn est tenu à jour par chaque _show* via _setCurrentScreen
+      this._showMyPlane();
+    });
+
+    // Boutons utilitaires (droite)
+    const right = document.createElement('div');
+    Object.assign(right.style, {
+      display: 'flex', alignItems: 'center', gap: '10px', flexShrink: '0',
+    });
+
+    const mkUtilBtn = (label, title, onClick) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = title || '';
+      Object.assign(b.style, {
+        pointerEvents: 'auto',
+        background   : 'rgba(8,8,6,0.6)',
+        border       : `1px solid ${M.border}`,
+        color        : M.dimCream,
+        fontFamily   : 'Rajdhani, sans-serif',
+        fontSize     : '12px',
+        letterSpacing: '2px',
+        fontWeight   : '600',
+        padding      : '7px 14px',
+        cursor       : 'pointer',
+        transition   : 'all 0.15s',
+        borderRadius : '4px',
+        minWidth     : '40px',
+      });
+      b.addEventListener('mouseover', () => { b.style.color = M.cream; b.style.borderColor = M.cream; });
+      b.addEventListener('mouseout',  () => { b.style.color = M.dimCream; b.style.borderColor = M.border; });
+      b.addEventListener('click', onClick);
+      return b;
+    };
+
+    const langBtn = mkUtilBtn(getLang() === 'fr' ? 'EN' : 'FR', '', () => {
+      const next = getLang() === 'fr' ? 'en' : 'fr';
+      setLang(next);
+      location.reload();
+    });
+    const gearBtn = mkUtilBtn('⚙', t('settings') || 'Paramètres', () => this._showSettings());
+    gearBtn.style.fontSize = '16px';
+    gearBtn.style.padding = '4px 12px';
+
+    right.appendChild(langBtn);
+    right.appendChild(gearBtn);
+
+    // ── Sélecteur d'avion actif — inline après les crédits ──────────────────
+    const planeSep = document.createElement('div');
+    planeSep.style.cssText = `height:30px;width:1px;background:${M.border}77;flex-shrink:0;`;
+
+    const planeSelWrap = document.createElement('div');
+    Object.assign(planeSelWrap.style, {
+      position: 'relative', display: 'flex', alignItems: 'center',
+      pointerEvents: 'auto', flexShrink: '0',
+    });
+    planeSelWrap.addEventListener('click', e => e.stopPropagation()); // évite d'ouvrir "Mon Avion"
+
+    const planeBtn = document.createElement('button');
+    Object.assign(planeBtn.style, {
+      background   : 'transparent',
+      border       : `1px solid ${M.border}`,
+      color        : M.cream,
+      fontFamily   : 'Rajdhani, sans-serif',
+      fontSize     : '11px', letterSpacing: '2px', fontWeight: '700',
+      padding      : '5px 10px', cursor: 'pointer', borderRadius: '4px',
+      display      : 'flex', alignItems: 'center', gap: '6px',
+      transition   : 'all 0.15s', whiteSpace: 'nowrap',
+    });
+    planeBtn.addEventListener('mouseover', () => { planeBtn.style.borderColor = M.yellow; planeBtn.style.color = M.yellow; });
+    planeBtn.addEventListener('mouseout',  () => { planeBtn.style.borderColor = M.border; planeBtn.style.color = M.cream; });
+
+    const planeDropdown = document.createElement('div');
+    Object.assign(planeDropdown.style, {
+      position: 'absolute', top: 'calc(100% + 6px)', left: '0',
+      background: 'rgba(8,8,6,0.97)', border: `1px solid ${M.border}`,
+      borderRadius: '6px', minWidth: '200px', display: 'none',
+      flexDirection: 'column', overflow: 'hidden',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
+      zIndex: '2100',
+    });
+
+    const closePlaneDropdown = () => { planeDropdown.style.display = 'none'; };
+
+    planeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = planeDropdown.style.display === 'flex';
+      if (isOpen) { closePlaneDropdown(); return; }
+      planeDropdown.innerHTML = '';
+      const prog = this._progression;
+      for (let i = 0; i < 3; i++) {
+        const planeData = prog?.getPlane(i);
+        const isActive  = prog?.activePlane === i;
+        const row = document.createElement('div');
+        Object.assign(row.style, {
+          display: 'flex', alignItems: 'center', gap: '12px',
+          padding: '10px 16px', cursor: 'pointer',
+          background: isActive ? `${M.yellow}18` : 'transparent',
+          borderLeft: isActive ? `3px solid ${M.yellow}` : '3px solid transparent',
+          transition: 'background 0.1s',
+        });
+        row.addEventListener('mouseover', () => { if (!isActive) row.style.background = 'rgba(212,200,138,0.06)'; });
+        row.addEventListener('mouseout',  () => { if (!isActive) row.style.background = 'transparent'; });
+        const icon = document.createElement('span');
+        icon.textContent = '✈';
+        icon.style.cssText = `font-size:14px;color:${isActive ? M.yellow : M.dimCream};flex-shrink:0;`;
+        const nameEl = document.createElement('span');
+        nameEl.textContent = (planeData?.name || `AVION ${i + 1}`).toUpperCase();
+        nameEl.style.cssText = `font-size:12px;letter-spacing:2px;font-weight:${isActive ? '700' : '500'};color:${isActive ? M.yellow : M.cream};font-family:Rajdhani,sans-serif;flex:1;`;
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✎';
+        editBtn.title = 'Renommer';
+        editBtn.style.cssText = `background:transparent;border:none;color:${M.dimCream};cursor:pointer;font-size:13px;padding:0 4px;opacity:0.6;transition:opacity 0.15s;`;
+        editBtn.addEventListener('mouseover', () => editBtn.style.opacity = '1');
+        editBtn.addEventListener('mouseout',  () => editBtn.style.opacity = '0.6');
+        editBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const inp = document.createElement('input');
+          inp.value = planeData?.name || '';
+          inp.style.cssText = `background:rgba(30,30,20,0.95);border:1px solid ${M.yellow};color:${M.yellow};font-family:Rajdhani,sans-serif;font-size:12px;letter-spacing:2px;padding:2px 6px;border-radius:3px;width:120px;outline:none;`;
+          nameEl.replaceWith(inp);
+          editBtn.style.display = 'none';
+          inp.focus(); inp.select();
+          const commit = () => {
+            const val = inp.value.trim().toUpperCase().slice(0, 20) || planeData?.name;
+            prog?.renamePlane(i, val);
+            this._refreshProfileBar();
+            this._myPlaneReturn?.();
+            closePlaneDropdown();
+          };
+          inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') closePlaneDropdown(); });
+          inp.addEventListener('blur', commit);
+        });
+        row.appendChild(icon); row.appendChild(nameEl); row.appendChild(editBtn);
+        row.addEventListener('click', () => {
+          prog?.setActivePlane(i);
+          closePlaneDropdown();
+          this._refreshProfileBar();
+          // Rafraîchit la page courante (config, multi, etc.) et synchronise le preview
+          this._syncPreviewPlane?.(i);
+          this._myPlaneReturn?.();
+        });
+        planeDropdown.appendChild(row);
+        if (i < 2) {
+          const sep = document.createElement('div');
+          sep.style.cssText = `height:1px;background:${M.border}55;margin:0 10px;`;
+          planeDropdown.appendChild(sep);
+        }
+      }
+      planeDropdown.style.display = 'flex';
+    });
+
+    document.addEventListener('click', closePlaneDropdown);
+
+    planeSelWrap.appendChild(planeBtn);
+    planeSelWrap.appendChild(planeDropdown);
+
+    // Injecter le sélecteur dans le bloc gauche, juste après les crédits
+    left.appendChild(planeSep);
+    left.appendChild(planeSelWrap);
+
+    bar.appendChild(left);
+    bar.appendChild(right);
+    document.body.appendChild(bar);
+    this._profileBar     = bar;
+    this._profileLangBtn = langBtn;
+    this._planeSelectorBtn = planeBtn;
+    this._refreshProfileBar();
+  }
+
+  _refreshProfileBar() {
+    const bar = this._profileBar;
+    if (!bar || !this._progression) return;
+    const prog = this._progression;
+    const { level, xpInLevel } = prog.levelInfo;
+    const xpNext = xpToNextLevel(level);
+    const xpPct  = xpNext < Infinity ? Math.min(100, (xpInLevel / xpNext) * 100) : 100;
+    const name   = (this._config?.pilotName || t('pilotPlaceh') || 'PILOTE').toString().toUpperCase();
+    const credFmt = prog.credits.toLocaleString('fr-FR').replace(/ | /g, ' ');
+    const xpStr  = xpNext < Infinity
+      ? `${Math.round(xpInLevel).toLocaleString('fr-FR')} / ${xpNext.toLocaleString('fr-FR')} XP`
+      : 'XP MAX';
+    bar.querySelector('.pb-name').textContent  = name;
+    bar.querySelector('.pb-lvl').textContent   = `${t('lvlReqPrefix')} ${level}`;
+    bar.querySelector('.pb-xp').style.width    = `${xpPct}%`;
+    bar.querySelector('.pb-xpnum').textContent = xpStr.replace(/ | /g, ' ');
+    bar.querySelector('.pb-cred').textContent  = `✦ ${credFmt}`;
+    // Badge "nouvelles options débloquées non vues"
+    const badge = bar.querySelector('.pb-badge');
+    if (badge) {
+      const n = prog.newOptionCount?.() ?? 0;
+      if (n > 0) {
+        badge.textContent = String(n);
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+    if (this._profileLangBtn) this._profileLangBtn.textContent = getLang() === 'fr' ? 'EN' : 'FR';
+    if (this._planeSelectorBtn && this._progression) {
+      const idx  = this._progression.activePlane;
+      const name = (this._progression.getPlane(idx)?.name || `AVION ${idx + 1}`).toUpperCase();
+      this._planeSelectorBtn.innerHTML = '';
+      const icon = document.createElement('span'); icon.textContent = '✈'; icon.style.color = M.yellow;
+      const lbl  = document.createElement('span'); lbl.textContent = name;
+      const arr  = document.createElement('span'); arr.textContent = '▾'; arr.style.cssText = `font-size:10px;color:${M.dimCream};`;
+      this._planeSelectorBtn.appendChild(icon);
+      this._planeSelectorBtn.appendChild(lbl);
+      this._planeSelectorBtn.appendChild(arr);
+    }
+  }
+
+  // Mémorise l'écran courant pour que le bouton retour de Mon Avion y revienne
+  // et pour que le bouton retour des Paramètres (accessible depuis la topbar) revienne ici aussi
+  _setCurrentScreen(fn) { this._myPlaneReturn = fn; this._settingsReturn = fn; }
+
+  _showProfileBar(visible = true) {
+    if (this._profileBar) this._profileBar.style.display = visible ? 'flex' : 'none';
+  }
+
   // ── Utilitaires ─────────────────────────────────────────────────────────────
   _clear() {
+    this._hangarOrbit          = false;
+    this._planeAnchor          = null;
+    this._useViewOffset        = false;
+    this._onPreviewModelLoaded = null;
+    (this._previewMissileMeshes || []).forEach(m => m.parent?.remove(m));
+    this._previewMissileMeshes = [];
     const children = Array.from(this._root.children);
     children.forEach(c => {
       // Garder : scanlines (div), canvas 3D preview
@@ -2069,6 +3266,9 @@ export class Menu {
       if (c.style.background?.includes('repeating-linear-gradient')) return;
       c.remove();
     });
+    // Barre de profil rafraîchie et visible sur chaque écran
+    this._refreshProfileBar();
+    this._showProfileBar(true);
     // Auto-focus le premier bouton interactif après chaque changement d'écran
     requestAnimationFrame(() => {
       const btn = this._root.querySelector('button:not(:disabled)');
@@ -2193,6 +3393,1161 @@ export class Menu {
     this._gpNavId = requestAnimationFrame(tick);
   }
 
+  // Attache des missiles visuels au modèle de prévisualisation selon le loadout
+  // ── Sons mécaniques — contexte audio partagé ─────────────────────────────
+  _uiAudioCtx() {
+    this._uiCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (this._uiCtx.state === 'suspended') this._uiCtx.resume();
+    return this._uiCtx;
+  }
+
+  // Survol d'un élément — clic mécanique très discret
+  _playHoverSound() {
+    try {
+      const ctx = this._uiAudioCtx();
+      const now = ctx.currentTime;
+      // Petit transient bande étroite — bouton physique léger
+      const len = Math.floor(ctx.sampleRate * 0.018);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d   = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const bp  = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 5;
+      const g   = ctx.createGain(); g.gain.setValueAtTime(0.09, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+      src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start(now);
+    } catch (_) {}
+  }
+
+  // Sélection / équipement — commutateur mécanique
+  _playEquipSound(_slotKey) {
+    try {
+      const ctx = this._uiAudioCtx();
+      const now = ctx.currentTime;
+      const noise = (dur, freq, q, vol, delay = 0) => {
+        const len = Math.floor(ctx.sampleRate * dur);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d   = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * dur * 0.4));
+        const src = ctx.createBufferSource(); src.buffer = buf;
+        const bp  = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+        const g   = ctx.createGain(); g.gain.setValueAtTime(vol, now + delay); g.gain.exponentialRampToValueAtTime(0.001, now + delay + dur);
+        src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start(now + delay);
+      };
+      // Impact initial : fréquence moyenne — interrupteur qui s'enclenche
+      noise(0.022, 1800, 4.0, 0.30);
+      // Queue métallique courte
+      noise(0.035, 600,  2.5, 0.18, 0.018);
+    } catch (_) {}
+  }
+
+  // Achat confirmé — verrouillage mécanique satisfaisant
+  _playBuySound() {
+    try {
+      const ctx = this._uiAudioCtx();
+      const now = ctx.currentTime;
+      const noise = (dur, freq, q, vol, delay = 0) => {
+        const len = Math.floor(ctx.sampleRate * dur);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d   = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * dur * 0.3));
+        const src = ctx.createBufferSource(); src.buffer = buf;
+        const bp  = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+        const g   = ctx.createGain(); g.gain.setValueAtTime(vol, now + delay); g.gain.exponentialRampToValueAtTime(0.001, now + delay + dur);
+        src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start(now + delay);
+      };
+      // Clunk grave — loquet qui s'enclenche
+      noise(0.055, 140,  2.0, 0.70);
+      // Impact métallique moyen — corps du mécanisme
+      noise(0.035, 520,  3.0, 0.45, 0.020);
+      // Résonance haute courte — confirmation
+      noise(0.025, 2400, 6.0, 0.22, 0.040);
+      // Tonalité brève de validation avionique (deux tons)
+      const osc1 = ctx.createOscillator(); osc1.type = 'sine'; osc1.frequency.value = 880;
+      const g1   = ctx.createGain(); g1.gain.setValueAtTime(0, now + 0.06); g1.gain.linearRampToValueAtTime(0.12, now + 0.075); g1.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+      osc1.connect(g1); g1.connect(ctx.destination); osc1.start(now + 0.06); osc1.stop(now + 0.14);
+      const osc2 = ctx.createOscillator(); osc2.type = 'sine'; osc2.frequency.value = 1320;
+      const g2   = ctx.createGain(); g2.gain.setValueAtTime(0, now + 0.11); g2.gain.linearRampToValueAtTime(0.10, now + 0.125); g2.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc2.connect(g2); g2.connect(ctx.destination); osc2.start(now + 0.11); osc2.stop(now + 0.19);
+    } catch (_) {}
+  }
+
+  // Montée de niveau — récompense avionique
+  _playLevelUpSound() {
+    try {
+      const ctx = this._uiAudioCtx();
+      const now = ctx.currentTime;
+      // Trois tonalités montantes — confirmation militaire
+      [[660, 0.00], [880, 0.10], [1100, 0.20]].forEach(([freq, delay]) => {
+        const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq;
+        const g   = ctx.createGain();
+        g.gain.setValueAtTime(0, now + delay);
+        g.gain.linearRampToValueAtTime(0.18, now + delay + 0.015);
+        g.gain.setValueAtTime(0.18, now + delay + 0.055);
+        g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.12);
+        osc.connect(g); g.connect(ctx.destination); osc.start(now + delay); osc.stop(now + delay + 0.13);
+      });
+      // Bruit de fond sourd — relâchement de pression
+      const len = Math.floor(ctx.sampleRate * 0.18);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d   = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.06));
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const lp  = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400;
+      const g   = ctx.createGain(); g.gain.setValueAtTime(0.15, now + 0.25); g.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+      src.connect(lp); lp.connect(g); g.connect(ctx.destination); src.start(now + 0.25);
+    } catch (_) {}
+  }
+
+  _attachPreviewMissiles(model, planeIdx) {
+    (this._previewMissileMeshes || []).forEach(m => m.parent?.remove(m));
+    this._previewMissileMeshes = [];
+
+    const loadout = this._progression.getLoadout(planeIdx ?? this._progression.activePlane);
+
+    // slots : indices d'emplacement X sur CHAQUE aile (permet l'entrelacement AA/AG)
+    const spawnMissiles = (slots, path, offsetY, rx, ry, rz) => {
+      if (!slots.length) return;
+      new GLTFLoader().load(path, (gltf) => {
+        if (!model.parent) return;
+        const src = gltf.scene;
+        src.scale.setScalar(0.25);
+        src.rotation.set(rx, ry, rz); // orientation native du GLB
+        src.updateMatrixWorld(true);
+        const invScale   = 1 / (model.scale.x || 1);
+        const srcScale   = src.scale.x;
+        const TARGET_LEN = 0.85;
+        const box2 = new THREE.Box3().setFromObject(src);
+        const size2 = new THREE.Vector3(); box2.getSize(size2);
+        const rawLen = Math.max(size2.x, size2.y, size2.z) || 1;
+        const localScale = (TARGET_LEN / rawLen) * invScale * srcScale;
+        for (let w = 0; w < 2; w++) {
+          for (const slot of slots) {
+            const m = src.clone();
+            const side = w === 0 ? -1 : 1;
+            m.position.set(side * (0.7 + slot * 0.42) * invScale, offsetY * invScale, 0.1 * invScale);
+            m.scale.setScalar(localScale);
+            model.add(m);
+            this._previewMissileMeshes.push(m);
+          }
+        }
+      }, undefined, () => {});
+    };
+
+    const aaCount = loadout.missiles_aa && loadout.missiles_aa !== 'none'
+      ? parseInt(loadout.missiles_aa.replace('aa', '')) || 0 : 0;
+    const agCount = loadout.missiles_ag && loadout.missiles_ag !== 'none'
+      ? parseInt(loadout.missiles_ag.replace('ag', '')) || 0 : 0;
+
+    // Entrelace les emplacements : AA, AG, AA, AG… le long de l'aile (pas d'empilement)
+    const { aaSlots, agSlots } = interleaveSlots(aaCount, agCount);
+    //                                                                 rx ry              rz
+    spawnMissiles(aaSlots, '/Missiles/low_poly_advanced_missile_Missile1.glb', -0.18, 0, -Math.PI / 2 + 0.26, 0);
+    spawnMissiles(agSlots, '/Missiles/game_ready_low_poly_r-77_Missile2.glb',  -0.18, 0, -Math.PI / 2,        0);
+  }
+
+  // ── MON AVION ─────────────────────────────────────────────────────────────
+  _showMyPlane() {
+    if (!this._inMyPlane) {
+      this._myPlanePrevReturn = this._myPlaneReturn;
+    }
+    this._inMyPlane = true;
+    this._setCurrentScreen(() => this._showMyPlane());
+    this._showPreview('hangar');
+
+    this._clear();
+    this._showPreview('hangar');
+
+    const prog = this._progression;
+
+    const { level } = prog;
+
+    const CAT_COLORS = {
+      propulsion:'#6f9cff', canons:'#ff8d4d', missiles_cat:'#ff6b8a',
+      defense:'#e0a84a', logistics:'#bcdb4f', equipements:'#d99bff',
+    };
+    // Descriptions des slots — via i18n pour support FR/EN
+    const slotDesc = (key) => t(`slotDesc_${key}`) || '';
+
+    const selectedSlot = prog.activePlane;
+    this._syncPreviewPlane(selectedSlot);
+
+    let activeSlotKey  = null; // slot ouvert dans la barre du bas
+    let activeCatKey   = null;
+    let infoOptId      = null; // option épinglée affichée dans le panneau d'info
+
+    const liveStats = (previewSlotKey = null, previewOptId = null) => {
+      const base = { ...prog.getLoadout(selectedSlot) };
+      if (previewSlotKey) base[previewSlotKey] = previewOptId;
+      return computeStats(loadoutToUpgradeIds(base));
+    };
+
+    // Classifie automatiquement le type d'avion selon le build
+    const classifyBuild = () => {
+      const s   = liveStats();
+      const ids = loadoutToUpgradeIds(prog.getLoadout(selectedSlot));
+      const hasAG = ids.includes('missile_ag');
+      const sp = s.speed, mn = s.maneuverability, hp = s.health, wp = s.weaponry, df = s.defense, ms = s.missiles;
+      if (hasAG || ms >= 4)          return { name:t('buildMissile'),      sub:t('buildMissileSub'),      col:'#ff8d4d' };
+      if (hp >= 150 || df >= 115)    return { name:t('buildDefensive'),    sub:t('buildDefensiveSub'),    col:'#e0a84a' };
+      if (wp >= 125 && sp <= 100)    return { name:t('buildHeavy'),        sub:t('buildHeavySub'),        col:'#cc6644' };
+      if (sp >= 112 && mn >= 108 && hp <= 115) return { name:t('buildInterceptorL'), sub:t('buildInterceptorLSub'), col:'#6f9cff' };
+      return { name:t('buildGeneral'), sub:t('buildGeneralSub'), col:'#bcdb4f' };
+    };
+
+    // ── WRAP ─────────────────────────────────────────────────────────────────
+    // Décalé de 52px pour laisser la topbar globale visible
+    const wrap = el('div', { style:{
+      position:'fixed', top:'52px', left:'0', right:'0', bottom:'0', zIndex:'5', pointerEvents:'none',
+      opacity:'0', transition:'opacity 0.25s ease-out',
+      fontFamily:'Rajdhani, sans-serif', color:M.cream,
+    }});
+
+    // Overlay gauche
+    wrap.appendChild(el('div', { style:{
+      position:'absolute', top:'0', left:'0', bottom:'0', width:'72%',
+      background:'rgba(4,4,3,0.75)', pointerEvents:'none',
+    }}));
+
+    // Ancre de cadrage de l'avion — fenêtre vide en haut à droite (colonne 72→100%,
+    // sous la topbar). _aimAtAnchor() mesure son centre chaque frame pour viser l'avion
+    // dessus. Invisible ; sert uniquement de repère géométrique robuste à la résolution.
+    const planeAnchor = el('div', { style:{
+      position:'absolute', left:'72%', right:'0', top:'50px', bottom:'67%',
+      pointerEvents:'none',
+    }});
+    wrap.appendChild(planeAnchor);
+    this._planeAnchor = planeAnchor;
+
+    // ── TOP BAR ──────────────────────────────────────────────────────────────
+    const topBar = el('div', { style:{
+      position:'absolute', top:'0', left:'0', right:'0', height:'50px',
+      background:'rgba(6,6,5,0.97)', borderBottom:`1px solid ${M.border}`,
+      display:'flex', alignItems:'center', pointerEvents:'all',
+    }});
+
+    const refreshTabs = () => {
+      this._refreshProfileBar();
+    };
+
+    // Champ nom du pilote — juste après les onglets d'avion
+    const pilotWrap = el('div', { style:{
+      display:'flex', alignItems:'center', gap:'8px', padding:'0 14px',
+      borderLeft:`1px solid ${M.border}44`, borderRight:`1px solid ${M.border}44`, height:'100%',
+    }});
+    const pilotLbl = el('span');
+    Object.assign(pilotLbl.style, { fontSize:'8px', letterSpacing:'2px', color:M.dimCream, whiteSpace:'nowrap' });
+    pilotLbl.textContent = t('pilotPlaceh') || 'PILOTE';
+    const pilotInp = mkInput('', this._config.pilotName || '');
+    Object.assign(pilotInp.style, { width:'130px', fontSize:'11px', padding:'4px 8px', letterSpacing:'2px' });
+    pilotInp.addEventListener('input', () => {
+      const v = pilotInp.value.toUpperCase().slice(0, 12);
+      pilotInp.value = v;
+      this._config.pilotName = v;
+      localStorage.setItem('pilotName', v);
+      this._refreshProfileBar();
+    });
+    pilotWrap.appendChild(pilotLbl);
+    pilotWrap.appendChild(pilotInp);
+    topBar.appendChild(pilotWrap);
+
+    topBar.appendChild(el('div', { style:{ flex:'1' }}));
+
+    // Niveau/XP/crédits sont maintenant affichés dans la topbar globale.
+    // refreshCredits rafraîchit la topbar après un achat.
+    const refreshCredits = () => { this._refreshProfileBar(); };
+
+    const btnBack = el('button', { text:t('back'), style:{
+      padding:'8px 16px', background:M.accentDim,
+      border:`1px solid ${M.accent}55`, color:M.cream,
+      fontFamily:'Rajdhani, sans-serif', fontSize:'10px', letterSpacing:'3px', cursor:'pointer',
+      height:'100%', fontWeight:'bold',
+      borderTop:'none', borderBottom:'none', borderRight:'none',
+    }});
+    btnBack.addEventListener('click', () => {
+      this._hangarOrbit = false;
+      this._planeAnchor = null;
+      this._inMyPlane = false;
+      wrap.style.opacity = '0';
+      const ret = this._myPlanePrevReturn || (() => this._showMain());
+      setTimeout(() => ret(), 230);
+    });
+    btnBack.addEventListener('mouseover', () => btnBack.style.background = M.accent);
+    btnBack.addEventListener('mouseout',  () => btnBack.style.background = M.accentDim);
+
+    // Section droite — positionnée absolument pour s'aligner avec le rightPanel (28% de large)
+    const rightSection = el('div', { style:{
+      position:'absolute', left:'72%', right:'0', top:'0', height:'50px',
+      display:'flex', alignItems:'stretch',
+      borderLeft:`1px solid ${M.border}44`,
+    }});
+
+    // Type d'avion — flex:1, label au-dessus, nom + sous-titre sur la même ligne
+    const typeWrap = el('div', { style:{
+      flex:'1', display:'flex', flexDirection:'column', justifyContent:'center',
+      padding:'0 16px', overflow:'hidden',
+    }});
+    const typeSubLbl = el('div', { style:{ fontSize:'8px', letterSpacing:'2px', color:M.dimCream, whiteSpace:'nowrap' }});
+    typeSubLbl.textContent = t('buildTypeLabel') || 'TYPE';
+    const nameRow = el('div', { style:{ display:'flex', alignItems:'baseline', gap:'8px', overflow:'hidden' }});
+    const typeNameEl = el('div', { style:{ fontSize:'13px', fontWeight:'800', letterSpacing:'1px', whiteSpace:'nowrap', flexShrink:'0' }});
+    const typeSepEl  = el('div', { style:{ fontSize:'10px', color:M.dimCream, flexShrink:'0' }});
+    typeSepEl.textContent = '·';
+    const typeSubEl  = el('div', { style:{ fontSize:'9px', letterSpacing:'0.5px', color:M.dimCream, fontStyle:'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }});
+    nameRow.appendChild(typeNameEl);
+    nameRow.appendChild(typeSepEl);
+    nameRow.appendChild(typeSubEl);
+    typeWrap.appendChild(typeSubLbl);
+    typeWrap.appendChild(nameRow);
+    rightSection.appendChild(typeWrap);
+    rightSection.appendChild(btnBack);
+    topBar.appendChild(rightSection);
+    wrap.appendChild(topBar);
+
+    // ── BARRE DE DÉTAIL (bas gauche, 72% large) ───────────────────────────────
+    const DETAIL_H = 186;
+    const detailBar = el('div', { style:{
+      position:'absolute', bottom:'0', left:'0', width:'72%', height:`${DETAIL_H}px`,
+      background:'rgba(7,7,6,0.98)', borderTop:`2px solid ${M.border}`,
+      borderRight:`1px solid ${M.border}`,
+      display:'none', alignItems:'stretch', gap:'0', padding:'0',
+      pointerEvents:'all', overflow:'hidden',
+    }});
+    wrap.appendChild(detailBar);
+
+    const closeDetail = () => {
+      detailBar.style.display = 'none';
+      tableArea.style.bottom = '0';
+      activeSlotKey = null; activeCatKey = null; infoOptId = null;
+      renderTable();
+    };
+
+    let newInSlot = new Set(); // optIds nouvellement débloqués pour le slot ouvert
+    const openDetail = (slotKey, catKey) => {
+      activeSlotKey = slotKey; activeCatKey = catKey;
+      infoOptId = prog.getLoadout(selectedSlot)[slotKey]; // option épinglée = équipée
+      // Capturer les nouveautés AVANT de marquer le slot comme vu
+      newInSlot = new Set(prog.getNewOptions().filter(o => o.slotKey === slotKey).map(o => o.optId));
+      prog.markSlotSeen(slotKey);
+      detailBar.style.display = 'flex';
+      tableArea.style.bottom  = `${DETAIL_H}px`;
+      renderDetailBar();
+      renderTable(); // re-highlight + retire le badge NEW du slot consulté
+    };
+
+    // Référence vers la colonne d'info, mise à jour au survol/clic
+    let _infoCol = null;
+    const renderInfo = (opt) => {
+      if (!_infoCol || !opt) return;
+      const catColor   = CAT_COLORS[activeCatKey] ?? M.accent;
+      const isUnlocked = level >= opt.levelReq;
+      const isEquipped = prog.getLoadout(selectedSlot)[activeSlotKey] === opt.id;
+      _infoCol.innerHTML = '';
+
+      // Ligne titre : nom + statut
+      const head = el('div', { style:{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'6px' }});
+      head.appendChild(el('div', { text: tEquip(opt.name), style:{
+        fontSize:'15px', fontWeight:'700', color: isUnlocked ? catColor : M.dimCream, letterSpacing:'0.5px',
+      }}));
+      if (opt.levelReq > 1) {
+        head.appendChild(el('div', { text:`${t('lvlReqPrefix')} ${opt.levelReq}`, style:{
+          fontSize:'10px', fontWeight:'700', letterSpacing:'1px',
+          padding:'2px 7px', borderRadius:'4px',
+          color: isUnlocked ? '#0a0a08' : '#fff',
+          background: isUnlocked ? M.yellow : '#cc4433',
+        }}));
+      }
+      if (isEquipped) {
+        head.appendChild(el('div', { text:t('equippedBadge'), style:{
+          fontSize:'10px', fontWeight:'700', letterSpacing:'1px', color:'#0a0a08',
+          padding:'2px 7px', borderRadius:'4px', background:catColor,
+        }}));
+      } else if (!isUnlocked) {
+        head.appendChild(el('div', { text:t('lockedBadge'), style:{
+          fontSize:'10px', fontWeight:'700', letterSpacing:'1px', color:'#ff8877',
+        }}));
+      }
+      _infoCol.appendChild(head);
+
+      // Description du slot
+      _infoCol.appendChild(el('div', { text: slotDesc(activeSlotKey), style:{
+        fontSize:'11px', lineHeight:'1.4', color:M.dimCream, marginBottom:'8px',
+      }}));
+
+      // Pros / cons
+      const pc = el('div', { style:{ display:'flex', gap:'18px', flexWrap:'wrap' }});
+      const prosCol = el('div', { style:{ display:'flex', flexDirection:'column', gap:'2px' }});
+      const consCol = el('div', { style:{ display:'flex', flexDirection:'column', gap:'2px' }});
+      (opt.pros ?? []).forEach(p => prosCol.appendChild(el('div', { text:`▲ ${tEquip(p)}`, style:{ fontSize:'11px', color:'#7fe07f', fontWeight:'600' }})));
+      (opt.cons ?? []).forEach(c => consCol.appendChild(el('div', { text:`▼ ${tEquip(c)}`, style:{ fontSize:'11px', color:'#ff8877', fontWeight:'600' }})));
+      if (!(opt.pros?.length) && !(opt.cons?.length)) {
+        prosCol.appendChild(el('div', { text:t('baseConfigDesc'), style:{ fontSize:'11px', color:M.dimCream }}));
+      }
+      pc.appendChild(prosCol); pc.appendChild(consCol);
+      _infoCol.appendChild(pc);
+    };
+
+    const renderDetailBar = () => {
+      if (!activeSlotKey) return;
+      detailBar.innerHTML = '';
+      const catColor  = CAT_COLORS[activeCatKey] ?? M.accent;
+      const catObj    = EQUIPMENT_CATALOG[activeCatKey];
+      const slot      = catObj?.slots[activeSlotKey];
+      if (!slot) return;
+      const loadout   = prog.getLoadout(selectedSlot);
+
+      // Colonne titre du slot
+      const titleCol = el('div', { style:{
+        minWidth:'190px', flexShrink:'0', padding:'14px 16px',
+        borderRight:`1px solid ${M.border}`,
+        display:'flex', flexDirection:'column', justifyContent:'center', gap:'4px',
+        background:`${catColor}10`,
+      }});
+      titleCol.appendChild(el('span', { text: tEquip(catObj.label), style:{ fontSize:'9px', letterSpacing:'2px', color:M.dimCream }}));
+      titleCol.appendChild(el('div', { text: tEquip(slot.label), style:{ fontSize:'15px', letterSpacing:'1px', color:catColor, fontWeight:'700', lineHeight:'1.1' }}));
+      const closeBtn = el('button', { text:t('closeBtn'), style:{
+        marginTop:'8px', background:'transparent', border:`1px solid ${M.border}66`,
+        color:M.dimCream, padding:'5px 8px', cursor:'pointer', alignSelf:'flex-start',
+        fontFamily:'Rajdhani, sans-serif', fontSize:'10px', letterSpacing:'1px', borderRadius:'4px',
+      }});
+      closeBtn.addEventListener('click', closeDetail);
+      titleCol.appendChild(closeBtn);
+      detailBar.appendChild(titleCol);
+
+      // Options en cercles
+      const optsScroll = el('div', { style:{
+        flexShrink:'0', display:'flex', alignItems:'center', gap:'16px',
+        padding:'0 18px', height:'100%', overflowX:'auto', maxWidth:'46%',
+        borderRight:`1px solid ${M.border}66`,
+      }});
+
+      const CZ = 54;
+
+      // ── Dialog d'achat ───────────────────────────────────────────────────
+      const showBuyDialog = (opt, cost) => {
+        const overlay = el('div', { style:{
+          position:'fixed', inset:'0', background:'rgba(0,0,0,0.75)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:'9999',
+        }});
+        const box = el('div', { style:{
+          background:'#0e0d09', border:`1px solid ${M.border}`,
+          borderRadius:'8px',
+          padding:'28px 32px', minWidth:'300px', maxWidth:'380px',
+          fontFamily:'Courier New, monospace',
+        }});
+        const canAfford = prog.credits >= cost;
+        // Description : on récupère la desc du premier upgrade associé
+        const upgradeDesc = opt.upgrades?.length
+          ? (UPGRADES[opt.upgrades[0]]?.desc ?? '')
+          : '';
+        box.appendChild(el('div', { text: t('buyTitle'), style:{
+          fontSize:'11px', letterSpacing:'3px', color:M.dimCream, marginBottom:'14px',
+        }}));
+        // Titre = label du slot (nom réel de l'amélioration), sous-titre = variante
+        box.appendChild(el('div', { text: tEquip(slot.label), style:{
+          fontSize:'17px', fontWeight:'700', color: catColor, letterSpacing:'1px', marginBottom:'2px',
+        }}));
+        box.appendChild(el('div', { text: tEquip(opt.name), style:{
+          fontSize:'11px', color:M.dimCream, letterSpacing:'0.5px', marginBottom:'12px',
+        }}));
+        if (upgradeDesc) {
+          box.appendChild(el('div', { text: tEquip(upgradeDesc), style:{
+            fontSize:'10px', color:M.dimCream+'bb', lineHeight:'1.5',
+            marginBottom:'14px', borderLeft:`2px solid ${catColor}55`, paddingLeft:'8px',
+          }}));
+        }
+        const rows = [
+          [t('buyCost'),   `${cost.toLocaleString()} ✦`],
+          [t('buyHave'),   `${prog.credits.toLocaleString()} ✦`],
+        ];
+        rows.forEach(([label, val]) => {
+          const row = el('div', { style:{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }});
+          row.appendChild(el('span', { text:label, style:{ fontSize:'12px', color:M.dimCream }}));
+          row.appendChild(el('span', { text:val, style:{
+            fontSize:'12px', fontWeight:'700',
+            color: label === t('buyCost') ? M.yellow : canAfford ? '#7fe07f' : '#ff6655',
+          }}));
+          box.appendChild(row);
+        });
+        if (!canAfford) {
+          box.appendChild(el('div', { text: t('buyNoCredits'), style:{
+            fontSize:'11px', color:'#ff6655', letterSpacing:'1px',
+            marginTop:'10px', marginBottom:'4px', fontWeight:'700',
+          }}));
+        }
+        const btns = el('div', { style:{ display:'flex', gap:'12px', marginTop:'20px' }});
+        if (canAfford) {
+          const yes = el('button', { text: t('buyYes'), style:{
+            flex:'1', padding:'9px', background:catColor, color:'#0a0a08',
+            fontFamily:'Rajdhani, sans-serif', fontSize:'13px', fontWeight:'700',
+            letterSpacing:'1.5px', border:'none', borderRadius:'4px', cursor:'pointer',
+          }});
+          yes.addEventListener('click', () => {
+            if (prog.buyOption(activeSlotKey, opt.id, cost)) {
+              overlay.remove();
+              this._playBuySound();
+              prog.setLoadoutItem(selectedSlot, activeSlotKey, opt.id);
+              if (this._previewModelRoot) this._attachPreviewMissiles(this._previewModelRoot, selectedSlot);
+              renderDetailBar(); renderTable(); renderStatBars();
+              refreshCredits();
+            }
+          });
+          btns.appendChild(yes);
+        }
+        const no = el('button', { text: t('buyNo'), style:{
+          flex:'1', padding:'9px', background:'transparent',
+          border:`1px solid ${M.border}`, borderRadius:'4px', color:M.dimCream,
+          fontFamily:'Rajdhani, sans-serif', fontSize:'13px', letterSpacing:'1.5px', cursor:'pointer',
+        }});
+        no.addEventListener('click', () => overlay.remove());
+        btns.appendChild(no);
+        box.appendChild(btns);
+        overlay.appendChild(box);
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+      };
+
+      // ── Cas spécial : défense active (UI 2 niveaux) ──────────────────────────
+      if (activeSlotKey === 'active_defense') {
+        const parseAd = id => {
+          if (!id || id === 'none') return { type:'none', level:0 };
+          const p = id.split('_');
+          if (p[0] === 'shield') return { type:`shield_${p[1]}`, level:parseInt(p[2]) };
+          return { type:p[0], level:parseInt(p[1]) };
+        };
+        const buildAdId = (type, level) => type === 'none' ? 'none' : `${type}_${level}`;
+        const currentParsed = parseAd(loadout[activeSlotKey] ?? 'none');
+        let selType  = currentParsed.type;
+        let selLevel = currentParsed.level;
+
+        const AD_TYPES = [
+          { key:'none',         label:t('adNone'),          icon:'○' },
+          { key:'leurres',      label:t('adLeurres'),       icon:'◉' },
+          { key:'ecm',          label:t('adEcmLabel'),      icon:'⊡' },
+          { key:'shield_front', label:t('adShieldFrontSh'), icon:'◭' },
+          { key:'shield_rear',  label:t('adShieldRearSh'),  icon:'◬' },
+          { key:'shield_full',  label:t('adShield360Sh'),   icon:'⊙' },
+        ];
+
+        const adWrap = el('div', { style:{
+          flex:'1', display:'flex', flexDirection:'row', alignItems:'center',
+          padding:'0 18px', gap:'8px', flexWrap:'wrap',
+        }});
+
+        // Section type
+        const typeRow = el('div', { style:{
+          display:'flex', alignItems:'center', gap:'6px', flexShrink:'0',
+        }});
+
+        // Séparateur vertical
+        const adSep = el('div', { style:{
+          width:'1px', height:'28px', background:`${catColor}40`, flexShrink:'0', alignSelf:'center',
+        }});
+
+        // Section niveau
+        const levelRow = el('div', { style:{
+          display:'flex', alignItems:'center', gap:'6px', flexShrink:'0',
+        }});
+
+        const renderAd = () => {
+          typeRow.innerHTML = '';
+          typeRow.appendChild(el('span', { text:'TYPE :', style:{
+            fontSize:'9px', letterSpacing:'1.5px', color:catColor, marginRight:'2px', flexShrink:'0',
+          }}));
+          AD_TYPES.forEach(({ key, label, icon }) => {
+            const isSel      = selType === key;
+            const levelOneId = key === 'none' ? 'none' : `${key}_1`;
+            const levelOneOpt = slot.options.find(o => o.id === levelOneId);
+            const isUnlocked = key === 'none' || (levelOneOpt && level >= levelOneOpt.levelReq);
+            const btn = el('div', { style:{
+              padding:'4px 8px', borderRadius:'4px', cursor:'pointer', fontSize:'10px',
+              border:`1px solid ${isSel ? catColor : (isUnlocked ? `${catColor}55` : '#553322')}`,
+              background: isSel ? `${catColor}30` : 'transparent',
+              color: isSel ? catColor : (isUnlocked ? M.cream : '#8a6a4a'),
+              display:'flex', alignItems:'center', gap:'4px', transition:'all 0.1s',
+              opacity: isUnlocked ? '1' : '0.5', whiteSpace:'nowrap',
+            }});
+            btn.appendChild(el('span', { text:icon, style:{ fontSize:'13px' }}));
+            btn.appendChild(el('span', { text:label }));
+            btn.addEventListener('click', () => {
+              if (!isUnlocked) return;
+              if (key === 'none') {
+                selType = 'none'; selLevel = 0;
+                prog.setLoadoutItem(selectedSlot, activeSlotKey, 'none');
+              } else if (key !== selType) {
+                // Passer au type choisi au niveau I
+                const opt1 = slot.options.find(o => o.id === `${key}_1`);
+                if (!opt1) return;
+                const isFree1  = opt1.levelReq <= 1 && opt1.upgrades.length === 0;
+                const isOwned1 = isFree1 || prog.ownsOption(activeSlotKey, opt1.id);
+                if (!isOwned1) {
+                  const cost1 = OPTION_COSTS[`active_defense:${opt1.id}`] ?? 0;
+                  showBuyDialog(opt1, cost1);
+                  return;
+                }
+                selType = key; selLevel = 1;
+                prog.setLoadoutItem(selectedSlot, activeSlotKey, `${key}_1`);
+              }
+              renderAd();
+              renderTable(); renderStatBars();
+              renderInfo(slot.options.find(o => o.id === (loadout[activeSlotKey] ?? 'none')) ?? slot.options[0]);
+            });
+            btn.addEventListener('mouseover', () => {
+              this._playHoverSound();
+              if (levelOneOpt) { renderInfo(levelOneOpt); renderStatBars(activeSlotKey, levelOneOpt.id); }
+            });
+            btn.addEventListener('mouseout', () => {
+              const cur = slot.options.find(o => o.id === (loadout[activeSlotKey] ?? 'none')) ?? slot.options[0];
+              renderInfo(cur);
+              renderStatBars();
+            });
+            typeRow.appendChild(btn);
+          });
+
+          // Section niveau (masquée si type === none)
+          levelRow.innerHTML = '';
+          adSep.style.display = selType !== 'none' ? 'block' : 'none';
+          if (selType !== 'none') {
+            levelRow.appendChild(el('span', { text:'NIV :', style:{
+              fontSize:'9px', letterSpacing:'1.5px', color:catColor, marginRight:'2px', flexShrink:'0',
+            }}));
+            [1, 2, 3].forEach(lv => {
+              const optId  = buildAdId(selType, lv);
+              const opt    = slot.options.find(o => o.id === optId);
+              if (!opt) return;
+              const isSel2     = selLevel === lv;
+              const isUnlocked2 = level >= opt.levelReq;
+              const isFree2    = opt.levelReq <= 1 && opt.upgrades.length === 0;
+              const isOwned2   = isFree2 || prog.ownsOption(activeSlotKey, opt.id);
+              const optCost2   = OPTION_COSTS[`active_defense:${opt.id}`] ?? 0;
+              const ROMAN      = ['', 'I', 'II', 'III'];
+              const btn2 = el('div', { style:{
+                padding:'5px 14px', borderRadius:'4px', cursor:'pointer', fontSize:'12px',
+                fontWeight: isSel2 ? '700' : '500',
+                border:`1px solid ${isSel2 ? catColor : (isUnlocked2 ? `${catColor}55` : '#553322')}`,
+                background: isSel2 ? `${catColor}30` : 'transparent',
+                color: isSel2 ? catColor : (isUnlocked2 ? (isOwned2 ? M.cream : M.yellow) : '#8a6a4a'),
+                transition:'all 0.1s', position:'relative',
+              }});
+              btn2.textContent = ROMAN[lv];
+              if (!isOwned2 && isUnlocked2 && optCost2 > 0) {
+                const badge = el('div', { text:`${(optCost2/1000).toFixed(0)}k✦`, style:{
+                  position:'absolute', top:'-8px', right:'-6px',
+                  background:'#1a1700', color:M.yellow, fontWeight:'800',
+                  fontSize:'7px', padding:'1px 3px', borderRadius:'3px',
+                  border:`1px solid ${M.yellow}66`, whiteSpace:'nowrap',
+                }});
+                btn2.appendChild(badge);
+              }
+              btn2.addEventListener('click', () => {
+                if (!isUnlocked2) { renderInfo(opt); return; }
+                if (!isOwned2) { showBuyDialog(opt, optCost2); return; }
+                selLevel = lv;
+                prog.setLoadoutItem(selectedSlot, activeSlotKey, optId);
+                if (this._previewModelRoot) this._attachPreviewMissiles(this._previewModelRoot, selectedSlot);
+                renderAd(); renderTable(); renderStatBars();
+                renderInfo(opt);
+              });
+              btn2.addEventListener('mouseover', () => {
+                this._playHoverSound();
+                renderInfo(opt); renderStatBars(activeSlotKey, opt.id);
+              });
+              btn2.addEventListener('mouseout', () => {
+                const cur = slot.options.find(o => o.id === (loadout[activeSlotKey] ?? 'none')) ?? slot.options[0];
+                renderInfo(cur); renderStatBars();
+              });
+              levelRow.appendChild(btn2);
+            });
+          }
+        };
+
+        adWrap.appendChild(typeRow);
+        adWrap.appendChild(adSep);
+        adWrap.appendChild(levelRow);
+        optsScroll.appendChild(adWrap);
+        detailBar.appendChild(optsScroll);
+
+        _infoCol = el('div', { style:{
+          flex:'1', minWidth:'0', padding:'14px 18px', overflowY:'auto',
+          display:'flex', flexDirection:'column', justifyContent:'center',
+        }});
+        detailBar.appendChild(_infoCol);
+        const pinnedAd = slot.options.find(o => o.id === (loadout[activeSlotKey] ?? 'none')) ?? slot.options[0];
+        renderAd();
+        renderInfo(pinnedAd);
+        return;
+      }
+
+      slot.options.forEach(opt => {
+        const isEquipped = loadout[activeSlotKey] === opt.id;
+        const isUnlocked = level >= opt.levelReq;
+        const isFree     = opt.levelReq <= 1 && opt.upgrades.length === 0;
+        const isOwned    = isFree || prog.ownsOption(activeSlotKey, opt.id);
+        const optCost    = OPTION_COSTS[`${activeSlotKey}:${opt.id}`] ?? 0;
+
+        // Couleurs selon état
+        let borderCol, bgCol, textCol;
+        if (isEquipped)         { borderCol = catColor;        bgCol = `${catColor}33`;          textCol = catColor;    }
+        else if (!isUnlocked)   { borderCol = '#553322';       bgCol = 'rgba(14,11,8,0.9)';      textCol = '#8a6a4a';   }
+        else if (!isOwned)      { borderCol = M.yellow+'88';   bgCol = 'rgba(20,18,10,0.95)';    textCol = M.yellow;    }
+        else                    { borderCol = M.border+'aa';   bgCol = 'rgba(22,20,15,0.95)';    textCol = M.cream;     }
+
+        const item = el('div', { style:{
+          display:'flex', flexDirection:'column', alignItems:'center', gap:'5px',
+          cursor:'pointer', minWidth:`${CZ}px`, flexShrink:'0',
+        }});
+
+        const circleWrap = el('div', { style:{ position:'relative', width:`${CZ}px`, height:`${CZ}px` }});
+        const circle = el('div', { style:{
+          width:`${CZ}px`, height:`${CZ}px`, borderRadius:'50%',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          fontSize: !isUnlocked ? '16px' : '22px', transition:'all 0.1s',
+          border:`2px solid ${borderCol}`, background:bgCol, color:textCol,
+        }});
+        if (!isUnlocked)       circle.textContent = '⊘';
+        else if (!isOwned)     circle.textContent = '✦';   // achetable
+        else                   circle.textContent = opt.icon ?? '○';
+        circleWrap.appendChild(circle);
+
+        if (isEquipped) {
+          const badge = el('div', { style:{
+            position:'absolute', top:'-4px', right:'-4px',
+            width:'18px', height:'18px', borderRadius:'50%',
+            background:catColor, color:'#000', fontWeight:'900',
+            display:'flex', alignItems:'center', justifyContent:'center', fontSize:'10px',
+            border:'2px solid rgba(7,7,6,0.95)',
+          }});
+          badge.textContent = '✓';
+          circleWrap.appendChild(badge);
+        } else if (!isOwned && isUnlocked && optCost > 0) {
+          // Badge coût
+          const cb = el('div', { text:`${(optCost/1000).toFixed(0)}k✦`, style:{
+            position:'absolute', bottom:'-6px', left:'50%', transform:'translateX(-50%)',
+            background:'#1a1700', color:M.yellow, fontWeight:'800',
+            fontSize:'7px', letterSpacing:'0.5px', padding:'1px 4px', borderRadius:'4px',
+            border:`1px solid ${M.yellow}66`, whiteSpace:'nowrap',
+          }});
+          circleWrap.appendChild(cb);
+        } else if (newInSlot.has(opt.id)) {
+          const nb = el('div', { text:t('newBadge'), style:{
+            position:'absolute', top:'-6px', left:'50%', transform:'translateX(-50%)',
+            background:'#ff4466', color:'#fff', fontWeight:'800',
+            fontSize:'7px', letterSpacing:'0.5px', padding:'1px 4px', borderRadius:'4px',
+            border:'1px solid rgba(7,7,6,0.95)', whiteSpace:'nowrap',
+          }});
+          circleWrap.appendChild(nb);
+        }
+        item.appendChild(circleWrap);
+        item.appendChild(el('div', { text: tEquip(opt.name), style:{
+          fontSize:'10px', color: isEquipped ? catColor : isOwned ? M.cream : isUnlocked ? M.yellow : '#9a7a5a',
+          textAlign:'center', letterSpacing:'0.3px', maxWidth:'68px', lineHeight:'1.2',
+          fontWeight: isEquipped ? '700' : '500',
+        }}));
+        item.appendChild(el('div', { text: opt.levelReq > 1 ? `${t('lvlReqPrefix')} ${opt.levelReq}` : t('baseTier'), style:{
+          fontSize:'9px', fontWeight:'700', letterSpacing:'0.5px',
+          color: opt.levelReq > 1 ? (isUnlocked ? M.yellow : '#cc6644') : M.dimCream+'88',
+        }}));
+
+        item.addEventListener('click', () => {
+          infoOptId = opt.id;
+          if (!isUnlocked) {
+            renderInfo(opt); renderStatBars(activeSlotKey, opt.id);
+          } else if (!isOwned) {
+            showBuyDialog(opt, optCost);
+          } else {
+            this._playEquipSound(activeSlotKey);
+            prog.setLoadoutItem(selectedSlot, activeSlotKey, opt.id);
+            if (this._previewModelRoot) this._attachPreviewMissiles(this._previewModelRoot, selectedSlot);
+            renderDetailBar(); renderTable(); renderStatBars();
+          }
+        });
+        item.addEventListener('mouseover', () => {
+          if (!isEquipped) {
+            circle.style.borderColor = `${catColor}cc`;
+            circle.style.background  = `${catColor}1c`;
+          }
+          this._playHoverSound();
+          renderInfo(opt);
+          renderStatBars(activeSlotKey, opt.id);
+        });
+        item.addEventListener('mouseout', () => {
+          if (!isEquipped) {
+            circle.style.borderColor = borderCol;
+            circle.style.background  = bgCol;
+          }
+          const pinned = slot.options.find(o => o.id === infoOptId);
+          renderInfo(pinned ?? slot.options[0]);
+          const pinnedOwned = pinned && (pinned.levelReq <= 1 && pinned.upgrades.length === 0 || prog.ownsOption(activeSlotKey, pinned.id));
+          if (pinned && !pinnedOwned && loadout[activeSlotKey] !== pinned.id) renderStatBars(activeSlotKey, pinned.id);
+          else renderStatBars();
+        });
+
+        optsScroll.appendChild(item);
+      });
+      detailBar.appendChild(optsScroll);
+
+      // Colonne d'information (description + niveau + pros/cons)
+      _infoCol = el('div', { style:{
+        flex:'1', minWidth:'0', padding:'14px 18px', overflowY:'auto',
+        display:'flex', flexDirection:'column', justifyContent:'center',
+      }});
+      detailBar.appendChild(_infoCol);
+      const pinned = slot.options.find(o => o.id === infoOptId) ?? slot.options[0];
+      renderInfo(pinned);
+    };
+
+    // ── TABLEAU CENTRAL (72% gauche) ─────────────────────────────────────────
+    const tableArea = el('div', { style:{
+      position:'absolute', top:'50px', left:'0', right:'28%', bottom:'0',
+      overflowY:'auto', pointerEvents:'all',
+    }});
+    tableArea.classList.add('menu-panel');
+
+    const CIRCLE_SIZE = 'clamp(28px, 3.2vw, 42px)';
+    const COLS = Object.keys(EQUIPMENT_CATALOG).length;
+
+    const renderTable = () => {
+      tableArea.innerHTML = '';
+      const loadout = prog.getLoadout(selectedSlot);
+
+      // En-têtes de colonnes
+      const headerRow = el('div', { style:{
+        display:'grid', gridTemplateColumns:`repeat(${COLS}, 1fr)`,
+        borderBottom:`1px solid ${M.border}`, position:'sticky', top:'0',
+        background:'rgba(5,5,4,0.98)', zIndex:'2',
+      }});
+      Object.entries(EQUIPMENT_CATALOG).forEach(([catKey, cat]) => {
+        const cc  = CAT_COLORS[catKey] ?? M.accent;
+        const hdr = el('div', { style:{
+          padding:'clamp(7px, 1vw, 12px)', borderRight:`1px solid ${M.border}44`,
+          display:'flex', alignItems:'center', gap:'clamp(3px, 0.5vw, 6px)', overflow:'hidden',
+        }});
+        hdr.appendChild(el('span', { text: cat.icon, style:{ fontSize:'clamp(11px, 1.3vw, 16px)', color:cc, flexShrink:'0' }}));
+        hdr.appendChild(el('span', { text: tEquip(cat.label), style:{
+          fontSize:'clamp(7px, 0.85vw, 11px)', letterSpacing:'clamp(0.5px, 0.15vw, 2px)',
+          fontWeight:'700', color:cc, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+        }}));
+        const catNew = prog.getNewOptions().filter(o => o.catKey === catKey).length;
+        if (catNew > 0) {
+          hdr.appendChild(el('span', { text:`${catNew}`, style:{
+            marginLeft:'auto', background:'#ff4466', color:'#fff', fontWeight:'800',
+            fontSize:'9px', borderRadius:'50%', minWidth:'16px', height:'16px', flexShrink:'0',
+            display:'flex', alignItems:'center', justifyContent:'center', padding:'0 4px',
+          }}));
+        }
+        headerRow.appendChild(hdr);
+      });
+      tableArea.appendChild(headerRow);
+
+      // Lignes de slots
+      const catEntries = Object.entries(EQUIPMENT_CATALOG);
+      const maxSlots   = Math.max(...catEntries.map(([, cat]) => Object.keys(cat.slots).length));
+
+      for (let rowIdx = 0; rowIdx < maxSlots; rowIdx++) {
+        const row = el('div', { style:{
+          display:'grid', gridTemplateColumns:`repeat(${COLS}, 1fr)`,
+          borderBottom:`1px solid ${M.border}22`,
+        }});
+
+        catEntries.forEach(([catKey, cat]) => {
+          const cc       = CAT_COLORS[catKey] ?? M.accent;
+          const slotEntries = Object.entries(cat.slots);
+          const cell     = el('div', { style:{
+            padding:'clamp(6px, 0.8vw, 11px) clamp(6px, 0.9vw, 13px)',
+            borderRight:`1px solid ${M.border}22`,
+            minHeight:'clamp(54px, 6vw, 72px)', display:'flex', alignItems:'center',
+            gap:'clamp(5px, 0.7vw, 11px)',
+          }});
+
+          if (rowIdx < slotEntries.length) {
+            const [slotKey, slot] = slotEntries[rowIdx];
+            const equippedOpt = slot.options.find(o => o.id === (loadout[slotKey] ?? slot.options[0].id));
+            const isActive    = activeSlotKey === slotKey && activeCatKey === catKey;
+            const isUnlocked  = equippedOpt ? level >= equippedOpt.levelReq : true;
+            // Slot verrouillé : aucune option non-basique accessible au niveau actuel
+            const hasAnyUpgrade = slot.options.some(o => (o.levelReq > 1 || o.upgrades.length > 0) && level >= o.levelReq);
+            const isLocked = !hasAnyUpgrade;
+
+            cell.style.cursor     = 'pointer';
+            cell.style.background = isActive ? `${cc}12` : 'transparent';
+            cell.style.transition = 'background 0.1s';
+
+            // Cercle mini
+            const circleWrap = el('div', { style:{ position:'relative', width:CIRCLE_SIZE, height:CIRCLE_SIZE, flexShrink:'0' }});
+            const circle = el('div', { style:{
+              width:CIRCLE_SIZE, height:CIRCLE_SIZE, borderRadius:'50%',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:'clamp(12px, 1.5vw, 17px)',
+              border: isActive ? `2px solid ${cc}` : isLocked ? `1px solid ${M.border}55` : `2px solid ${cc}66`,
+              background: isActive ? `${cc}2a` : isLocked ? 'transparent' : `${cc}14`,
+              color: isLocked ? M.dimCream : cc,
+              opacity: isLocked ? '0.38' : '1',
+              transition:'all 0.1s',
+            }});
+            circle.textContent = equippedOpt?.icon ?? '○';
+            circleWrap.appendChild(circle);
+            cell.appendChild(circleWrap);
+
+            // Labels
+            const labels = el('div', { style:{ minWidth:'0', overflow:'hidden', opacity: isLocked ? '0.38' : '1' }});
+            labels.appendChild(el('div', { text: tEquip(slot.label), style:{
+              fontSize:'clamp(6px, 0.7vw, 9px)', letterSpacing:'clamp(0.5px, 0.12vw, 1.5px)',
+              color:M.dimCream, marginBottom:'3px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+            }}));
+            labels.appendChild(el('div', { text: equippedOpt ? tEquip(equippedOpt.name) : '—', style:{
+              fontSize:'clamp(9px, 1.0vw, 13px)', fontWeight:'700', color: isActive ? cc : M.cream,
+              letterSpacing:'0.3px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+            }}));
+            cell.appendChild(labels);
+
+            // Badge NEW si le slot contient des options débloquées non consultées
+            if (prog.slotHasNew(slotKey)) {
+              labels.appendChild(el('div', { text:t('newSlotBadge'), style:{
+                fontSize:'8px', fontWeight:'800', letterSpacing:'0.5px',
+                color:'#ff4466', marginTop:'3px',
+              }}));
+            }
+
+            // Flèche d'ouverture
+            const arrow = el('div', { text: isActive ? '▲' : '▼', style:{
+              marginLeft:'auto', fontSize:'11px', color:cc+'aa', flexShrink:'0',
+            }});
+            cell.appendChild(arrow);
+
+            cell.addEventListener('click', () => {
+              if (isActive) closeDetail();
+              else openDetail(slotKey, catKey);
+            });
+            cell.addEventListener('mouseover', () => { if (!isActive) cell.style.background = `${cc}0a`; });
+            cell.addEventListener('mouseout',  () => { if (!isActive) cell.style.background = 'transparent'; });
+          }
+
+          row.appendChild(cell);
+        });
+
+        tableArea.appendChild(row);
+      }
+    };
+
+    wrap.appendChild(tableArea);
+
+    // ── PANEL DROIT (28%) — avion 3D + identité + stats ──────────────────────
+    const rightPanel = el('div', { style:{
+      position:'absolute', top:'50px', right:'0', bottom:'0', width:'28%',
+      display:'flex', flexDirection:'column', pointerEvents:'none',
+    }});
+
+    // Zone avion (transparent, ~38% hauteur — plus petite pour laisser place aux stats)
+    rightPanel.appendChild(el('div', { style:{ flex:'0 0 38%' }}));
+
+    // Panel identité + stats
+    const statsPanel = el('div', { style:{
+      flex:'1', background:'rgba(5,4,3,0.90)', borderTop:`1px solid ${M.border}`,
+      borderLeft:`1px solid ${M.border}`, padding:'14px 18px 14px 18px',
+      overflowY:'auto', overflowX:'hidden', pointerEvents:'all', display:'flex', flexDirection:'column', gap:'9px',
+    }});
+
+    const renderSummary = () => {
+      const b = classifyBuild();
+      typeNameEl.textContent = b.name;
+      typeNameEl.style.color = b.col;
+      typeSubEl.textContent  = b.sub;
+    };
+
+    // Identité : pastilles couleur
+    const identityEl = el('div', { style:{ paddingBottom:'10px', borderBottom:`1px solid ${M.border}` }});
+    const identityRow = el('div', { style:{ display:'flex', alignItems:'center', gap:'8px' }});
+    const cr = el('div', { style:{ display:'flex', gap:'4px', flexShrink:'0' }});
+    Object.entries(TEAM_COLORS).forEach(([key, tc]) => {
+      const cb = el('button', { style:{
+        width:'22px', height:'22px', borderRadius:'4px',
+        border: prog.getPlane(selectedSlot).color === key ? '2px solid #fff' : `1px solid ${M.border}44`,
+        background:tc.hex, cursor:'pointer',
+      }});
+      cb.addEventListener('click', () => {
+        prog.setPlaneColor(selectedSlot, key);
+        this._syncPreviewPlane(selectedSlot);
+        refreshTabs(); refreshIdentity();
+      });
+      cr.appendChild(cb);
+    });
+    identityRow.appendChild(cr);
+    identityEl.appendChild(identityRow);
+    statsPanel.appendChild(identityEl);
+
+    const refreshIdentity = () => {
+      const plane = prog.getPlane(selectedSlot);
+      cr.querySelectorAll('button').forEach((cb, i) => {
+        const key = Object.keys(TEAM_COLORS)[i];
+        cb.style.border = plane.color === key ? '2px solid #fff' : `1px solid ${M.border}44`;
+      });
+    };
+
+    // Barres de stats
+    const statBarsEl = el('div', { style:{ flex:'1' }});
+    statsPanel.appendChild(statBarsEl);
+
+    const statDefs = [
+      { key:'speed',           label:t('statSpeed'),    maxVal:150, col:'#5588ff' },
+      { key:'maneuverability', label:t('statManeuver'), maxVal:150, col:'#88ddff' },
+      { key:'health',          label:t('statHealth'),   maxVal:200, col:'#55cc55' },
+      { key:'weaponry',        label:t('statWeaponry'), maxVal:180, col:'#ff7733' },
+      { key:'defense',         label:t('statDefense'),  maxVal:160, col:'#cc8833' },
+      { key:'logistics',       label:t('statLogistics'),maxVal:160, col:'#aacc44' },
+      { key:'fuel',            label:t('statFuel'),     maxVal:200, col:'#ddaa33' },
+      { key:'ammo',            label:t('statAmmo'),     maxVal:200, col:'#aaccff' },
+    ];
+
+    const renderStatBars = (previewSlotKey = null, previewOptId = null) => {
+      statBarsEl.innerHTML = '';
+      const base = liveStats();
+      const disp = previewSlotKey ? liveStats(previewSlotKey, previewOptId) : base;
+      const isPreview = previewSlotKey !== null;
+      if (!isPreview) renderSummary();
+
+      statDefs.forEach(sd => {
+        const baseValRaw = base[sd.key] ?? 100;
+        const dispValRaw = disp[sd.key] ?? 100;
+        // Plafonne les valeurs affichées au maximum visuel défini
+        const baseVal = Math.min(baseValRaw, sd.maxVal);
+        const dispVal = Math.min(dispValRaw, sd.maxVal);
+        const diff    = Math.round(dispVal - baseVal);
+        const pct     = Math.min(100, Math.max(0, (dispVal / sd.maxVal) * 100));
+        const pctBase = Math.min(100, Math.max(0, (baseVal / sd.maxVal) * 100));
+
+        const row = el('div', { style:{ marginBottom:'7px' }});
+        const top = el('div', { style:{
+          display:'flex', justifyContent:'space-between', alignItems:'baseline',
+          fontSize:'10px', letterSpacing:'1px', marginBottom:'4px',
+        }});
+        top.appendChild(el('span', { text: sd.label, style:{ color:M.dimCream, fontWeight:'600' }}));
+        const valWrap = el('span', { style:{ display:'flex', gap:'6px', alignItems:'baseline' }});
+        if (isPreview && diff !== 0) {
+          valWrap.appendChild(el('span', { text: String(Math.round(baseVal)), style:{ color:M.dimCream, fontSize:'11px' }}));
+          valWrap.appendChild(el('span', { text:'→', style:{ color:M.dimCream, fontSize:'10px' }}));
+        }
+        valWrap.appendChild(el('span', { text: String(Math.round(dispVal)), style:{
+          color: isPreview && diff !== 0 ? (diff > 0 ? '#7fe07f' : '#ff8877') : M.cream,
+          fontWeight:'700', fontSize:'13px',
+        }}));
+        if (isPreview && diff !== 0) {
+          valWrap.appendChild(el('span', { text:`(${diff > 0 ? '+' : ''}${diff})`, style:{
+            fontSize:'10px', fontWeight:'700',
+            color: diff > 0 ? '#7fe07f' : '#ff8877',
+          }}));
+        }
+        top.appendChild(valWrap);
+        row.appendChild(top);
+
+        const bg = el('div', { style:{ background:'#1a1810', height:'7px', borderRadius:'3px', overflow:'hidden', position:'relative' }});
+        if (isPreview && diff !== 0) {
+          const lo = Math.min(pct, pctBase);
+          bg.appendChild(el('div', { style:{ position:'absolute', left:'0', width:`${lo}%`, height:'100%', background: sd.col+'88' }}));
+          bg.appendChild(el('div', { style:{ position:'absolute', left:`${lo}%`, width:`${Math.abs(pct-pctBase)}%`, height:'100%', background: diff>0?'#7fe07f':'#ff8877' }}));
+        } else {
+          bg.appendChild(el('div', { style:{ background:sd.col, width:`${pct}%`, height:'100%' }}));
+        }
+        row.appendChild(bg);
+        statBarsEl.appendChild(row);
+      });
+    };
+
+    rightPanel.appendChild(statsPanel);
+    wrap.appendChild(rightPanel);
+
+    // ── INIT ─────────────────────────────────────────────────────────────────
+    this._root.appendChild(wrap);
+    requestAnimationFrame(() => { wrap.style.opacity = '1'; });
+    refreshTabs(); renderTable(); renderStatBars();
+  }
+
+  // ── STATISTIQUES ──────────────────────────────────────────────────────────
+  _showStats() {
+    this._clear();
+    this._setCurrentScreen(() => this._showStats());
+    this._showPreview('settings');
+    this._syncPreviewPlane();
+
+    const prog = this._progression;
+    const s    = prog.stats;
+
+    const wrap = mkPanelLeft('680px');
+    wrap.appendChild(mkSectionTitle(t('stats')));
+    wrap.appendChild(mkDivider());
+
+    const cols = el('div', { style:{ display:'flex', gap:'28px', alignItems:'flex-start' }});
+    const colL = el('div', { style:{ flex:'1', minWidth:'0' }});
+    const colR = el('div', { style:{ flex:'1', minWidth:'0' }});
+
+    const mkStatRow = (label, value, color = M.cream) => {
+      const row = el('div', { style:{
+        display:'flex', justifyContent:'space-between', alignItems:'center',
+        padding:'5px 0', borderBottom:`1px solid ${M.border}`,
+      }});
+      row.appendChild(el('span', { text:label, style:{ color:M.dimCream, fontSize:'9px', letterSpacing:'2px', textTransform:'uppercase' }}));
+      row.appendChild(el('span', { text:String(value), style:{ color, fontSize:'13px', letterSpacing:'2px', fontWeight:'bold' }}));
+      return row;
+    };
+
+    const { level, xpInLevel } = prog.levelInfo;
+    const xpNext = xpToNextLevel(level);
+    const diffs = [t('diffEasy'), t('diffNormal'), t('diffHard'), t('diffExpert')];
+
+    // Colonne gauche
+    colL.appendChild(mkLabel(t('sectionGlobal')));
+    colL.appendChild(mkStatRow(t('statLevelLabel'), level, M.accent));
+    colL.appendChild(mkStatRow(t('statXpTotal'), prog.totalXp.toLocaleString(), M.yellow));
+    colL.appendChild(mkStatRow(t('statCredits'), prog.credits.toLocaleString(), M.yellow));
+    colL.appendChild(mkStatRow(t('gamesPlayed'), s.totalGames));
+    colL.appendChild(mkStatRow(t('kills'), s.totalKills, M.green));
+    colL.appendChild(mkStatRow(t('deaths'), s.totalDeaths, M.red));
+    colL.appendChild(mkStatRow(t('statKD'), prog.kd(s.totalKills, s.totalDeaths), M.cream));
+    const flightHours = Math.floor(s.flightTimeSec / 3600);
+    const flightMin   = Math.floor((s.flightTimeSec % 3600) / 60);
+    colL.appendChild(mkStatRow(t('flightTime'), `${flightHours}h ${flightMin}min`));
+    colL.appendChild(mkStatRow(t('statDistance'), Math.round(s.distanceKm).toLocaleString()));
+
+    colL.appendChild(mkDivider());
+    colL.appendChild(mkLabel(t('statsSurvival')));
+    colL.appendChild(mkStatRow(t('bestWave'), s.survival.bestWave, M.yellow));
+    colL.appendChild(mkStatRow(t('statMaxDiff'), diffs[s.survival.maxDiff ?? 0] ?? diffs[0]));
+    const sMin = Math.floor(s.survival.timeSec / 60);
+    colL.appendChild(mkStatRow(t('statSurvTime'), `${sMin} min`));
+
+    // Colonne droite
+    colR.appendChild(mkLabel(t('mission')));
+    colR.appendChild(mkStatRow(t('statVictories'), s.mission.victories, M.green));
+    colR.appendChild(mkStatRow(t('statMaxDiff'), diffs[s.mission.maxDiff ?? 0] ?? diffs[0]));
+    colR.appendChild(mkStatRow(t('statMaxKills'), s.mission.maxKills, M.yellow));
+    const mMin = Math.floor(s.mission.timeSec / 60);
+    colR.appendChild(mkStatRow(t('statTotalTime'), `${mMin} min`));
+
+    colR.appendChild(mkDivider());
+    colR.appendChild(mkLabel(t('sectionVersus')));
+    colR.appendChild(mkStatRow(t('statVictories'), s.versus.wins, M.green));
+    colR.appendChild(mkStatRow(t('statLosses'), s.versus.losses, M.red));
+    colR.appendChild(mkStatRow(t('kills'), s.versus.kills));
+    colR.appendChild(mkStatRow(t('deaths'), s.versus.deaths));
+    colR.appendChild(mkStatRow(t('statRatio'), prog.kd(s.versus.kills, s.versus.deaths)));
+
+    colR.appendChild(mkDivider());
+    colR.appendChild(mkLabel(t('sectionTeams')));
+    colR.appendChild(mkStatRow(t('statVictories'), s.teams.wins, M.green));
+    colR.appendChild(mkStatRow(t('statLosses'), s.teams.losses, M.red));
+    colR.appendChild(mkStatRow(t('kills'), s.teams.kills));
+    colR.appendChild(mkStatRow(t('deaths'), s.teams.deaths));
+    colR.appendChild(mkStatRow(t('statAssists'), s.teams.assists));
+    colR.appendChild(mkStatRow(t('statRatio'), prog.kd(s.teams.kills, s.teams.deaths)));
+
+    cols.appendChild(colL); cols.appendChild(colR);
+    wrap.appendChild(cols);
+    wrap.appendChild(mkDivider());
+
+    const btnBack = mkBtn(t('back'), M.dimCream);
+    btnBack.addEventListener('click', () => this._showMain());
+    wrap.appendChild(btnBack);
+    this._root.appendChild(wrap);
+  }
+
   _stopGamepadNav() {
     if (this._gpNavId) { cancelAnimationFrame(this._gpNavId); this._gpNavId = null; }
   }
@@ -2204,3 +4559,6 @@ export class Menu {
 }
 
 export { TEAM_COLORS };
+export { ProgressionSystem };
+
+

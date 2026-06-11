@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AudioManager } from './AudioManager.js';
-import { t, tCtrlLines, getLang, setLang } from './i18n.js';
+import { t, tCtrlLines, tCtrlBindings, getLang, setLang } from './i18n.js';
+import { IS_MOBILE } from './MobileControls.js';
 
 // ── Palette WW2 cockpit ────────────────────────────────────────────────────────
 const C = {
@@ -117,7 +118,7 @@ export class UI {
     // Ne pas écraser le message "terminé" si le timer tourne encore
     if (this._refuelCompleteTimer > 0) return;
     this._ensureRefuelEl();
-    if (active) this._refuelEl.textContent = '▲ RAVITAILLEMENT EN COURS ▲';
+    if (active) this._refuelEl.textContent = t('refuelInProgress');
     this._refuelEl.style.display = active ? 'block' : 'none';
   }
 
@@ -127,7 +128,7 @@ export class UI {
 
   showRefuelComplete() {
     this._ensureRefuelEl();
-    this._refuelEl.textContent = '✓ RAVITAILLEMENT TERMINÉ';
+    this._refuelEl.textContent = t('refuelDone');
     this._refuelEl.style.display = 'block';
     this._refuelCompleteTimer = 3.0;
   }
@@ -137,6 +138,84 @@ export class UI {
       this._refuelCompleteTimer = 0;
       if (this._refuelEl) this._refuelEl.style.display = 'none';
     }
+  }
+
+  // ── Conseil contextuel (tutoriel) ─────────────────────────────────────────
+  showTip(text, duration = 5, opts = {}) {
+    const dismissible = opts.dismissible ?? true;
+    if (!this._tipEl) {
+      this._tipEl = document.createElement('div');
+      Object.assign(this._tipEl.style, {
+        position     : 'absolute',
+        top          : '18%',
+        left         : '50%',
+        transform    : 'translateX(-50%)',
+        color        : '#d4c88a',
+        fontFamily   : '"Courier New", monospace',
+        fontSize     : '13px',
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+        pointerEvents: 'none',
+        zIndex       : '150',
+        textShadow   : '0 0 10px rgba(212,200,138,0.5)',
+        background   : 'rgba(10,10,6,0.78)',
+        border       : '1px solid rgba(212,200,138,0.22)',
+        padding      : '10px 26px',
+        display      : 'none',
+        transition   : 'opacity 0.6s ease',
+        textAlign    : 'center',
+        maxWidth     : '520px',
+        lineHeight   : '1.6',
+        whiteSpace   : 'pre',
+      });
+      this._tipText = document.createElement('div');
+      this._tipEl.appendChild(this._tipText);
+      // Bouton "Ne plus afficher" — seul élément cliquable
+      this._tipHide = document.createElement('button');
+      Object.assign(this._tipHide.style, {
+        marginTop    : '8px',
+        background   : 'transparent',
+        border       : '1px solid rgba(212,200,138,0.4)',
+        color        : '#a89c66',
+        fontFamily   : '"Courier New", monospace',
+        fontSize     : '10px',
+        letterSpacing: '2px',
+        padding      : '4px 12px',
+        cursor       : 'pointer',
+        pointerEvents: 'auto',
+        textTransform: 'uppercase',
+      });
+      this._tipHide.textContent = t('tutHide');
+      this._tipHide.addEventListener('click', () => {
+        try { localStorage.setItem('cielDeFeu_tutorialDisabled', '1'); } catch (_) {}
+        this._tipEl.style.display = 'none';
+        if (this._onTutorialDisabled) this._onTutorialDisabled();
+      });
+      this._tipEl.appendChild(this._tipHide);
+      // Indicateur touche rapide (mode entraînement) — ne persiste pas dans localStorage
+      this._tipSkip = document.createElement('div');
+      Object.assign(this._tipSkip.style, {
+        marginTop    : '8px',
+        fontSize     : '9px',
+        letterSpacing: '2px',
+        color        : 'rgba(212,200,138,0.45)',
+        display      : 'none',
+        textTransform: 'uppercase',
+      });
+      this._tipSkip.textContent = t('tutSkip');
+      this._tipEl.appendChild(this._tipSkip);
+      this._root.appendChild(this._tipEl);
+    }
+    clearTimeout(this._tipTimeout);
+    this._tipText.textContent = text;
+    this._tipHide.style.display = dismissible ? 'inline-block' : 'none';
+    this._tipSkip.style.display = (!dismissible && (opts.skippable ?? false)) ? 'block' : 'none';
+    this._tipEl.style.opacity = '1';
+    this._tipEl.style.display = 'block';
+    this._tipTimeout = setTimeout(() => {
+      this._tipEl.style.opacity = '0';
+      setTimeout(() => { if (this._tipEl) this._tipEl.style.display = 'none'; }, 650);
+    }, duration * 1000);
   }
 
   showPause(visible, onQuit = null, onResume = null, onRespawn = null, isSurvival = null) {
@@ -167,6 +246,7 @@ export class UI {
         Object.assign(b.style, {
           background   : primary ? `rgba(212,200,138,0.08)` : 'transparent',
           border       : `1px solid ${col}`,
+          borderRadius : '4px',
           color        : col,
           fontFamily   : '"Courier New",monospace',
           fontSize     : '12px',
@@ -209,6 +289,12 @@ export class UI {
         this._showPauseSettings();
       });
 
+      const btnControls = mkPBtn(t('controls') || 'COMMANDES', C.dimCream);
+      btnControls.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._showPauseControls();
+      });
+
       const btnMenu = mkPBtn(t('mainMenu'), C.dimCream);
       btnMenu.style.marginTop = '4px';
       btnMenu.addEventListener('click', (e) => {
@@ -221,6 +307,7 @@ export class UI {
       wrap.appendChild(btnResume);
       wrap.appendChild(btnRespawn);
       wrap.appendChild(btnSettings);
+      wrap.appendChild(btnControls);
       wrap.appendChild(btnMenu);
       document.body.appendChild(wrap);
       this._pauseOverlay = wrap;
@@ -243,6 +330,150 @@ export class UI {
     if (visible) requestAnimationFrame(() => {
       this._pauseOverlay?.querySelector('button')?.focus();
     });
+  }
+
+  setMobileControls(mc) {
+    this._mobileControls = mc;
+  }
+
+  // ── Panneau contrôles mobiles (gyro / joystick / sensibilité) ─────────────
+  _buildMobileCtrlPanel() {
+    const mc = this._mobileControls;
+    const panel = document.createElement('div');
+    Object.assign(panel.style, {
+      flex: '1', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', padding: '32px 24px', gap: '24px',
+      overflowY: 'auto',
+    });
+
+    // ── Section label ──
+    const secLabel = (txt) => {
+      const d = document.createElement('div');
+      d.textContent = txt;
+      Object.assign(d.style, {
+        fontSize: '11px', letterSpacing: '4px', color: C.dimCream,
+        fontFamily: 'Rajdhani,sans-serif', fontWeight: '700',
+        width: '100%', maxWidth: '340px', paddingBottom: '8px',
+        borderBottom: `1px solid #3a3020`,
+      });
+      return d;
+    };
+
+    // ── Toggle joystick / gyro ──
+    panel.appendChild(secLabel(t('mobileCtrlMode')));
+
+    const toggleRow = document.createElement('div');
+    Object.assign(toggleRow.style, {
+      display: 'flex', gap: '12px', width: '100%', maxWidth: '340px',
+    });
+
+    const mkModeBtn = (label, mode) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      const isActive = () => (mode === 'gyro') === mc.gyroMode;
+      const refresh = () => {
+        const active = isActive();
+        Object.assign(b.style, {
+          flex: '1', padding: '14px 0', borderRadius: '4px',
+          border: `1px solid ${active ? C.cream : '#3a3020'}`,
+          background: active ? 'rgba(212,200,138,0.12)' : 'transparent',
+          color: active ? C.cream : C.dimCream,
+          fontFamily: '"Courier New",monospace', fontSize: '12px',
+          letterSpacing: '3px', cursor: 'pointer', transition: 'all 0.15s',
+        });
+      };
+      refresh();
+      b.addEventListener('click', async () => {
+        const ok = await mc.setMode(mode);
+        if (!ok) {
+          statusMsg.textContent = t(mode === 'gyro' ? 'gyroPermDenied' : 'gyroNotSupported');
+          statusMsg.style.color = '#cc4444';
+          return;
+        }
+        statusMsg.textContent = '';
+        toggleRow.querySelectorAll('button').forEach(b2 => b2.dispatchEvent(new Event('refresh')));
+        calibSection.style.display = mc.gyroMode ? '' : 'none';
+        sensitivitySection.style.display = mc.gyroMode ? '' : 'none';
+      });
+      b.addEventListener('refresh', refresh);
+      b.addEventListener('touchstart', async (e) => { e.preventDefault(); b.click(); }, { passive: false });
+      return b;
+    };
+
+    toggleRow.appendChild(mkModeBtn(t('mobileJoystick'), 'joystick'));
+    toggleRow.appendChild(mkModeBtn(t('mobileGyro'), 'gyro'));
+    panel.appendChild(toggleRow);
+
+    const statusMsg = document.createElement('div');
+    Object.assign(statusMsg.style, {
+      fontSize: '11px', letterSpacing: '1px', color: '#cc4444',
+      fontFamily: 'Rajdhani,sans-serif', minHeight: '16px', width: '100%', maxWidth: '340px',
+    });
+    panel.appendChild(statusMsg);
+
+    // ── Calibration ──
+    const calibSection = document.createElement('div');
+    calibSection.style.cssText = `width:100%;max-width:340px;display:${mc.gyroMode ? '' : 'none'};`;
+
+    calibSection.appendChild(secLabel(t('gyroCalibrate')));
+    const calibDesc = document.createElement('div');
+    calibDesc.textContent = t('gyroCalibrateDesc');
+    Object.assign(calibDesc.style, {
+      fontSize: '12px', color: C.dimCream, fontFamily: 'Rajdhani,sans-serif',
+      marginBottom: '12px', lineHeight: '1.5',
+    });
+    calibSection.appendChild(calibDesc);
+
+    const calibBtn = document.createElement('button');
+    calibBtn.textContent = '✦ ' + t('gyroCalibrate');
+    Object.assign(calibBtn.style, {
+      width: '100%', padding: '13px 0', borderRadius: '4px',
+      border: `1px solid ${C.cream}`, background: 'transparent',
+      color: C.cream, fontFamily: '"Courier New",monospace',
+      fontSize: '12px', letterSpacing: '3px', cursor: 'pointer', transition: 'background 0.15s',
+    });
+    calibBtn.addEventListener('click', () => {
+      mc.calibrate();
+      calibBtn.textContent = '✓ ' + t('gyroCalibrate');
+      setTimeout(() => { calibBtn.textContent = '✦ ' + t('gyroCalibrate'); }, 1500);
+    });
+    calibBtn.addEventListener('touchstart', (e) => { e.preventDefault(); calibBtn.click(); }, { passive: false });
+    calibBtn.addEventListener('mouseover', () => { calibBtn.style.background = 'rgba(212,200,138,0.1)'; });
+    calibBtn.addEventListener('mouseout',  () => { calibBtn.style.background = 'transparent'; });
+    calibSection.appendChild(calibBtn);
+    panel.appendChild(calibSection);
+
+    // ── Sensibilité ──
+    const sensitivitySection = document.createElement('div');
+    sensitivitySection.style.cssText = `width:100%;max-width:340px;display:${mc.gyroMode ? '' : 'none'};`;
+    sensitivitySection.appendChild(secLabel(t('gyroSensitivity')));
+
+    const sliderRow = document.createElement('div');
+    Object.assign(sliderRow.style, { display: 'flex', alignItems: 'center', gap: '12px' });
+
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = '0.3'; slider.max = '3.0'; slider.step = '0.1';
+    slider.value = String(mc.gyroSensitivity);
+    Object.assign(slider.style, { flex: '1', accentColor: C.cream, cursor: 'pointer' });
+
+    const sensVal = document.createElement('div');
+    sensVal.textContent = Number(mc.gyroSensitivity).toFixed(1) + '×';
+    Object.assign(sensVal.style, {
+      fontFamily: '"Courier New",monospace', fontSize: '13px',
+      color: C.cream, minWidth: '36px', textAlign: 'right',
+    });
+
+    slider.addEventListener('input', () => {
+      mc.setSensitivity(parseFloat(slider.value));
+      sensVal.textContent = Number(slider.value).toFixed(1) + '×';
+    });
+
+    sliderRow.appendChild(slider);
+    sliderRow.appendChild(sensVal);
+    sensitivitySection.appendChild(sliderRow);
+    panel.appendChild(sensitivitySection);
+
+    return panel;
   }
 
   _showPauseSettings() {
@@ -269,6 +500,7 @@ export class UI {
         b.textContent = label;
         Object.assign(b.style, {
           background: 'transparent', border: `1px solid ${col}`,
+          borderRadius: '4px',
           color: col, fontFamily: '"Courier New",monospace',
           fontSize: '11px', letterSpacing: '3px',
           padding: '8px 24px', cursor: 'pointer', outline: 'none',
@@ -458,6 +690,175 @@ export class UI {
     );
   }
 
+  _showPauseControls() {
+    if (this._pauseCtrlOverlay) {
+      this._pauseCtrlOverlay.remove();
+      this._pauseCtrlOverlay = null;
+    }
+
+    const isSim = localStorage.getItem('ctrlMode') === 'simulator';
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, {
+      position: 'fixed', inset: '0',
+      display: 'flex', flexDirection: 'column',
+      background: 'rgba(6,6,5,0.97)',
+      fontFamily: '"Courier New",monospace',
+      color: C.cream, zIndex: '503',
+    });
+
+    // ── Top bar ──
+    const bar = document.createElement('div');
+    Object.assign(bar.style, {
+      height: '54px', flexShrink: '0',
+      background: 'rgba(4,4,3,0.99)',
+      borderBottom: '1px solid #3a3020',
+      display: 'flex', alignItems: 'stretch',
+    });
+    const titleArea = document.createElement('div');
+    Object.assign(titleArea.style, {
+      flex: '1', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', gap: '12px',
+    });
+    const hr = () => { const d = document.createElement('div'); Object.assign(d.style, { flex: '1', height: '1px', background: '#3a3020', margin: '0 8px' }); return d; };
+    titleArea.appendChild(hr());
+    const star = document.createElement('div'); star.textContent = '✦'; star.style.cssText = `color:#cc3300;font-size:12px;`;
+    titleArea.appendChild(star);
+    const ttl = document.createElement('div'); ttl.textContent = t('controls') || 'COMMANDES';
+    ttl.style.cssText = `font-size:18px;font-weight:bold;letter-spacing:6px;font-family:Rajdhani,sans-serif;`;
+    titleArea.appendChild(ttl);
+    const star2 = document.createElement('div'); star2.textContent = '✦'; star2.style.cssText = `color:#cc3300;font-size:12px;`;
+    titleArea.appendChild(star2);
+    titleArea.appendChild(hr());
+    bar.appendChild(titleArea);
+    const backBtn = document.createElement('button');
+    backBtn.textContent = t('back');
+    Object.assign(backBtn.style, {
+      padding: '0 26px', background: '#6a1a00', border: 'none',
+      borderLeft: '1px solid #3a3020', color: C.cream,
+      fontFamily: 'Rajdhani,sans-serif', fontSize: '13px',
+      letterSpacing: '3px', cursor: 'pointer', fontWeight: 'bold',
+      flexShrink: '0', transition: 'background 0.1s',
+    });
+    backBtn.addEventListener('click', () => { wrap.remove(); this._pauseCtrlOverlay = null; });
+    backBtn.addEventListener('mouseover', () => { backBtn.style.background = '#8a2200'; });
+    backBtn.addEventListener('mouseout',  () => { backBtn.style.background = '#6a1a00'; });
+    bar.appendChild(backBtn);
+    wrap.appendChild(bar);
+
+    // ── Mobile : panneau gyro/joystick ──────────────────────────────────────
+    if (IS_MOBILE && this._mobileControls) {
+      wrap.appendChild(this._buildMobileCtrlPanel());
+      document.body.appendChild(wrap);
+      this._pauseCtrlOverlay = wrap;
+      return;
+    }
+
+    // ── Mode tabs ──
+    let activeMode = isSim ? 'sim' : 'std';
+    const tabBar = document.createElement('div');
+    Object.assign(tabBar.style, {
+      display: 'flex', flexShrink: '0',
+      borderBottom: '1px solid #3a3020',
+      background: 'rgba(8,8,6,0.95)',
+    });
+    const mkTab = (label, key) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.dataset.mode = key;
+      const active = () => key === activeMode;
+      const refresh = () => {
+        Object.assign(b.style, {
+          padding: '12px 32px', background: active() ? '#1a180f' : 'transparent',
+          border: 'none', borderBottom: active() ? '2px solid #cc3300' : '2px solid transparent',
+          color: active() ? C.cream : '#6a6040',
+          fontFamily: 'Rajdhani,sans-serif', fontSize: '13px', letterSpacing: '3px',
+          fontWeight: active() ? '800' : '600', cursor: 'pointer', transition: 'all 0.15s',
+        });
+      };
+      refresh();
+      b.addEventListener('click', () => { activeMode = key; rebuildContent(); tabBar.querySelectorAll('button').forEach(t => t.dispatchEvent(new Event('refresh'))); });
+      b.addEventListener('refresh', refresh);
+      return b;
+    };
+    tabBar.appendChild(mkTab(t('ctrlStd') || 'STANDARD', 'std'));
+    tabBar.appendChild(mkTab(t('ctrlSim') || 'SIMULATEUR', 'sim'));
+    wrap.appendChild(tabBar);
+
+    // ── Content area ──
+    const content = document.createElement('div');
+    Object.assign(content.style, { flex: '1', display: 'flex', overflow: 'hidden' });
+    wrap.appendChild(content);
+
+    const _bind = tCtrlBindings();
+    const BINDINGS_STD = _bind.std;
+    const BINDINGS_SIM = _bind.sim;
+    const GAMEPAD      = _bind.gamepad;
+
+    const mkCol = (flex, title) => {
+      const col = document.createElement('div');
+      Object.assign(col.style, { flex, display: 'flex', flexDirection: 'column', overflow: 'hidden' });
+      const hdr = document.createElement('div');
+      hdr.textContent = title;
+      Object.assign(hdr.style, {
+        padding: '14px 28px 12px', flexShrink: '0', borderBottom: '1px solid #3a302022',
+        fontSize: '12px', letterSpacing: '4px', color: '#8a8060', fontWeight: '700',
+        fontFamily: 'Rajdhani,sans-serif',
+      });
+      col.appendChild(hdr);
+      const scroll = document.createElement('div');
+      Object.assign(scroll.style, { flex: '1', overflowY: 'auto', padding: '12px 28px 24px' });
+      col.appendChild(scroll);
+      return { col, scroll };
+    };
+
+    const mkRow = (key, action, keyColor = null) => {
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '7px 0', borderBottom: '1px solid #3a302033',
+      });
+      const chip = document.createElement('span');
+      chip.textContent = key;
+      Object.assign(chip.style, {
+        padding: '2px 10px', background: '#12110a',
+        border: `1px solid ${keyColor || '#3a3020'}`,
+        borderRadius: '4px', fontFamily: 'Rajdhani,sans-serif',
+        fontSize: '12px', fontWeight: '700', letterSpacing: '1px',
+        color: keyColor || C.cream, flexShrink: '0', whiteSpace: 'nowrap', minWidth: '80px',
+        textAlign: 'center',
+      });
+      const act = document.createElement('span');
+      act.textContent = action;
+      Object.assign(act.style, {
+        fontFamily: 'Rajdhani,sans-serif', fontSize: '12px', color: '#8a8060', letterSpacing: '0.3px',
+      });
+      row.appendChild(chip);
+      row.appendChild(act);
+      return row;
+    };
+
+    const rebuildContent = () => {
+      content.innerHTML = '';
+      const bindings = activeMode === 'sim' ? BINDINGS_SIM : BINDINGS_STD;
+      const { col: kbCol, scroll: kbScroll } = mkCol('3', _bind.colKb);
+      for (const [key, action] of bindings) kbScroll.appendChild(mkRow(key, action));
+      content.appendChild(kbCol);
+
+      const divider = document.createElement('div');
+      Object.assign(divider.style, { width: '1px', background: '#3a3020', flexShrink: '0' });
+      content.appendChild(divider);
+
+      const { col: gpCol, scroll: gpScroll } = mkCol('2', _bind.colGp);
+      for (const [key, action, col] of GAMEPAD) gpScroll.appendChild(mkRow(key, action, col || null));
+      content.appendChild(gpCol);
+    };
+    rebuildContent();
+
+    this._pauseCtrlOverlay = wrap;
+    document.body.appendChild(wrap);
+    requestAnimationFrame(() => backBtn.focus());
+  }
+
   // Overlay ESC pour le multijoueur — même présentation que le menu pause solo
   // (le jeu continue derrière : pas de gel, mais réapparition possible)
   showEscMenu(visible, onQuit = null, onRespawn = null, onResume = null, onEndGame = null) {
@@ -497,6 +898,7 @@ export class UI {
         Object.assign(b.style, {
           background   : primary ? `rgba(212,200,138,0.08)` : 'transparent',
           border       : `1px solid ${col}`,
+          borderRadius : '4px',
           color        : col,
           fontFamily   : '"Courier New",monospace',
           fontSize     : '12px',
@@ -532,6 +934,9 @@ export class UI {
       const btnSettings = mkPBtn(t('settingsBtn'), C.dimCream);
       btnSettings.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseSettings(); });
 
+      const btnCtrlsEsc = mkPBtn(t('controls') || 'COMMANDES', C.dimCream);
+      btnCtrlsEsc.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseControls(); });
+
       const btnEndGame = mkPBtn(t('endGameBtn'), '#cc6633');
       btnEndGame.style.display = 'none';
       btnEndGame.addEventListener('click', (e) => {
@@ -553,6 +958,7 @@ export class UI {
       wrap.appendChild(btnRespawn);
       wrap.appendChild(btnEndGame);
       wrap.appendChild(btnSettings);
+      wrap.appendChild(btnCtrlsEsc);
       wrap.appendChild(btnMenu);
       document.body.appendChild(wrap);
       this._escOverlay = wrap;
@@ -625,7 +1031,7 @@ export class UI {
       letterSpacing: '4px',
       background   : 'rgba(10,4,4,0.80)',
       border       : `1px solid ${color}`,
-      borderRadius : '2px',
+      borderRadius : '4px',
       padding      : '5px 20px',
       pointerEvents: 'none',
       display      : 'none',
@@ -698,6 +1104,12 @@ export class UI {
     this._place(this._fuelCanvas, { bottom:'100px', left:'calc(50% - 135px)' }, root);
     this._place(this._dmgCanvas,  { bottom:'100px', left:'calc(50% + 25px)' }, root);
 
+    // Compteurs missiles (gauche) et leurres (droite), encadrés WW2 alignés sur les cadrans secondaires
+    this._missileCanvas = this._mkCanvas(95, 70);
+    this._decoyCanvas   = this._mkCanvas(95, 70);
+    this._place(this._missileCanvas, { bottom:'120px', left:'calc(50% - 240px)' }, root);
+    this._place(this._decoyCanvas,   { bottom:'120px', left:'calc(50% + 145px)' }, root);
+
     // Ruban de cap (bas-centre)
     this._headCanvas = this._mkCanvas(300, 54);
     this._place(this._headCanvas, {
@@ -753,7 +1165,7 @@ export class UI {
       fontSize     : '14px', letterSpacing: '4px', fontWeight: 'bold',
       color        : '#d4c88a',
       background   : 'rgba(8,8,4,0.78)',
-      border       : '1px solid #4a4030', borderRadius: '3px',
+      border       : '1px solid #4a4030', borderRadius: '5px',
       padding      : '4px 18px',
       display      : 'none', pointerEvents: 'none', whiteSpace: 'nowrap',
       boxShadow    : 'inset 0 0 10px rgba(0,0,0,0.7)',
@@ -770,7 +1182,7 @@ export class UI {
       color        : '#d4c88a',
       background   : 'rgba(6,6,4,0.72)',
       border       : '1px solid #3a3020',
-      borderRadius : '2px',
+      borderRadius : '4px',
       padding      : '4px 18px 3px',
       pointerEvents: 'none',
       display      : 'none',
@@ -798,7 +1210,7 @@ export class UI {
       fontWeight   : 'bold',
       padding      : '5px 18px',
       border       : '1.5px solid',
-      borderRadius : '2px',
+      borderRadius : '4px',
       display      : 'none',
       pointerEvents: 'none',
       whiteSpace   : 'nowrap',
@@ -1146,20 +1558,18 @@ export class UI {
       }
     }
 
-    // Villages (petites flèches triangulaires crème)
+    // Villages (petits cercles crème sur le radar)
     for (const v of villages) {
       const p = toRadar(v.x, v.z);
       const inR = Math.hypot(p.x - cx, p.y - cy) < R;
       if (!inR) continue;
       ctx.save();
       ctx.translate(p.x, p.y);
-      ctx.beginPath();
-      ctx.moveTo(0, -5); ctx.lineTo(4, 3); ctx.lineTo(0, 1); ctx.lineTo(-4, 3);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(212,200,138,0.55)';
+      ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(212,200,138,0.45)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(212,200,138,0.85)';
-      ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.strokeStyle = 'rgba(212,200,138,0.9)';
+      ctx.lineWidth = 0.9; ctx.stroke();
       ctx.restore();
     }
 
@@ -1236,20 +1646,56 @@ export class UI {
       if (sx < 6 || sx > W-6 || sy < 6 || sy > H-6) continue;
 
       const gDist = g.pos.distanceTo(player.position);
-      const alpha = Math.max(0.08, Math.min(0.9, 1.0 - (gDist - 200) / 1400));
+      // Pleine opacité dans la portée utile (~800 u), fondu progressif au-delà
+      const GROUND_FIRE_RANGE = 800;
+      const alpha = gDist <= GROUND_FIRE_RANGE
+        ? 1.0
+        : Math.max(0.10, Math.min(0.9, 1.0 - (gDist - GROUND_FIRE_RANGE) / 1200));
 
-      const s = g.kind === 'mg' ? 11 : 9;
-      const col = g.kind === 'mg' ? '#ff8c1a' : '#d2691e';
+      // Détection du verrou : le lockTarget stocke un wrapper avec .rawUnit = g
+      const isLockTgt = this._lockTarget?.isGround && this._lockTarget?.rawUnit === g;
+      const lockProg  = isLockTgt ? Math.max(0, Math.min(1, this._lockProgress || 0)) : 0;
+      const lockOK    = isLockTgt && this._lockDone;
+
+      const baseCol = g.kind === 'mg' ? '#ff8c1a' : '#d2691e';
+      const col = lockOK ? '#ff2211' : isLockTgt ? '#ffcc22' : baseCol;
+      const s = g.kind === 'mg' ? 7 : 6;
+
       ctx.save();
       ctx.globalAlpha = alpha;
+
+      // Remplissage progressif (bas → haut) pendant le verrouillage
+      if (isLockTgt && lockProg > 0) {
+        ctx.save();
+        ctx.beginPath(); ctx.rect(sx - s, sy - s, s*2, s*2); ctx.clip();
+        ctx.globalAlpha = lockOK ? alpha : alpha * 0.6;
+        ctx.fillStyle = lockOK ? 'rgba(255,40,20,0.85)' : 'rgba(255,200,40,0.55)';
+        const fillH = s * 2 * lockProg;
+        ctx.fillRect(sx - s - 1, sy + s - fillH, s*2 + 2, fillH + 1);
+        ctx.restore();
+      }
+
+      // Contour du carré
       ctx.beginPath();
       ctx.rect(sx - s, sy - s, s*2, s*2);
-      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = lockOK ? 2.0 : 1.5; ctx.stroke();
+
+      // Label type (AA uniquement, petit et discret)
       if (g.kind === 'mg') {
-        ctx.font = '9px "Courier New",monospace';
+        ctx.font = '8px "Courier New",monospace';
         ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.fillText('AA', sx, sy - s - 2);
+        ctx.fillText('AA', sx, sy - s - 1);
       }
+
+      // Pulse quand verrouillé
+      if (lockOK) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
+        ctx.globalAlpha = (0.25 + pulse * 0.35) * alpha;
+        ctx.beginPath();
+        ctx.rect(sx - s - 3, sy - s - 3, (s+3)*2, (s+3)*2);
+        ctx.strokeStyle = '#ff5544'; ctx.lineWidth = 1.0; ctx.stroke();
+      }
+
       ctx.restore();
     }
 
@@ -1316,7 +1762,7 @@ export class UI {
       }
     }
 
-    // ── Carrés VILLAGES ENNEMIS (rouge, sans label) ───────────────────────
+    // ── Cercles VILLAGES ENNEMIS (rouge, sans label) ──────────────────────
     const enemyVillages = villages.slice(1);
     for (const v of enemyVillages) {
       // Disparaît si toutes les défenses du village sont éliminées
@@ -1335,29 +1781,26 @@ export class UI {
       const vDist = vp.distanceTo(player.position);
       const vAlpha = THREE.MathUtils.clamp((vDist - 80) / 300, 0.08, 1.0);
       const col = '#cc4433';
-      const hs = 7;
+      const r = 7;
 
       if (onScreen) {
         ctx.save();
         ctx.globalAlpha = vAlpha;
         ctx.translate(sx, sy);
-        ctx.fillStyle = 'rgba(180,40,20,0.2)';
-        ctx.fillRect(-hs, -hs, hs*2, hs*2);
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(180,40,20,0.18)';
+        ctx.fill();
         ctx.strokeStyle = col; ctx.lineWidth = 1.8;
-        ctx.strokeRect(-hs, -hs, hs*2, hs*2);
+        ctx.stroke();
         ctx.restore();
       } else {
-        // Carré orienté (distinct des flèches avion)
-        const angle = inFront
-          ? Math.atan2(sy - H/2, sx - W/2)
-          : Math.atan2(-(sy - H/2), -(sx - W/2));
         const { ex, ey } = this._clampToEdge(sx, sy, W, H, 28, inFront);
-        const hs2 = 6;
         ctx.save();
         ctx.globalAlpha = vAlpha;
         ctx.translate(ex, ey);
+        ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2);
         ctx.strokeStyle = col; ctx.lineWidth = 1.8;
-        ctx.strokeRect(-hs2, -hs2, hs2*2, hs2*2);
+        ctx.stroke();
         ctx.restore();
       }
     }
@@ -1421,34 +1864,71 @@ export class UI {
       }
 
       // ── Ennemi : marqueur rouge complet ─────────────────────────────────
-      const col = isClosest ? '#ff3322' : '#cc3322';
+      const isLockTgt = (e === this._lockTarget);
+      const lockProg  = isLockTgt ? Math.max(0, Math.min(1, this._lockProgress || 0)) : 0;
+      const lockOK    = isLockTgt && this._lockDone;
+      // Couleur : ambre pendant l'acquisition, rouge vif quand verrouillé
+      const col = lockOK     ? '#ff2211'
+                : isLockTgt  ? '#ffcc22'
+                : isClosest  ? '#ff3322'
+                             : '#cc3322';
 
+      const inGunRange = dist < 1400;
       if (onScreen) {
-        const dh = 7;
-        ctx.beginPath();
-        ctx.moveTo(sx,      sy - dh*2);
-        ctx.lineTo(sx + dh, sy - dh);
-        ctx.lineTo(sx,      sy);
-        ctx.lineTo(sx - dh, sy - dh);
-        ctx.closePath();
-        ctx.strokeStyle = col; ctx.lineWidth = 1.6;
-        ctx.stroke();
+        if (inGunRange || isLockTgt) {
+          if (!inGunRange) ctx.globalAlpha = 0.5; // lock missile hors portée canon → discret
+          const dh = 7;
+          const diamond = () => {
+            ctx.beginPath();
+            ctx.moveTo(sx,      sy - dh*2);
+            ctx.lineTo(sx + dh, sy - dh);
+            ctx.lineTo(sx,      sy);
+            ctx.lineTo(sx - dh, sy - dh);
+            ctx.closePath();
+          };
+          // Remplissage progressif (du bas vers le haut) si lock en cours
+          if (isLockTgt && lockProg > 0) {
+            ctx.save();
+            diamond(); ctx.clip();
+            const fillH = dh * 2 * lockProg;
+            ctx.fillStyle = lockOK ? 'rgba(255,40,20,0.85)' : 'rgba(255,200,40,0.55)';
+            ctx.fillRect(sx - dh - 1, sy - fillH, dh*2 + 2, fillH + 1);
+            ctx.restore();
+          }
+          diamond();
+          ctx.strokeStyle = col; ctx.lineWidth = lockOK ? 2.2 : 1.6;
+          ctx.stroke();
+          // Pulse subtil quand verrouillé
+          if (lockOK) {
+            const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
+            ctx.globalAlpha = 0.35 + pulse * 0.4;
+            ctx.beginPath();
+            ctx.moveTo(sx,        sy - dh*2 - 2);
+            ctx.lineTo(sx + dh+2, sy - dh);
+            ctx.lineTo(sx,        sy + 2);
+            ctx.lineTo(sx - dh-2, sy - dh);
+            ctx.closePath();
+            ctx.strokeStyle = '#ff5544'; ctx.lineWidth = 1.2;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
 
-        // Label distance uniquement pour le plus proche
-        if (isClosest) {
-          ctx.font = '11px "Courier New",monospace';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          const tw = ctx.measureText(distStr).width;
-          ctx.fillStyle = 'rgba(0,0,0,0.55)';
-          ctx.fillRect(sx - tw/2 - 3, sy - dh*2 - 18, tw + 6, 14);
-          ctx.fillStyle = col;
-          ctx.fillText(distStr, sx, sy - dh*2 - 6);
+          // Label distance uniquement pour le plus proche en portée canon
+          if (isClosest && inGunRange) {
+            ctx.font = '11px "Courier New",monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            const tw = ctx.measureText(distStr).width;
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.fillRect(sx - tw/2 - 3, sy - dh*2 - 18, tw + 6, 14);
+            ctx.fillStyle = col;
+            ctx.fillText(distStr, sx, sy - dh*2 - 6);
+          }
         }
 
         // ── Indicateur de visée : où tirer pour toucher une cible mobile ──
         // Relié au losange par une ligne fine → pas de confusion sur la cible.
         // Pour une cible lente le cercle reste sur l'avion ; il dévie quand elle file.
-        if (dist < 1100 && this._leadSpeed) {
+        if (inGunRange && dist < 1100 && this._leadSpeed) {
           const lead = this._leadPoint(player.position, e, this._leadSpeed);
           const lndc = lead.clone().project(camera);
           if (lndc.z < 1.0) {
@@ -1571,7 +2051,7 @@ export class UI {
       position:'absolute', top:'20px', right:'20px',
       background:'rgba(8,8,4,0.78)',
       border:'1px solid #4a4030',
-      borderRadius:'3px',
+      borderRadius:'5px',
       padding:'6px 12px',
       boxShadow:'inset 0 0 10px rgba(0,0,0,0.7)',
     });
@@ -1859,7 +2339,7 @@ export class UI {
     Object.assign(el.style, {
       background : 'rgba(8,8,4,0.78)',
       border     : '1px solid #4a4030',
-      borderRadius: '3px',
+      borderRadius: '5px',
       padding    : '6px 20px',
       display    : 'none',   // masqué par défaut (affiché seulement en TDM)
       gap        : '28px',
@@ -2025,10 +2505,10 @@ export class UI {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: C.menuBackdrop,
         fontFamily: '"Courier New",monospace',
-        pointerEvents: 'none', zIndex: '450',
+        pointerEvents: 'none', zIndex: '510',
       });
       const panel = document.createElement('div');
-      panel.style.cssText = `background:rgba(11,12,10,0.92);border:1px solid #4a4030;border-radius:4px;` +
+      panel.style.cssText = `background:rgba(11,12,10,0.92);border:1px solid #4a4030;border-radius:8px;` +
         `box-shadow:0 10px 50px rgba(0,0,0,0.7);padding:18px 26px;min-width:400px;`;
       const title = document.createElement('div');
       title.textContent = t('scoreboardTitle');
@@ -2082,7 +2562,7 @@ export class UI {
     Object.assign(hint.style, {
       fontSize:'9px', letterSpacing:'3px', color:'#d4c88a',
       background:'rgba(8,8,4,0.75)',
-      border:'1px solid #5a5030', borderRadius:'2px',
+      border:'1px solid #5a5030', borderRadius:'4px',
       padding:'4px 10px', display:'block',
     });
     wrap.appendChild(hint);
@@ -2091,7 +2571,7 @@ export class UI {
     const panel = document.createElement('div');
     Object.assign(panel.style, {
       background:'rgba(8,8,4,0.82)',
-      border:'1px solid #3a3020', borderRadius:'3px',
+      border:'1px solid #3a3020', borderRadius:'6px',
       padding:'8px 14px', marginTop:'6px',
       fontSize:'11px', lineHeight:'1.9',
       color:'#8a8060',
@@ -2127,7 +2607,7 @@ export class UI {
     Object.assign(wrap.style, {
       background : 'rgba(8,8,4,0.72)',
       border     : '1px solid #3a3020',
-      borderRadius: '3px',
+      borderRadius: '6px',
       padding    : '4px 16px',
       display    : 'none',
       fontFamily : '"Courier New",monospace',
@@ -2191,7 +2671,7 @@ export class UI {
       background: C.menuBackdrop,
       display:'flex', alignItems:'center', justifyContent:'center',
       fontFamily:'"Courier New",monospace',
-      color:C.cream, pointerEvents:'none',
+      color:C.cream, pointerEvents:'auto',
       zIndex:'800',
     });
 
@@ -2244,6 +2724,328 @@ export class UI {
     document.body.appendChild(overlay);
   }
 
+  // ── Écran de récompenses de fin de partie ────────────────────────────────
+  // breakdown: [{ label, xp, credits }], leveledUp: bool, oldLevel/newLevel: int
+  showRewards({ breakdown, totalXp, totalCredits, oldLevel, newLevel, leveledUp,
+                scoreboard, onContinue }) {
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position:'fixed', inset:'0',
+      background:'rgba(4,5,3,0.97)',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      fontFamily:'"Courier New",monospace',
+      color:'#d4c88a', zIndex:'850', pointerEvents:'auto',
+    });
+
+    const card = document.createElement('div');
+    card.style.cssText = `
+      display:flex; gap:40px; align-items:flex-start;
+      background:rgba(12,11,9,0.98); border:1px solid #3a3020; border-radius:8px;
+      padding:36px 48px; box-shadow:0 14px 60px rgba(0,0,0,0.8);
+      max-height:88vh; overflow-y:auto;
+    `;
+
+    // ── Colonne gauche : scoreboard ──
+    if (scoreboard?.length) {
+      const leftCol = document.createElement('div');
+      leftCol.style.cssText = 'min-width:300px;';
+      const sbTitle = document.createElement('div');
+      sbTitle.textContent = t('ranking');
+      sbTitle.style.cssText = 'font-size:10px;letter-spacing:4px;color:#7a7050;margin-bottom:12px;border-bottom:1px solid #3a3020;padding-bottom:6px;';
+      leftCol.appendChild(sbTitle);
+      leftCol.innerHTML += this._scoreboardHTML(scoreboard);
+      card.appendChild(leftCol);
+    }
+
+    // ── Colonne droite : récompenses ──
+    const rightCol = document.createElement('div');
+    rightCol.style.cssText = 'min-width:280px;';
+
+    const rwTitle = document.createElement('div');
+    rwTitle.textContent = t('rewardsTitle');
+    rwTitle.style.cssText = 'font-size:10px;letter-spacing:4px;color:#7a7050;margin-bottom:14px;border-bottom:1px solid #3a3020;padding-bottom:6px;';
+    rightCol.appendChild(rwTitle);
+
+    // Lignes de détail
+    breakdown.forEach(({ label, xp, credits }) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1a1810;gap:16px;';
+      const lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = 'font-size:10px;letter-spacing:2px;color:#a09878;';
+      const vals = document.createElement('span');
+      vals.style.cssText = 'display:flex;gap:12px;font-size:11px;font-weight:bold;';
+      if (xp !== 0) {
+        const xpEl = document.createElement('span');
+        xpEl.textContent = `${xp > 0 ? '+' : ''}${xp} XP`;
+        xpEl.style.color = xp > 0 ? '#88cc44' : '#cc4444';
+        vals.appendChild(xpEl);
+      }
+      if (credits > 0) {
+        const crEl = document.createElement('span');
+        crEl.textContent = `+${credits} ✦`;
+        crEl.style.color = '#ccaa22';
+        vals.appendChild(crEl);
+      }
+      row.appendChild(lbl); row.appendChild(vals);
+      rightCol.appendChild(row);
+    });
+
+    // Total
+    const totalRow = document.createElement('div');
+    totalRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 0;margin-top:4px;border-top:1px solid #4a4030;';
+    const tLbl = document.createElement('span');
+    tLbl.textContent = t('rewardsTotal');
+    tLbl.style.cssText = 'font-size:12px;letter-spacing:3px;color:#d4c88a;font-weight:bold;';
+    const tVals = document.createElement('span');
+    tVals.style.cssText = 'display:flex;gap:14px;font-size:14px;font-weight:bold;';
+    const xpTot = document.createElement('span');
+    xpTot.textContent = `+${totalXp} XP`;
+    xpTot.style.color = '#88cc44';
+    const crTot = document.createElement('span');
+    crTot.textContent = `+${totalCredits} ✦`;
+    crTot.style.color = '#ccaa22';
+    tVals.appendChild(xpTot); tVals.appendChild(crTot);
+    totalRow.appendChild(tLbl); totalRow.appendChild(tVals);
+    rightCol.appendChild(totalRow);
+
+    // Niveau gagné
+    if (leveledUp) {
+      const lvlBanner = document.createElement('div');
+      lvlBanner.style.cssText = `
+        margin-top:16px; padding:12px; text-align:center;
+        background:rgba(200,80,0,0.15); border:1px solid #cc3300; border-radius:6px;
+        animation:levelFlash 0.6s ease;
+      `;
+      lvlBanner.innerHTML = `
+        <div style="font-size:11px;letter-spacing:3px;color:#cc3300;">${t('levelUpLabel')}</div>
+        <div style="font-size:32px;font-weight:bold;color:#eccfa6;letter-spacing:4px;">${t('levelShort')} ${newLevel}</div>
+        <div style="font-size:9px;letter-spacing:2px;color:#7a7050;">${t('levelShort')} ${oldLevel} → ${t('levelShort')} ${newLevel}</div>
+      `;
+      rightCol.appendChild(lvlBanner);
+    }
+
+    // Barre de progression XP
+    const xpBarWrap = document.createElement('div');
+    xpBarWrap.style.cssText = 'margin-top:14px;';
+    xpBarWrap.innerHTML = `
+      <div style="display:flex;justify-content:space-between;font-size:9px;letter-spacing:2px;color:#7a7050;margin-bottom:4px;">
+        <span>${t('levelShort')} ${newLevel}</span><span>${t('levelShort')} ${Math.min(newLevel + 1, 50)}</span>
+      </div>
+      <div style="background:#1a1810;height:6px;border-radius:3px;overflow:hidden;">
+        <div id="xpBarFill" style="background:#cc3300;width:0%;height:100%;border-radius:3px;transition:width 1.2s ease;"></div>
+      </div>
+    `;
+    rightCol.appendChild(xpBarWrap);
+
+    const btnContinue = this._mkEndButton('CONTINUER', '#4a6030', '#88cc44');
+    btnContinue.style.marginTop = '20px'; btnContinue.style.marginBottom = '0';
+    btnContinue.addEventListener('click', () => { overlay.remove(); if (onContinue) onContinue(); });
+    rightCol.appendChild(btnContinue);
+
+    card.appendChild(rightCol);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // Anime la barre XP après un court délai
+    setTimeout(() => {
+      const fill = overlay.querySelector('#xpBarFill');
+      if (fill && window._xpBarPct !== undefined) fill.style.width = `${window._xpBarPct}%`;
+    }, 300);
+
+    return overlay;
+  }
+
+  // ── Compteurs missiles/leurres intégrés au HUD bas (style WW2) ───────────
+  setMissileCount(aaCount, aaMax, agCount = 0, agMax = 0) {
+    if (this._missileEl) { this._missileEl.remove(); this._missileEl = null; }
+    if (!this._missileCanvas) return;
+    const hasAA = aaMax > 0, hasAG = agMax > 0;
+    if (!hasAA && !hasAG) { this._missileCanvas.style.display = 'none'; return; }
+    this._missileCanvas.style.display = 'block';
+    if (hasAA && hasAG) {
+      this._missileCanvas.height = 100;
+      this._missileCanvas.style.height = '100px';
+      this._drawDualMissileBox(aaCount, aaMax, agCount, agMax);
+    } else {
+      this._missileCanvas.height = 70;
+      this._missileCanvas.style.height = '70px';
+      if (hasAA) this._drawCounterBox(this._missileCanvas, 'AA', aaCount, aaMax, aaCount === 0 ? '#cc3322' : C.cream, '◆', '◇');
+      else       this._drawCounterBox(this._missileCanvas, 'AS', agCount, agMax, agCount === 0 ? '#cc3322' : C.cream, '▲', '△');
+    }
+  }
+
+  _drawDualMissileBox(aaCount, aaMax, agCount, agMax) {
+    const canvas = this._missileCanvas;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(8,10,6,0.78)'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = C.bezelHi; ctx.lineWidth = 1.2;
+    ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+    ctx.beginPath();
+    ctx.moveTo(0, 6); ctx.lineTo(6, 0); ctx.moveTo(W - 6, 0); ctx.lineTo(W, 6);
+    ctx.moveTo(0, H - 6); ctx.lineTo(6, H); ctx.moveTo(W - 6, H); ctx.lineTo(W, H - 6);
+    ctx.strokeStyle = C.bezelHi; ctx.lineWidth = 1; ctx.stroke();
+
+    ctx.fillStyle = C.cream; ctx.font = '9px "Courier New",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('MISSILES', W / 2, 5);
+
+    ctx.strokeStyle = C.tickMinor; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(6, 17); ctx.lineTo(W - 6, 17); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, 58); ctx.lineTo(W - 6, 58); ctx.stroke();
+
+    const drawRow = (type, count, max, sym, symEmpty, y0) => {
+      const valColor = count === 0 ? '#cc3322' : C.cream;
+      ctx.fillStyle = C.tickMinor; ctx.font = '8px "Courier New",monospace';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText(type, 7, y0 + 3);
+      ctx.fillStyle = valColor; ctx.font = 'bold 14px "Courier New",monospace';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText(String(count).padStart(2, ' '), W - 7, y0 + 1);
+      const shown = Math.min(6, max);
+      const cellW = (W - 16) / Math.max(shown, 1);
+      const symY = y0 + 30;
+      ctx.font = '8px "Courier New",monospace'; ctx.textBaseline = 'middle';
+      for (let i = 0; i < shown; i++) {
+        const isFull = i < Math.min(count, shown);
+        ctx.fillStyle = isFull ? valColor : C.tickMinor;
+        ctx.textAlign = 'center';
+        ctx.fillText(isFull ? sym : symEmpty, 8 + cellW * (i + 0.5), symY);
+      }
+    };
+
+    drawRow('AA', aaCount, aaMax, '◆', '◇', 18);
+    drawRow('AS', agCount, agMax, '▲', '△', 59);
+  }
+
+  // type: 'leurres' | 'ecm' | 'shield_front' | 'shield_rear' | 'shield_full' | null
+  // Pour leurres :  count = restants, max = total
+  // Pour ECM/shield: isActive = true/false, cooldownPct = 0→1 (1 = en recharge complète)
+  setActiveDefenseStatus(type, count, max, cooldownPct = 0, isActive = false) {
+    if (this._decoyEl) { this._decoyEl.remove(); this._decoyEl = null; }
+    if (!this._decoyCanvas) return;
+    if (!type || type === 'none' || max <= 0) { this._decoyCanvas.style.display = 'none'; return; }
+    this._decoyCanvas.style.display = 'block';
+
+    if (type === 'leurres') {
+      this._drawCounterBox(this._decoyCanvas, 'LEURRES', count, max, C.cream, '●', '○');
+      return;
+    }
+
+    const ctx = this._decoyCanvas.getContext('2d');
+    const W = this._decoyCanvas.width, H = this._decoyCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Fond + cadre
+    ctx.fillStyle = 'rgba(8,10,6,0.78)';
+    ctx.fillRect(0, 0, W, H);
+    const frameCol = isActive ? '#4488ff' : (cooldownPct > 0 ? C.bezelHi : '#44cc88');
+    ctx.strokeStyle = frameCol;
+    ctx.lineWidth = isActive ? 1.8 : 1.2;
+    ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+    // Label
+    const LABELS = { ecm:'ECM', shield_front:t('adShieldFront'), shield_rear:t('adShieldRear'), shield_full:t('adShield360') };
+    const label = LABELS[type] ?? t('adDefense');
+    ctx.fillStyle = C.cream;
+    ctx.font = '9px "Courier New",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(label, W / 2, 6);
+
+    // État central
+    let stateText, stateColor;
+    if (isActive) {
+      stateText  = t('adActive');
+      stateColor = '#4488ff';
+    } else if (cooldownPct > 0) {
+      stateText  = t('adRecharge');
+      stateColor = C.tickMinor;
+    } else {
+      stateText  = t('adReady');
+      stateColor = '#44cc88';
+    }
+    ctx.fillStyle = stateColor;
+    ctx.font = 'bold 13px "Courier New",monospace';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stateText, W / 2, H / 2 + 2);
+
+    // Barre de recharge en bas
+    const barY = H - 10, barH = 4;
+    const barW = W - 16;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(8, barY - barH / 2, barW, barH);
+    if (isActive || cooldownPct > 0) {
+      const fill = isActive ? (count / max) : (1 - cooldownPct);
+      ctx.fillStyle = isActive ? '#4488ff' : '#88aaff55';
+      ctx.fillRect(8, barY - barH / 2, barW * Math.max(0, Math.min(1, fill)), barH);
+    } else {
+      ctx.fillStyle = '#44cc8888';
+      ctx.fillRect(8, barY - barH / 2, barW, barH);
+    }
+  }
+
+  // Compat leurres legacy
+  setDecoyCount(count, max) {
+    this.setActiveDefenseStatus('leurres', count, max);
+  }
+
+  // Encadré compteur réutilisable — style WW2 crème sur fond sombre
+  _drawCounterBox(canvas, label, count, max, valColor, symFull, symEmpty) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Fond + cadre — même palette que les cadrans
+    ctx.fillStyle = 'rgba(8,10,6,0.78)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = C.bezelHi;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+    // Coin biseauté discret
+    ctx.beginPath();
+    ctx.moveTo(0, 6); ctx.lineTo(6, 0); ctx.moveTo(W - 6, 0); ctx.lineTo(W, 6);
+    ctx.moveTo(0, H - 6); ctx.lineTo(6, H); ctx.moveTo(W - 6, H); ctx.lineTo(W, H - 6);
+    ctx.strokeStyle = C.bezelHi; ctx.lineWidth = 1; ctx.stroke();
+
+    // Label
+    ctx.fillStyle = C.cream;
+    ctx.font = '9px "Courier New",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(label, W / 2, 6);
+
+    // Valeur centrale
+    ctx.fillStyle = valColor;
+    ctx.font = 'bold 22px "Courier New",monospace';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(count), W / 2, H / 2 + 4);
+
+    // Petits symboles (jusqu'à 8 max pour rester lisible)
+    const shown = Math.min(8, max);
+    const cellW = (W - 16) / shown;
+    const y = H - 10;
+    ctx.font = '8px "Courier New",monospace';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < shown; i++) {
+      const isFull = i < Math.min(count, shown);
+      ctx.fillStyle = isFull ? valColor : C.tickMinor;
+      ctx.fillText(isFull ? symFull : symEmpty, 8 + cellW * (i + 0.5), y);
+    }
+  }
+
+  // Indicateur de verrouillage missile (cercle autour de la cible)
+  // Le rendu du verrouillage est intégré au losange existant de l'ennemi
+  // (voir le bloc "Ennemi : marqueur rouge complet"). On stocke juste la cible
+  // et la progression ; pas d'élément DOM.
+  setLockTarget(target, progress, isLocked) {
+    this._lockTarget   = target ?? null;
+    this._lockProgress = progress ?? 0;
+    this._lockDone     = !!isLocked;
+    // Suppression de l'ancien overlay HTML si présent
+    if (this._lockEl) { this._lockEl.remove(); this._lockEl = null; }
+  }
+
   // Bouton d'écran de fin — taille uniforme (couleur seule différencie le principal)
   _mkEndButton(label, borderColor, textColor) {
     const b = document.createElement('button');
@@ -2252,6 +3054,7 @@ export class UI {
       pointerEvents: 'auto',
       background   : 'transparent',
       border       : `1.5px solid ${borderColor}`,
+      borderRadius : '4px',
       color        : textColor,
       fontFamily   : '"Courier New",monospace',
       fontSize     : '14px',
@@ -2393,14 +3196,14 @@ export class UI {
         background : 'rgba(6,8,4,0.55)',
         border     : '1px solid rgba(212,200,138,0.20)',
         padding    : '4px 16px',
-        borderRadius: '2px',
+        borderRadius: '4px',
         pointerEvents: 'none',
         zIndex     : '500',
         textAlign  : 'center',
       });
       document.body.appendChild(this._survivalWaveBar);
     }
-    this._survivalWaveBar.textContent = `MANCHE ${wave}`;
+    this._survivalWaveBar.textContent = `${t('roundLabel')} ${wave}`;
   }
 
   // ── Bannière vague survie ────────────────────────────────────────────────
@@ -2537,7 +3340,7 @@ export class UI {
       border: `1px solid ${color}`,
       color,
       fontSize: '11px', letterSpacing: '3px',
-      padding: '7px 18px', borderRadius: '2px',
+      padding: '7px 18px', borderRadius: '5px',
       opacity: '0', transition: 'opacity 0.3s',
       whiteSpace: 'nowrap',
     });
@@ -2563,7 +3366,7 @@ export class UI {
       background: C.menuBackdrop,   // fond gris uniforme
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: '"Courier New",monospace',
-      color: C.cream, pointerEvents: 'none',
+      color: C.cream, pointerEvents: 'auto',
       zIndex: '800',
     });
 

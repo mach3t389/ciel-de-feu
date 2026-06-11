@@ -334,6 +334,24 @@ export class NormandyMap {
     geo.computeVertexNormals();
     this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
 
+    // Lookup bilinéaire rapide — remplace le fBm 8 octaves (~200× plus rapide) (A3)
+    {
+      const _g = SEGS + 1;
+      this.getTerrainHeight = (wx, wz) => {
+        const nx = Math.max(0, Math.min(SEGS, (wx / SIZE + 0.5) * SEGS));
+        const nz = Math.max(0, Math.min(SEGS, (wz / SIZE + 0.5) * SEGS));
+        const xi = Math.min(SEGS - 1, Math.floor(nx));
+        const zi = Math.min(SEGS - 1, Math.floor(nz));
+        const xf = nx - xi, zf = nz - zi;
+        const h00 = ys[zi * _g + xi];
+        const h10 = ys[zi * _g + xi + 1];
+        const h01 = ys[(zi + 1) * _g + xi];
+        const h11 = ys[(zi + 1) * _g + xi + 1];
+        return h00 * (1 - xf) * (1 - zf) + h10 * xf * (1 - zf)
+             + h01 * (1 - xf) * zf        + h11 * xf * zf;
+      };
+    }
+
     // Mer — plane énorme sous tout le terrain
     const ocean = new THREE.Mesh(
       new THREE.PlaneGeometry(40000, 40000, 4, 4),
@@ -469,15 +487,21 @@ export class NormandyMap {
       this.scene.add(square);
 
       const placed = [];
-      const MIN_D2 = 20 * 20;
+      const MIN_D2 = 50 * 50;
       for (const [dx, dz, type, targetH, rotY] of this._makeVillageLayout()) {
         const g = groups[type];
         if (!g || counts[type] >= MAX_PER_TYPE || g.naturalHeight <= 0) continue;
         const wx = v.x + dx, wz = v.z + dz;
-        if (this._nearAirport(wx, wz, 40)) continue;
+        if (this._nearAirport(wx, wz, 80)) continue;
         if (placed.some(([px, pz]) => (wx-px)**2 + (wz-pz)**2 < MIN_D2)) continue;
         const scale = targetH / g.naturalHeight;
-        const gY  = this.getTerrainHeight(wx, wz);
+        // Validation 4 coins — rejette si la pente est trop forte (B2)
+        const c0 = this.getTerrainHeight(wx - 14, wz - 14);
+        const c1 = this.getTerrainHeight(wx + 14, wz - 14);
+        const c2 = this.getTerrainHeight(wx - 14, wz + 14);
+        const c3 = this.getTerrainHeight(wx + 14, wz + 14);
+        if (Math.max(c0, c1, c2, c3) - Math.min(c0, c1, c2, c3) > 4) continue;
+        const gY = (c0 + c1 + c2 + c3) / 4;
         dummy.position.set(wx, gY + g.baseOffset * scale, wz);
         dummy.rotation.set(0, rotY, 0);
         dummy.scale.setScalar(scale);
@@ -531,30 +555,21 @@ export class NormandyMap {
 
   _makeVillageLayout() {
     const house = ['maison1','maison2','maison3','maison4','maison5'];
+    const FIXED_H = 11;
+    const rings = [
+      { r:  50, count:  5, offset: 0             },
+      { r: 108, count: 12, offset: Math.PI / 12  },
+      { r: 166, count: 18, offset: Math.PI / 18  },
+      { r: 225, count: 24, offset: Math.PI / 24  },
+    ];
     const p = [];
-    // Anneau central — rayon 18-26
-    for (let i = 0; i < 5; i++) {
-      const ang = (i / 5) * Math.PI * 2 + rng(-0.3, 0.3);
-      const d   = 22 + rng(-4, 6);
-      p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[i%house.length], 20+rng(-2,5), ang+Math.PI+rng(-0.4,0.4)]);
-    }
-    // Anneau intérieur — rayon 36-48
-    for (let i = 0; i < 9; i++) {
-      const ang = (i / 9) * Math.PI * 2 + rng(-0.15, 0.15);
-      const d   = 42 + rng(-5, 8);
-      p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[i%house.length], 18+rng(-2,4), ang+Math.PI+rng(-0.3,0.3)]);
-    }
-    // Anneau médian — rayon 62-76
-    for (let i = 0; i < 11; i++) {
-      const ang = (i / 11) * Math.PI * 2 + rng(-0.18, 0.18);
-      const d   = 68 + rng(-7, 10);
-      p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[i%house.length], 16+rng(-2,3), ang+Math.PI+rng(-0.3,0.3)]);
-    }
-    // Anneau extérieur — rayon 88-102
-    for (let i = 0; i < 9; i++) {
-      const ang = (i / 9) * Math.PI * 2 + rng(-0.22, 0.22);
-      const d   = 92 + rng(-6, 12);
-      p.push([Math.cos(ang)*d, Math.sin(ang)*d, house[(i+2)%house.length], 14+rng(-1,3), ang+rng(-0.4,0.4)]);
+    let hIdx = 0;
+    for (const { r, count, offset } of rings) {
+      for (let i = 0; i < count; i++) {
+        const ang = (i / count) * Math.PI * 2 + offset;
+        p.push([Math.cos(ang) * r, Math.sin(ang) * r, house[hIdx % house.length], FIXED_H, ang + Math.PI]);
+        hIdx++;
+      }
     }
     return p;
   }

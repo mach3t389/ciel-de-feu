@@ -59,7 +59,31 @@
       "Bash(grep -rn \"wss://\\\\|onrender\\\\|railway\\\\|fly.dev\\\\|VITE_WS_URL\\\\|herokuapp\\\\|glitch\" . --include=*.js --include=*.json --include=*.md --include=.env*)",
       "Bash(node --check src/NetworkManager.js)",
       "Bash(timeout 4 node server.js)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(node test-prod-server.mjs)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('main:',p.main\\); console.log\\('scripts:',JSON.stringify\\(p.scripts,null,2\\)\\); console.log\\('type:',p.type\\)\")",
+      "Bash(node verify-deploy.mjs)",
+      "Bash(git rev-list *)",
+      "Bash(gh repo *)",
+      "Bash(gh pr *)",
+      "PowerShell($gh = \\(Get-Command gh -ErrorAction SilentlyContinue\\); if \\($gh\\) { Write-Output \"gh trouvé: $\\($gh.Source\\)\"; gh repo view --json defaultBranchRef --jq .defaultBranchRef.name; Write-Output \"--- PR ouvertes head=main ---\"; gh pr list --head main --state open } else { Write-Output \"gh ABSENT\" })",
+      "Bash(node watch-deploy.mjs)",
+      "Bash(grep -v \"^\\\\s*//\")",
+      "Bash(ls public/Avions/)",
+      "Bash(ls public/*.glb)",
+      "Bash(node --check src/MissileSystem.js)",
+      "Bash(node --check src/UpgradeTree.js)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Vibe Coding\\\\Jeu Avion\\\\src\\\\\" -Recurse -File | Select-Object -ExpandProperty Name | Sort-Object)",
+      "PowerShell(Stop-Process -Id 25872, 26748 -Force)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(npx acorn *)",
+      "Bash(Get-Process -Name node -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object Id, CPU)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "mcp__Claude_Preview__preview_start",
+      "Skill(run)",
+      "Skill(run:*)"
     ]
   }
 }

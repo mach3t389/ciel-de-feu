@@ -7,6 +7,9 @@ import { UI } from './UI.js';
 import { BulletManager, EnemyBulletManager } from './Bullet.js';
 import { Enemy, setAIDebug } from './Enemy.js';
 import { TEAM_COLORS } from './Menu.js';
+import { ProgressionSystem, calcRewards, xpToNextLevel } from './ProgressionSystem.js';
+import { UPGRADES, computeStats, loadModifiers, missileParams, serviceTimeMult, activeDefenseParams, missileLoadPenalties } from './UpgradeTree.js';
+import { MissileSystem } from './MissileSystem.js';
 import { VillageMap } from './VillageMap.js';
 import { NormandyMap } from './NormandyMap.js';
 import { CretesMap } from './CretesMap.js';
@@ -15,6 +18,7 @@ import { PracticeMode } from './PracticeMode.js';
 import { AudioManager } from './AudioManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
 import { t } from './i18n.js';
+import { MobileControls, IS_MOBILE } from './MobileControls.js';
 
 const PLANE_PATHS = {
   blanc: '/Avions/SK_Veh_Plane_Stunt_01_AvionBlanc.glb',
@@ -30,6 +34,7 @@ const DIFFICULTY = {
   easy    : { hp:  35, countMult: 0.6 },
   standard: { hp:  65, countMult: 1.0 },
   hard    : { hp: 120, countMult: 1.0 },
+  expert  : { hp: 200, countMult: 1.2 },
 };
 
 export class Game {
@@ -81,6 +86,17 @@ export class Game {
     // ── Modules du jeu ──────────────────────────────────────────────────────
     const planePath = PLANE_PATHS[this._config.team] || '/SK_Veh_Plane_Stunt_01.glb';
     this.player = new Player(this.scene, { planePath });
+    if (IS_MOBILE) {
+      this._mobileControls = new MobileControls(
+        document.getElementById('app') || document.body,
+        this.player,
+        { onPause: () => {
+            if (this._config.networkManager) this._toggleEscMenu?.();
+            else if (!this.isPaused) this._setPause(true);
+          }
+        }
+      );
+    }
     this.cameraController = new CameraController(this.camera, this.player);
     this.bulletManager      = new BulletManager(this.scene);
     this._enemyBulletManager = new EnemyBulletManager(this.scene);
@@ -88,6 +104,7 @@ export class Game {
     this._remoteBulletManager = new BulletManager(this.scene); // tirs des joueurs distants (visuel)
     this.ui            = new UI();
     this.ui.setRespawnCallback(() => this._respawn());
+    if (this._mobileControls) this.ui.setMobileControls(this._mobileControls);
 
     // ── Environnement ───────────────────────────────────────────────────────
     this._buildSky();
@@ -118,24 +135,38 @@ export class Game {
 
   // ── Préchargement des assets (appelé avant start()) ────────────────────────
   async preload(onProgress = () => {}) {
-    onProgress(5);
+    onProgress(0);
+    const mapTarget = this._villageMap ? 55 : 25;
+
+    // Progression visuelle pendant la génération du terrain (tâche synchrone → pas de callbacks)
+    let fakeP = 0;
+    const ticker = setInterval(() => {
+      fakeP = Math.min(fakeP + 1, mapTarget - 3);
+      onProgress(fakeP);
+    }, 60);
+
     if (this._villageMap) {
       const mapResult = await this._villageMap.build();
       this.getTerrainHeight = mapResult.getTerrainHeight;
       this.isOnRunway = mapResult.isOnRunway;
-      onProgress(65);
-    } else {
-      onProgress(35);
     }
+    clearInterval(ticker);
+    onProgress(mapTarget);
+
     // Chargement en parallèle : joueur + ennemi aérien + véhicules sol
     const [, enemyGltf, groundModels] = await Promise.all([
       this.player.load(),
-      new Promise(res => new GLTFLoader().load('/SK_Veh_Plane_Stunt_01.glb', res, null, () => res(null))),
+      new Promise(res => new GLTFLoader().load(
+        '/SK_Veh_Plane_Stunt_01.glb',
+        res,
+        (xhr) => { if (xhr.lengthComputable) onProgress(mapTarget + (xhr.loaded / xhr.total) * (90 - mapTarget)); },
+        () => res(null)
+      )),
       GroundDefense.preloadModels(),
     ]);
     this._enemyModelScene   = enemyGltf?.scene ?? null;
     this._groundModelCache  = groundModels;
-    onProgress(92);
+    onProgress(95);
     this.player.getTerrainHeight = this.getTerrainHeight;
     this.player.isOnRunway = this.isOnRunway ?? null;
     this._applySpawnPosition();
@@ -280,6 +311,199 @@ export class Game {
     // ── Compteur de parties ───────────────────────────────────────────────────
     this._bumpLifetime('stats_games');
 
+    // ── Système de progression ────────────────────────────────────────────────
+    this._progression = new ProgressionSystem();
+    const isTraining  = this._config.mode === 'freeflight';
+    this._isTraining  = isTraining;
+    this._gameStartTime = performance.now();
+
+    // Appliquer les améliorations de l'avion actif (tous modes y compris entraînement)
+    {
+      const activePlane = this._progression.getActivePlaneData();
+      const upgradeIds  = this._progression.getUpgrades(this._progression.activePlane);
+      const stats       = computeStats(upgradeIds);
+      const loadout     = this._progression.getLoadout(this._progression.activePlane);
+      const adParams    = activeDefenseParams(loadout);
+      // Mémorisés pour le respawn
+      this._upgradeIds       = upgradeIds;
+      this._initMissileCount = stats.missiles;
+      this._initDecoyCount   = stats.decoys;
+      this._adParams         = adParams;
+      // État défense active
+      this._adType           = adParams?.type ?? 'none';
+      this._ecmActive        = false;
+      this._ecmTimer         = 0;
+      this._ecmCooldown      = 0;
+      this._shieldActive     = false;
+      this._shieldTimer      = 0;
+      this._shieldCooldown   = 0;
+      this._shieldMesh       = null;
+      this._initAACount = (['missile_aa','missile_imp1','missile_imp2'].filter(id => upgradeIds.includes(id)).length) * 2;
+      this._initAGCount = (['missile_ag','missile_ag2','missile_ag3'].filter(id => upgradeIds.includes(id)).length) * 2;
+      const loadMod     = loadModifiers(stats.load);
+
+      // Calculer les modificateurs de gameplay
+      const mods = {
+        healthBonus     : Math.round((stats.health - 100) / 100 * 100),  // HP bonus
+        speedMult       : (100 + (stats.speed - 100) / 100 * 20) / 100 * (1 + loadMod.speed),
+        accelMult       : (1 + loadMod.accel),
+        maneuverMult    : (1 + (stats.maneuverability - 100) / 500 + loadMod.maneuverability),
+        rollMult        : (1 + (stats.rollSpeed !== undefined ? (stats.rollSpeed - 100) / 400 : 0)),
+        fuelCapMult     : Math.max(1.0, stats.fuel / 100),          // réservoir plus grand si stats positives
+        fuelBurnMult    : 1 + Math.max(0, (100 - stats.fuel) / 100) * 0.30, // conso +0→30% si stats négatives
+        ammoBonus       : Math.round(stats.ammo * 2 - 300),
+        fireCooldownMult: stats.fireRate ? 100 / stats.fireRate : 1.0,
+        damageMult      : stats.weaponry / 100,
+        resistTurrets   : 0, resistPlanes: 0,
+        repairMult      : 1.0, rearmMult: 1.0, refuelMult: 1.0,
+      };
+
+      this.player.applyUpgradeModifiers(mods, stats.missiles, stats.decoys);
+
+      // Pénalités dynamiques liées au chargement en missiles
+      const mlp = missileLoadPenalties(upgradeIds);
+      this._missileSpeedDelta    = mlp.speedDelta;    // négatif si pénalité
+      this._missileManeuverDelta = mlp.maneuverDelta; // négatif si pénalité
+      this._baseSpeedMult    = mods.speedMult    - mlp.speedDelta;
+      this._baseManeuverMult = mods.maneuverMult - mlp.maneuverDelta;
+
+      // Système de missiles
+      this._missileSystem = new MissileSystem(this.scene, null);
+      this._missileSystem.friendlyFire = !!this._config?.friendlyFire;
+      if (this.getTerrainHeight) this._missileSystem.setTerrainHeightFn(this.getTerrainHeight);
+      this._groundTargetCache = new Map();
+      const msParams = missileParams(upgradeIds);
+      if (msParams) {
+        this._missileSystem.setParams(msParams);
+        this.player.onFireMissile = () => {
+          if (this.player.missileCount <= 0) {
+            this._audio?.playNoAmmo();
+            return;
+          }
+          if (this._missileSystem.isLocked) {
+            const type = (this._missileSystem.lockTarget?.isGround && msParams.hasAG) ? 'ag' : 'aa';
+            if (this._missileSystem.fire(this.player.pivot, type)) {
+              this.player.missileCount--;
+              this._updateMissileLoadMods();
+              this._missileSystem.removeWingMissile();
+              this.ui.setMissileCount(
+                this._missileSystem.missilesRemainingAA, this._initAACount,
+                this._missileSystem.missilesRemainingAG, this._initAGCount
+              );
+            }
+          }
+        };
+      }
+
+      // Défense active
+      if (adParams?.type === 'leurres') {
+        this.player.onDeployDecoy = () => {
+          if (this.player.decoyCount <= 0) return;
+          this.player.decoyCount--;
+          this.ui.setActiveDefenseStatus('leurres', this.player.decoyCount, this.player._maxDecoys);
+          this._missileSystem.deployDecoy(this.player.pivot);
+          this._missileSystem.removeDecoyPod?.();
+          this._audio?.playDecoy();
+        };
+      } else if (adParams?.type === 'ecm') {
+        this.player.onDeployDecoy = () => {
+          if (this._ecmActive || this._ecmCooldown > 0) return;
+          this._ecmActive = true;
+          this._ecmTimer  = adParams.ecmDuration;
+          this._missileSystem.setECMActive(true);
+          this._audio?.playDecoy?.();
+          this.ui.setActiveDefenseStatus('ecm', 1, 1, 0, true);
+        };
+      } else if (adParams?.type?.startsWith('shield')) {
+        this._buildShieldMesh(adParams.type);
+        this.player.onDeployDecoy = () => {
+          if (this._shieldActive || this._shieldCooldown > 0) return;
+          this._shieldActive = true;
+          this._shieldTimer  = adParams.shieldDuration;
+          if (this._shieldMesh) this._shieldMesh.visible = true;
+          this._audio?.playDecoy?.();
+          this.ui.setActiveDefenseStatus(adParams.type, 1, 1, 0, true);
+        };
+      }
+
+      // HUD missile/défense initial
+      this.ui.setMissileCount(this._initAACount, this._initAACount, this._initAGCount, this._initAGCount);
+      if (adParams) {
+        this.ui.setActiveDefenseStatus(
+          adParams.type,
+          adParams.type === 'leurres' ? adParams.decoys : 1,
+          adParams.type === 'leurres' ? adParams.decoys : 1,
+          0, false
+        );
+      } else {
+        this.ui.setActiveDefenseStatus(null, 0, 0);
+      }
+
+      // Modèles visuels sous les ailes / le fuselage — attend que les GLB soient prêts
+      if (stats.missiles > 0 || stats.decoys > 0) {
+        const tryAttach = (attempt = 0) => {
+          const modelsReady = (stats.missiles <= 0 || this._missileSystem._modelAA);
+          if (this.player.model && modelsReady) {
+            if (stats.missiles > 0) this._missileSystem.attachWingMissiles(this.player.model, upgradeIds, stats.missiles);
+            if (stats.decoys   > 0) this._missileSystem.attachDecoyPods(this.player.model, stats.decoys);
+          } else if (attempt < 20) {
+            setTimeout(() => tryAttach(attempt + 1), 200);
+          }
+        };
+        setTimeout(() => tryAttach(), 200);
+      }
+      // Attacher le mesh de bouclier au joueur une fois le modèle chargé
+      if (adParams?.type?.startsWith('shield') && !this._shieldMesh) {
+        const tryShield = (attempt = 0) => {
+          if (this.player.pivot) {
+            this._buildShieldMesh(adParams.type);
+          } else if (attempt < 20) {
+            setTimeout(() => tryShield(attempt + 1), 200);
+          }
+        };
+        setTimeout(() => tryShield(), 300);
+      }
+
+      // Vitesses de service (repair/rearm/refuel) depuis les upgrades
+      const svc = serviceTimeMult(upgradeIds);
+      mods.repairMult = svc.repair;
+      mods.rearmMult  = svc.rearm;
+      mods.refuelMult = svc.refuel;
+
+      // Résistances aux dégâts
+      upgradeIds.forEach(id => {
+        const u = UPGRADES[id];
+        if (u?.resistTurrets)   mods.resistTurrets   = (mods.resistTurrets   ?? 0) + u.resistTurrets;
+        if (u?.resistPlanes)    mods.resistPlanes     = (mods.resistPlanes    ?? 0) + u.resistPlanes;
+        if (u?.reduceDmgPct)    mods.reduceDmgPct     = (mods.reduceDmgPct    ?? 0) + u.reduceDmgPct;
+        if (u?.collisionDmgMult) mods.collisionDmgMult = (mods.collisionDmgMult ?? 1) * u.collisionDmgMult;
+      });
+
+      this.player.applyUpgradeModifiers(mods, stats.missiles, stats.decoys);
+      this._playerDamageMult    = mods.damageMult;
+      this._playerResistTurrets = mods.resistTurrets;
+      this._playerResistPlanes  = mods.resistPlanes;
+      this._playerReduceDmg     = mods.reduceDmgPct     ?? 0;
+      this._playerCollisionMult = mods.collisionDmgMult ?? 1;
+      // Caméra arrière (touche R) : disponible uniquement si l'équipement est installé
+      this.player._tailCamEnabled = upgradeIds.includes('tail_cam');
+
+      // Dégâts missiles → ennemis IA
+      if (this._missileSystem) {
+        this._missileSystem.onHit = (target, dmg) => {
+          if (!target || target.isDead) return;
+          const wasAlive = !target.isDead;
+          target.hit(Math.round(dmg * this._playerDamageMult));
+          if (wasAlive && target.isDead) {
+            this._audio?.playExplosion(1.0);
+            if (!target.isGround) this._audio?.removeEnemyEngine(target);
+            this.stats.kills++;
+            if (!this._isTDM && !target.isGround) this._multiplayerManager?.sendEnemyKill(target.netId);
+          }
+        };
+      }
+    }
+
     // ── Audio ────────────────────────────────────────────────────────────────
     this._audio = new AudioManager();
     this._audio.init();
@@ -340,6 +564,7 @@ export class Game {
     const isMulti    = ['multiplayer', 'coop', 'ffa', 'tdm', 'freeflight', 'survival'].includes(mode);
     this._isSurvival = isSurvival;
     this._isTDM      = isTDM;
+    this._isFFA      = isFFA;
 
     // ── Mise à l'échelle selon le nombre de joueurs (coop/survie multijoueur) ──
     // Solo : playerCount=1 → aucun changement. Chaque joueur additionnel ajoute des
@@ -446,6 +671,10 @@ export class Game {
       this._multiplayerManager.on('enemy_killed', ({ netId }) => {
         const e = this.enemies.find(e => e.netId === netId && !e.isDead);
         if (e) e.hit(99999);
+        // FFA client : tuer le RemoteBot immédiatement sans attendre le prochain bot_state
+        const bots = this._multiplayerManager.getRemoteBots();
+        const bot  = bots.find(b => b.netId === netId && !b.isDead);
+        if (bot) bot.applyState({ dead: true });
       });
 
       // Notifications arrivée / départ des autres joueurs
@@ -481,9 +710,12 @@ export class Game {
       this._multiplayerManager.on('remoteHit', ({ targetId, damage }) => {
         if (targetId !== this._config.networkManager.id) return;
         if (this.player.isDead) return;
-        this.player.health = Math.max(0, this.player.health - (damage ?? 18));
-        this.ui.showPlayerHit();
-        this._audio?.playPlayerHit();
+        const shieldM = this._getShieldDmgMult(null);
+        this.player.health = Math.max(0, this.player.health - Math.round((damage ?? 18) * (1 - (this._playerReduceDmg ?? 0)) * shieldM));
+        if (shieldM >= 1.0) {
+          this.ui.showPlayerHit();
+          this._audio?.playPlayerHit();
+        }
       });
     }
 
@@ -519,6 +751,19 @@ export class Game {
       this._tdmEnemyBase = aps?.[myApIdx === 0 ? 1 : 0]?.center ?? enemyBase;
       this._spawnTeamAI('ally',  this._tdmAiCount);
       this._spawnTeamAI('enemy', this._tdmAiCount);
+    }
+
+    // ── Bots FFA host-authoritative ──────────────────────────────────────────
+    // Hôte : simule + diffuse positions. Clients : reçoivent via MultiplayerManager.
+    const ffaBotCount = this._config.ffaBotCount ?? 0;
+    const ffaBotDiff  = this._config.ffaBotDiff  ?? 'standard';
+    if (isFFA && ffaBotCount > 0) {
+      if (isHost) {
+        this._spawnFFABots(ffaBotCount, ffaBotDiff);
+        this._startBotBroadcast();
+      } else if (this._multiplayerManager) {
+        this._multiplayerManager.enableBotReceive();
+      }
     }
 
     // Stats DE LA PARTIE (repartent à 0) — affichées sur le HUD
@@ -581,13 +826,22 @@ export class Game {
       if (e.key === 'F6') { e.preventDefault(); this._toggleTextureDebug(); return; }
       // Tab en mode spectateur → cycler entre les alliés vivants
       if (e.key === 'Tab' && this._spectatorMode) { e.preventDefault(); this._cycleSpectatorTarget(); return; }
+      // Entrée : passer le tutoriel en mode entraînement
+      if (e.key === 'Enter' && this._isTraining && !this._tutDone) {
+        this._tutDone = true;
+        if (this.ui._tipEl) { this.ui._tipEl.style.opacity = '0'; setTimeout(() => { if (this.ui._tipEl) this.ui._tipEl.style.display = 'none'; }, 400); }
+        return;
+      }
       if (this.player.isDead || this._missionComplete) return;
       const key = e.key;
       if (isPvP) {
         // Multijoueur : Echap / P bascule le menu ESC (le jeu continue derrière)
         if (key === 'Escape' || key === 'p' || key === 'P') this._toggleEscMenu();
       } else {
-        if ((key === 'p' || key === 'P') && !this.isPaused) this._setPause(true);
+        if (key === 'Escape' || key === 'p' || key === 'P') {
+          if (this.isPaused) this._setPause(false);
+          else this._setPause(true);
+        }
         if (key === 'i' || key === 'I') {
           this._aiDebug = !this._aiDebug;
           setAIDebug(this._aiDebug);
@@ -716,6 +970,125 @@ export class Game {
     }
   }
 
+  // Bots FFA : dispersés sur la carte, ciblent tous les joueurs humains
+  // ── Tick défense active (ECM / boucliers) ────────────────────────────────────
+  _tickActiveDefense(delta) {
+    const ad = this._adParams;
+    if (!ad) return;
+
+    if (ad.type === 'ecm') {
+      if (this._ecmActive) {
+        this._ecmTimer -= delta;
+        const pct = Math.max(0, this._ecmTimer / ad.ecmDuration);
+        this.ui.setActiveDefenseStatus('ecm', 1, 1, 1 - pct, true);
+        if (this._ecmTimer <= 0) {
+          this._ecmActive = false;
+          this._ecmCooldown = ad.ecmCooldown;
+          this._missileSystem?.setECMActive(false);
+        }
+      } else if (this._ecmCooldown > 0) {
+        this._ecmCooldown -= delta;
+        const pct = this._ecmCooldown / ad.ecmCooldown;
+        this.ui.setActiveDefenseStatus('ecm', 0, 1, pct, false);
+        if (this._ecmCooldown <= 0) this.ui.setActiveDefenseStatus('ecm', 1, 1, 0, false);
+      }
+    } else if (ad.type?.startsWith('shield')) {
+      if (this._shieldActive) {
+        this._shieldTimer -= delta;
+        const pct = Math.max(0, this._shieldTimer / ad.shieldDuration);
+        this.ui.setActiveDefenseStatus(ad.type, 1, 1, 1 - pct, true);
+        if (this._shieldMesh) {
+          this._shieldMesh.material.opacity = 0.15 + 0.20 * Math.abs(Math.sin(performance.now() / 280));
+        }
+        if (this._shieldTimer <= 0) {
+          this._shieldActive = false;
+          this._shieldCooldown = ad.shieldCooldown;
+          if (this._shieldMesh) this._shieldMesh.visible = false;
+          this.ui.setActiveDefenseStatus(ad.type, 0, 1, 1, false);
+        }
+      } else if (this._shieldCooldown > 0) {
+        this._shieldCooldown -= delta;
+        const pct = this._shieldCooldown / ad.shieldCooldown;
+        this.ui.setActiveDefenseStatus(ad.type, 0, 1, pct, false);
+        if (this._shieldCooldown <= 0) this.ui.setActiveDefenseStatus(ad.type, 1, 1, 0, false);
+      }
+    }
+  }
+
+  // Retourne le multiplicateur de dégâts selon l'état du bouclier.
+  // bulletDir: THREE.Vector3 (direction de vol de la balle) ou null (dégâts non-directionnels)
+  _getShieldDmgMult(bulletDir) {
+    if (!this._shieldActive || !this._adParams) return 1.0;
+    const type      = this._adParams.type;
+    const reduction = this._adParams.shieldReduction;
+    if (type === 'shield_full') return 1 - reduction;
+    if (!bulletDir) return 1 - reduction * 0.5; // non-directionnel → moitié de l'effet
+    const playerFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.pivot.quaternion);
+    const dot       = bulletDir.dot(playerFwd);
+    // dot < 0 → balle venant de l'avant ; dot > 0 → de l'arrière
+    if (type === 'shield_front' && dot < 0) return 1 - reduction;
+    if (type === 'shield_rear'  && dot > 0) return 1 - reduction;
+    return 1.0;
+  }
+
+  // ── Bouclier visuel ──────────────────────────────────────────────────────────
+  _buildShieldMesh(type) {
+    if (this._shieldMesh) { this._shieldMesh.parent?.remove(this._shieldMesh); this._shieldMesh = null; }
+    const color = type === 'shield_full' ? 0x44ccff : (type === 'shield_front' ? 0x4488ff : 0xff8844);
+    const mat   = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.22,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    let geo;
+    if (type === 'shield_full') {
+      geo = new THREE.SphereGeometry(11, 10, 7);
+    } else {
+      // Hémisphère (demi-sphère) orienté vers l'avant ou l'arrière
+      geo = new THREE.SphereGeometry(11, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+    }
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 10;
+    if (type === 'shield_front') mesh.rotation.x = Math.PI / 2;   // ouverture vers -Z (avant)
+    if (type === 'shield_rear')  mesh.rotation.x = -Math.PI / 2;  // ouverture vers +Z (arrière)
+    mesh.visible = false;
+    this.player.pivot.add(mesh);
+    this._shieldMesh = mesh;
+  }
+
+  _spawnFFABots(count, diffKey) {
+    const diff = DIFFICULTY[diffKey] ?? DIFFICULTY.standard;
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+      const r   = 600 + Math.random() * 1600;
+      const sp  = new THREE.Vector3(Math.cos(ang)*r, 180 + Math.random()*200, Math.sin(ang)*r);
+      const e   = new Enemy(this.scene, sp, {
+        hp: diff.hp, skill: 'regular', role: 'attacker',
+        homeZone: { x: 0, z: 0, radius: 3000 }, leash: 4000,
+        preloadedScene: this._enemyModelScene,
+      });
+      e.getTerrainHeight = this.getTerrainHeight ?? null;
+      this._wireEnemyFire(e);
+      this.enemies.push(e);
+    }
+  }
+
+  // Diffuse les états des bots toutes les 100 ms (hôte FFA uniquement)
+  _startBotBroadcast() {
+    this._botBroadcastTimer = setInterval(() => {
+      if (!this._multiplayerManager || this._destroyed) return;
+      const states = this.enemies
+        .filter(e => e.netId !== undefined)
+        .map(e => ({
+          netId: e.netId,
+          pos  : { x: e.pivot.position.x, y: e.pivot.position.y, z: e.pivot.position.z },
+          quat : { x: e.pivot.quaternion.x, y: e.pivot.quaternion.y, z: e.pivot.quaternion.z, w: e.pivot.quaternion.w },
+          hp   : e.hp ?? 100,
+          dead : !!e.isDead,
+        }));
+      if (states.length > 0) this._multiplayerManager.sendBotStates(states);
+    }, 100);
+  }
+
   // Première vague : spawn en altitude autour de la base ennemie (ou dispersés en FFA)
   _spawnInitialWave(count, diff, playerBase, enemyBase, pickSkill, scattered = false) {
     const attackCount  = Math.round(count * 0.45);
@@ -842,8 +1215,22 @@ export class Game {
   }
 
   // ── Vague survie ─────────────────────────────────────────────────────────
+  // Recalcule speedMult et maneuverMult en fonction des missiles encore chargés
+  _updateMissileLoadMods() {
+    const p = this.player;
+    if (!p || !this._missileSpeedDelta) return;
+    const max = p._maxMissiles || 1;
+    const factor = Math.max(0, Math.min(1, (p.missileCount ?? 0) / max));
+    p._upgMods.speedMult    = this._baseSpeedMult    + this._missileSpeedDelta    * factor;
+    p._upgMods.maneuverMult = this._baseManeuverMult + this._missileManeuverDelta * factor;
+  }
+
   _startSurvivalWave() {
     this._survivalWave++;
+    // Réapparition des ennemis au sol toutes les 5 vagues (ne compte pas pour la fin de vague)
+    if (this._groundDefense && this._survivalWave > 1 && this._survivalWave % 5 === 1) {
+      this._groundDefense.respawnEnemies();
+    }
     // Plus de joueurs → vagues plus grosses + avions un peu plus coriaces
     const count = Math.floor((3 + this._survivalWave * 1.5) * (this._countScale ?? 1));
     const hp    = Math.round((30 + this._survivalWave * 10) * (this._enemyHpMult ?? 1));
@@ -1238,17 +1625,59 @@ export class Game {
   _triggerMatchEnd() {
     if (this._missionComplete) return;
     this._missionComplete = true;
+    if (this.player) this.player._blockPointerLock = true;
     this._audio?.pauseEngine(true);
     document.exitPointerLock();
     if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
     if (this._escMenuVisible) this.ui.showEscMenu(false);
     this._updateFFARecord(this.stats.kills);
-    this.ui.showVictory(
-      this.stats,
-      this._config.networkManager ? null : () => this._quit('replay'),
-      () => this._quit(),
-      this._buildScoreboardRows(),
-    );
+    // Afficher les récompenses de progression avant l'écran de victoire
+    this._showEndRewards(true, () => {
+      this.ui.showVictory(
+        this.stats,
+        this._config.networkManager ? null : () => this._quit('replay'),
+        () => this._quit(),
+        this._buildScoreboardRows(),
+      );
+    });
+  }
+
+  // ── Récompenses de fin de partie ────────────────────────────────────────────
+  _showEndRewards(won, onContinue) {
+    if (this._isTraining || !this._progression) { onContinue?.(); return; }
+
+    const kills  = this.stats?.kills  ?? 0;
+    const deaths = this.stats?.deaths ?? 0;
+    const mode   = this._config.mode;
+    const diff   = this._config.difficulty ?? 'standard';
+    const diffMap = { easy:'easy', standard:'normal', hard:'hard', expert:'expert' };
+    const diffKey = diffMap[diff] ?? 'normal';
+    const waves   = this._survivalWave ?? 0;
+    const flightSec = (performance.now() - (this._gameStartTime ?? performance.now())) / 1000;
+
+    const { xp, credits, breakdown } = calcRewards({
+      mode, kills, deaths, won,
+      wavesCleared: mode === 'survival' || mode === 'coop' ? waves : 0,
+      diff: diffKey, isTraining: false,
+    });
+
+    const { oldLevel, newLevel, leveledUp } = this._progression.addRewards(xp, credits);
+    this._progression.recordGame({
+      mode, kills, deaths, won,
+      wavesCleared: waves, flightTimeSec: Math.round(flightSec),
+      distanceKm: 0, diff: diffKey,
+    });
+
+    const { xpInLevel } = this._progression.levelInfo;
+    const xpNext = xpToNextLevel(newLevel);
+    window._xpBarPct = xpNext < Infinity ? Math.min(100, Math.round(xpInLevel / xpNext * 100)) : 100;
+
+    this.ui.showRewards({
+      breakdown, totalXp: xp, totalCredits: credits,
+      oldLevel, newLevel, leveledUp,
+      scoreboard: this._buildScoreboardRows(),
+      onContinue,
+    });
   }
 
   // action : 'menu' (défaut) ou 'replay' (main.js relance la même config).
@@ -1309,9 +1738,12 @@ export class Game {
 
   _respawn() {
     const p = this.player;
-    p.health   = 100;
-    p.fuel     = 100;
-    p.ammo     = 200;
+    // Respawn volontaire depuis le menu ESC (joueur encore en vie) → compte comme une mort
+    if (!p.isDead && this.stats) this.stats.deaths++;
+    // Respecter les max issus des upgrades
+    p.health   = 100 + (p._upgMods?.healthBonus ?? 0);
+    p.fuel     = p._maxFuelOverride ?? 100;
+    p.ammo     = p._maxAmmoOverride ?? 200;
     p.speed    = 30;
     p.isDead   = false;
     p.isLanded = false;
@@ -1321,6 +1753,39 @@ export class Game {
     p._sHoldTime = 0;
     p._sinkRate  = 0;
     p._groundDamageCooldown = 1.5;
+
+    // Réapprovisionner missiles et leurres
+    if (this._missileSystem && this.player.model) {
+      const mc = this._initMissileCount ?? 0;
+      const dc = this._initDecoyCount   ?? 0;
+      if (mc > 0) {
+        this._missileSystem.attachWingMissiles(this.player.model, this._upgradeIds ?? [], mc);
+        this._missileSystem._fireWingIdx = 0;
+        p.missileCount = mc;
+        this.ui.setMissileCount(
+          this._missileSystem.missilesRemainingAA, this._initAACount,
+          this._missileSystem.missilesRemainingAG, this._initAGCount
+        );
+      }
+      if (dc > 0) {
+        this._missileSystem.attachDecoyPods(this.player.model, dc);
+        p.decoyCount = dc;
+        this.ui.setActiveDefenseStatus('leurres', dc, dc);
+      }
+      // Réinitialiser l'état ECM/bouclier
+      this._ecmActive = false; this._ecmTimer = 0; this._ecmCooldown = 0;
+      this._shieldActive = false; this._shieldTimer = 0; this._shieldCooldown = 0;
+      if (this._shieldMesh) this._shieldMesh.visible = false;
+      this._missileSystem?.setECMActive?.(false);
+      if (this._adParams) {
+        this.ui.setActiveDefenseStatus(
+          this._adParams.type,
+          this._adParams.type === 'leurres' ? dc : 1,
+          this._adParams.type === 'leurres' ? dc : 1,
+          0, false
+        );
+      }
+    }
 
     const mode = this._config.mode;
     if (mode === 'ffa') {
@@ -1409,6 +1874,7 @@ export class Game {
   // ── Pause ────────────────────────────────────────────────────────────────
   _setPause(paused) {
     this.isPaused = paused;
+    if (paused) this._mobileControls?.reset();
     this.ui.showPause(paused, () => this._quit(), () => {
       // Reprendre via le bouton UI (manette / clavier)
       this._pauseCooldownUntil = performance.now() + 500;
@@ -1490,8 +1956,100 @@ export class Game {
       }
     }
 
+    // ── Défense active (ECM / boucliers) ─────────────────────────────────────
+    if (this._adParams) this._tickActiveDefense(delta);
+
+    // ── Esquive joueur → imprécision ennemis ──────────────────────────────────
+    // Plus le joueur manie l'appareil rapidement, plus les ennemis ratent.
+    {
+      const p = this.player;
+      const totalAngRate = Math.abs(p._rollRate ?? 0) + Math.abs(p._pitchRate ?? 0) + Math.abs(p._yawRate ?? 0);
+      // Max théorique ≈ 3.0 rad/s (roll 1.6 + pitch 0.9 + yaw 0.5)
+      // Bonus max = 0.18 → régulier (0.075) devient 0.255, as (0.03) devient 0.21
+      const evasion = Math.min(0.18, totalAngRate * 0.06);
+      for (const e of this.enemies) { if (!e.isDead) e.playerEvasion = evasion; }
+      if (this.allies) for (const a of this.allies) { /* alliés non affectés */ }
+    }
+
     // Met à jour la physique / les contrôles du joueur
     this.player.update(delta);
+
+    // ── Tutoriel ──────────────────────────────────────────────────────────────
+    // Affiché systématiquement en training/practice. En partie normale, respecte
+    // la préférence "Ne plus afficher" (localStorage). Le bouton de dismiss est
+    // câblé via _onTutorialDisabled pour interrompre la séquence en cours.
+    if (this._tutSkipChecked == null) {
+      const disabled = (() => {
+        try { return localStorage.getItem('cielDeFeu_tutorialDisabled') === '1'; }
+        catch (_) { return false; }
+      })();
+      const forceShow = this._isTraining || !!this._practiceMode;
+      this._tutSkipChecked = disabled && !forceShow;
+      this._tutDismissible = !forceShow;
+      if (this.ui) this.ui._onTutorialDisabled = () => { this._tutDone = true; };
+    }
+    if (!this._tutDone && !this._tutSkipChecked && !this.player.isDead) {
+      this._tutTimer = (this._tutTimer ?? 0) + delta;
+      const opts = { dismissible: this._tutDismissible, skippable: !!this._isTraining };
+      if (!this._tut1 && this._tutTimer > 4) {
+        this.ui.showTip?.(t('tutControls'), 7, opts);
+        this._tut1 = true;
+      }
+      if (!this._tut2 && (this.enemies ?? []).some(
+        e => !e.isDead && e.position.distanceTo(this.player.position) < 600
+      )) {
+        this.ui.showTip?.(t('tutShoot'), 6, opts);
+        this._tut2 = true;
+      }
+      if (!this._tut3 && (this.player.isLanded || this._tutTimer > 45)) {
+        this.ui.showTip?.(t('tutLand'), 6, opts);
+        this._tut3 = true;
+      }
+      if (this._tut1 && this._tut2 && this._tut3) this._tutDone = true;
+    }
+
+    // ── Système de missiles ───────────────────────────────────────────────────
+    if (this._missileSystem) {
+      // Cibles sol : incluses si le joueur a des missiles AS équipés
+      // Les wrappers sont cachés pour que l'identité d'objet reste stable entre frames
+      // (nécessaire pour que le lock ne se réinitialise pas chaque frame)
+      const hasAG = this._missileSystem._lockParams?.hasAG;
+      const rawGround = (hasAG && this._groundDefense)
+        ? this._groundDefense.getEnemyGroundTargets()
+        : [];
+      const groundTargets = rawGround.map(u => {
+        let w = this._groundTargetCache.get(u);
+        if (!w) {
+          w = {
+            get isDead() { return u.isDead; },
+            pivot   : { position: u.pos },
+            hit     : (dmg) => { if (u.isDead) return; u.hp -= dmg; if (u.hp <= 0) { u.isDead = true; u.root.visible = false; } },
+            isGround: true,
+            rawUnit : u,
+          };
+          this._groundTargetCache.set(u, w);
+        }
+        return w;
+      });
+      // Nettoyage des unités mortes du cache
+      if (this._groundTargetCache.size > 0) {
+        for (const [u] of this._groundTargetCache) { if (u.isDead) this._groundTargetCache.delete(u); }
+      }
+      const remoteBots = this._multiplayerManager?.getRemoteBots?.() ?? [];
+      const allEnemies = [...(this.enemies ?? []), ...(this.allies ?? []), ...groundTargets, ...remoteBots];
+      const activeDecoys = this._missileSystem.getActiveDecoys();
+      this._missileSystem.update(delta, this.player.pivot, allEnemies, activeDecoys);
+      this._missileSystem.updateDecoys(delta);
+      this._missileSystem.tickExplosions(delta);
+
+      // HUD verrou — intégré au losange existant de l'ennemi (UI.js)
+      const target = this._missileSystem.lockTarget;
+      if (target && this._missileSystem.missilesRemaining > 0) {
+        this.ui.setLockTarget(target, this._missileSystem.lockProgress, this._missileSystem.isLocked);
+      } else {
+        this.ui.setLockTarget(null, 0, false);
+      }
+    }
 
     // Mode spectateur (survie MP) : piloter la caméra vers un allié vivant
     if (this._spectatorMode) {
@@ -1518,12 +2076,14 @@ export class Game {
             this._spectatorMode = false;
             if (this.player.model) this.player.model.visible = true;
             this.ui.showSpectatorBanner(false);
-            this.ui.showSurvivalGameOver(
-              this._survivalWave, this._survivalKills,
-              () => this._quit(),
-              null,
-              this._buildScoreboardRows(),
-            );
+            this._showEndRewards(false, () => {
+              this.ui.showSurvivalGameOver(
+                this._survivalWave, this._survivalKills,
+                () => this._quit(),
+                null,
+                this._buildScoreboardRows(),
+              );
+            });
           }
         } else {
           this._allDeadTimer = 0;
@@ -1551,12 +2111,15 @@ export class Game {
         if (hasAllies && (anyAllyAlive || remotePlayers.length > 0)) {
           this._enterSpectator();
         } else {
-          this.ui.showSurvivalGameOver(
-            this._survivalWave, this._survivalKills,
-            () => this._quit(),
-            this._config.networkManager ? null : () => this._quit('replay'),
-            this._buildScoreboardRows(),
-          );
+          if (this.player) this.player._blockPointerLock = true;
+          this._showEndRewards(false, () => {
+            this.ui.showSurvivalGameOver(
+              this._survivalWave, this._survivalKills,
+              () => this._quit(),
+              this._config.networkManager ? null : () => this._quit('replay'),
+              this._buildScoreboardRows(),
+            );
+          });
         }
       }
     }
@@ -1572,7 +2135,7 @@ export class Game {
         playerPos  : this.player.position,
         playerAlive: !this.player.isDead,
         enemies    : this.enemies,
-        enemyFire  : (pos, quat, dmg) => this._enemyBulletManager.fire(pos, quat, dmg),
+        enemyFire  : (pos, quat, dmg) => { const b = this._enemyBulletManager.fire(pos, quat, dmg); if (b) b._fromTurret = true; },
         alliedFire : (pos, quat, dmg) => this._alliedBulletManager.fire(pos, quat, dmg, true),
       });
     }
@@ -1581,10 +2144,15 @@ export class Game {
     for (const b of this._enemyBulletManager.getBullets()) {
       if (b.age >= 999) continue;
       if (!this.player.isDead && b.mesh.position.distanceTo(this.player.position) < 8) {
-        this.player.health = Math.max(0, this.player.health - (b.dmg ?? 7));
+        const resist      = b._fromTurret ? (this._playerResistTurrets ?? 0) : (this._playerResistPlanes ?? 0);
+        const shieldMult  = this._getShieldDmgMult(b.dir);
+        const dmg         = (b.dmg ?? 7) * (1 - resist) * shieldMult;
+        this.player.health = Math.max(0, this.player.health - Math.round(dmg * (this._playerCollisionMult ?? 1) * (1 - (this._playerReduceDmg ?? 0))));
         b.age = 999;
-        this.ui.showPlayerHit();
-        this._audio?.playPlayerHit();
+        if (shieldMult >= 1.0) {
+          this.ui.showPlayerHit();
+          this._audio?.playPlayerHit();
+        }
         continue;
       }
       for (const a of this.allies) {
@@ -1592,7 +2160,7 @@ export class Game {
         this._frameCollisionChecks++;
         if (b.mesh.position.distanceTo(a.position) < 9) {
           const wasAlive = !a.isDead;
-          a.hit(25); b.age = 999;
+          a.hit(Math.round(25 * (this._playerDamageMult ?? 1))); b.age = 999;
           if (wasAlive && a.isDead) {
             const v = this._distExplosionVol(a.position, 0.8);
             if (v > 0.04) this._audio?.playExplosion(v);
@@ -1610,7 +2178,8 @@ export class Game {
         this._frameCollisionChecks++;
         if (!e.isDead && b.mesh.position.distanceTo(e.position) < 9) {
           const wasAlive = !e.isDead;
-          e.hit(25); b.age = 999;
+          e.notifyAllyFire();
+          e.hit(Math.round(25 * (this._playerDamageMult ?? 1))); b.age = 999;
           if (wasAlive && e.isDead) {
             const v = this._distExplosionVol(e.position, 0.9);
             if (v > 0.04) this._audio?.playExplosion(v);
@@ -1633,7 +2202,7 @@ export class Game {
         if (b.age >= 999) continue;
         for (const rp of remotes) {
           if (rp.isDead) continue;
-          if (!rp.isEnemy && !ff) continue;   // allié non touchable si tir allié off
+          if (!rp.isEnemy && !ff) continue;
           this._frameCollisionChecks++;
           if (b.mesh.position.distanceTo(rp.position) < 9) {
             b.age = 999;
@@ -1642,6 +2211,33 @@ export class Game {
             this._multiplayerManager.sendHit(rp.id, PVP_DMG);
             rp.applyLocalHit(PVP_DMG);   // dégâts optimistes → réaction immédiate
             break;
+          }
+        }
+      }
+    }
+
+    // Balles joueur → bots FFA distants (clients : l'hôte a les ennemis localement)
+    if (this._multiplayerManager) {
+      const bots = this._multiplayerManager.getRemoteBots();
+      if (bots.length > 0) {
+        for (const b of this.bulletManager.getBullets()) {
+          if (b.age >= 999) continue;
+          for (const bot of bots) {
+            if (bot.isDead) continue;
+            if (b.mesh.position.distanceTo(bot.position) < 9) {
+              b.age = 999;
+              this.ui.showHitMarker();
+              this._audio?.playImpact('plane');
+              bot.applyLocalHit(25);
+              if (bot.hp <= 0 && !bot._killSent) {
+                bot._killSent = true;
+                this._audio?.playExplosion(1.0);
+                this.stats.kills++;
+                this._bumpLifetime('stats_kills');
+                this._multiplayerManager.sendEnemyKill(bot.netId);
+              }
+              break;
+            }
           }
         }
       }
@@ -1657,7 +2253,8 @@ export class Game {
     const humanTargets = [];
     if (!this.player.isDead) humanTargets.push(this.player.position);
     for (const rp of (this._multiplayerManager?.getRemotePlayers() ?? [])) {
-      if (!rp.isDead && rp.isEnemy === false) humanTargets.push(rp.position);
+      // FFA : bots ciblent tout le monde ; autres modes : seulement les alliés
+      if (!rp.isDead && (rp.isEnemy === false || this._isFFA)) humanTargets.push(rp.position);
     }
     const nearestOf = (epos, list, fallback) => {
       if (list.length === 0) return fallback;
@@ -1714,7 +2311,7 @@ export class Game {
           this._frameCollisionChecks++;
           if (b.mesh.position.distanceTo(enemy.position) < 9) {
             const wasAlive = !enemy.isDead;
-            enemy.hit(25);
+            enemy.hit(Math.round(25 * (this._playerDamageMult ?? 1)));
             b.age = 999;
             this.ui.showHitMarker();
             this._audio?.playImpact('plane');
@@ -1836,16 +2433,19 @@ export class Game {
       const allGroundDead = !this._groundDefense || this._groundDefense.allEnemiesDead();
       if (allAirDead && allGroundDead) {
         this._missionComplete = true;
+        if (this.player) this.player._blockPointerLock = true;
         this._audio?.pauseEngine(true);
         document.exitPointerLock();
         if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
         this._updateMissionRecord();
-        this.ui.showVictory(
-          this.stats,
-          this._config.networkManager ? null : () => this._quit('replay'),
-          () => this._quit(),
-          this._buildScoreboardRows(),
-        );
+        this._showEndRewards(true, () => {
+          this.ui.showVictory(
+            this.stats,
+            this._config.networkManager ? null : () => this._quit('replay'),
+            () => this._quit(),
+            this._buildScoreboardRows(),
+          );
+        });
       }
     }
 
@@ -1870,7 +2470,10 @@ export class Game {
       this._multiplayerManager.update(delta);
       this._netSyncTimer += delta;
       if (this._netSyncTimer >= 0.033) { // 30 Hz — plus réactif, l'extrapolation lisse le reste
-        this._multiplayerManager.sendLocalState(this.player);
+        this._multiplayerManager.sendLocalState(this.player, {
+          shieldActive: this._shieldActive ?? false,
+          shieldType  : this._adParams?.type ?? null,
+        });
         this._netSyncTimer = 0;
       }
       // Diffuse notre score dès qu'il change → tableau des scores synchronisé
@@ -1936,18 +2539,69 @@ export class Game {
           nearAirport = true;
           this._refuelTimer += delta;
           if (this._refuelTimer > 2.0) {
-            const wasFull = p.fuel >= 100 && p.ammo >= 200 && p.health >= 100;
+            const maxFuel   = p._maxFuelOverride  ?? 100;
+            const maxAmmo   = p._maxAmmoOverride  ?? 200;
+            const maxHealth = 100 + (p._upgMods?.healthBonus ?? 0);
+            const upgIds    = this._progression?.getUpgrades(this._progression?.activePlane ?? 0) ?? [];
+            // repairMult/rearmMult/refuelMult < 1 = plus rapide (serviceTimeMult retourne <1)
+            const repairSpd = 18 * (1 / (p._upgMods?.repairMult ?? 1));
+            const rearmSpd  = 25 * (1 / (p._upgMods?.rearmMult  ?? 1));
+            const refuelSpd = 12 * (1 / (p._upgMods?.refuelMult ?? 1));
+
+            const wasFull = p.fuel >= maxFuel && p.ammo >= maxAmmo && p.health >= maxHealth
+              && (p.missileCount ?? 0) >= (p._maxMissiles ?? 0)
+              && ((p._maxDecoys ?? 0) === 0 || (p.decoyCount ?? 0) >= (p._maxDecoys ?? 0));
+
             if (!wasFull) {
-              p.fuel   = Math.min(100, p.fuel   + delta * 12);
-              p.ammo   = Math.min(200, p.ammo   + delta * 25);
-              p.health = Math.min(100, p.health + delta * 18);
+              p.fuel   = Math.min(maxFuel,   p.fuel   + delta * refuelSpd);
+              p.ammo   = Math.min(maxAmmo,   p.ammo   + delta * rearmSpd);
+              p.health = Math.min(maxHealth, p.health + delta * repairSpd);
+
+              // Recharger missiles progressivement (1 missile toutes les ~3s)
+              const missileRate = 0.33 / (p._upgMods?.rearmMult ?? 1);
+              if (p._maxMissiles > 0 && (p.missileCount ?? 0) < p._maxMissiles) {
+                this._missileAccum = (this._missileAccum ?? 0) + delta * missileRate;
+                if (this._missileAccum >= 1.0) {
+                  const add = Math.floor(this._missileAccum);
+                  this._missileAccum -= add;
+                  p.missileCount = Math.min(p._maxMissiles, (p.missileCount ?? 0) + add);
+                  this._updateMissileLoadMods();
+                  if (this._missileSystem && p.model) {
+                    this._missileSystem.attachWingMissiles(p.model, upgIds, p.missileCount);
+                  }
+                  this.ui.setMissileCount(
+                    this._missileSystem?.missilesRemainingAA ?? 0, this._initAACount ?? 0,
+                    this._missileSystem?.missilesRemainingAG ?? 0, this._initAGCount ?? 0
+                  );
+                }
+              } else {
+                this._missileAccum = 0;
+              }
+
+              // Recharger leurres progressivement (1 leurre toutes les ~3s)
+              const decoyRate = 0.33 / (p._upgMods?.rearmMult ?? 1);
+              if (p._maxDecoys > 0 && (p.decoyCount ?? 0) < p._maxDecoys) {
+                this._decoyAccum = (this._decoyAccum ?? 0) + delta * decoyRate;
+                if (this._decoyAccum >= 1.0) {
+                  const add = Math.floor(this._decoyAccum);
+                  this._decoyAccum -= add;
+                  p.decoyCount = Math.min(p._maxDecoys, (p.decoyCount ?? 0) + add);
+                  this.ui.setActiveDefenseStatus('leurres', p.decoyCount, p._maxDecoys);
+                  if (this._missileSystem && p.model) {
+                    this._missileSystem.attachDecoyPods(p.model, p.decoyCount);
+                  }
+                }
+              } else {
+                this._decoyAccum = 0;
+              }
+
               refueling = true;
               this._refuelSoundTimer = (this._refuelSoundTimer || 0) + delta;
               if (this._refuelSoundTimer >= 1.0) {
                 this._audio?.playRefuelTick();
                 this._refuelSoundTimer = 0;
               }
-              if (p.fuel >= 100 && p.ammo >= 200 && p.health >= 100) {
+              if (p.fuel >= maxFuel && p.ammo >= maxAmmo && p.health >= maxHealth) {
                 this.ui.showRefuelComplete();
               }
             } else {
@@ -1957,7 +2611,7 @@ export class Game {
           break;
         }
       }
-      if (!nearAirport) { this._refuelTimer = 0; this._refuelSoundTimer = 0; }
+      if (!nearAirport) { this._refuelTimer = 0; this._refuelSoundTimer = 0; this._missileAccum = 0; this._decoyAccum = 0; }
       if (!p.isLanded) this.ui.clearRefuelMessage();
       this.ui.showRefueling(refueling);
     }
@@ -2546,7 +3200,7 @@ export class Game {
       fontSize: '14px', letterSpacing: '2px', zIndex: '999',
       pointerEvents: 'none', opacity: '0.85',
     });
-    hint.textContent = '— CLIQUEZ POUR CAPTURER LA SOURIS —';
+    hint.textContent = t('clickToCapture');
     document.body.appendChild(hint);
     this._pointerLockHint = hint;
 
@@ -2575,7 +3229,13 @@ export class Game {
   destroy() {
     this._destroyed = true;
 
+    this._mobileControls?.destroy();
+    this._mobileControls = null;
+
     if (this._loopId) cancelAnimationFrame(this._loopId);
+    if (this._botBroadcastTimer) { clearInterval(this._botBroadcastTimer); this._botBroadcastTimer = null; }
+    this._multiplayerManager?.removeAllBots?.();
+    if (this._shieldMesh) { this._shieldMesh.parent?.remove(this._shieldMesh); this._shieldMesh = null; }
 
     // Événements
     if (this._keydownHandler) document.removeEventListener('keydown',           this._keydownHandler);

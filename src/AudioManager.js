@@ -579,6 +579,44 @@ export class AudioManager {
     osc.start(t); osc.stop(t + 0.3);
   }
 
+  // ── DÉPLOIEMENT LEURRES (chaff/flare) ────────────────────────────────────
+  playDecoy() {
+    if (!this._ctx) return;
+    const ctx = this._ctx;
+    const t   = ctx.currentTime;
+    // Rafale de claquements métalliques courts (cartouches éjectées)
+    const bursts = 5;
+    for (let i = 0; i < bursts; i++) {
+      const delay = i * 0.045 + Math.random() * 0.015;
+      const dur   = 0.055;
+      const len   = Math.floor(ctx.sampleRate * dur);
+      const buf   = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data  = buf.getChannelData(0);
+      for (let j = 0; j < len; j++) {
+        data[j] = (Math.random() * 2 - 1) * Math.exp(-j / (ctx.sampleRate * 0.007));
+      }
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const hp  = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2800 + Math.random() * 1200;
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.28 + Math.random() * 0.18, t + delay);
+      env.gain.exponentialRampToValueAtTime(0.001, t + delay + dur);
+      src.connect(hp); hp.connect(env); env.connect(this._bus.sfx);
+      src.start(t + delay);
+    }
+    // Bruit de fond bref (air expulsé)
+    const wlen = Math.floor(ctx.sampleRate * 0.18);
+    const wbuf = ctx.createBuffer(1, wlen, ctx.sampleRate);
+    const wd   = wbuf.getChannelData(0);
+    for (let j = 0; j < wlen; j++) wd[j] = Math.random() * 2 - 1;
+    const wsrc = ctx.createBufferSource(); wsrc.buffer = wbuf;
+    const wlp  = ctx.createBiquadFilter(); wlp.type = 'lowpass'; wlp.frequency.value = 600;
+    const wenv = ctx.createGain();
+    wenv.gain.setValueAtTime(0.12, t);
+    wenv.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    wsrc.connect(wlp); wlp.connect(wenv); wenv.connect(this._bus.sfx);
+    wsrc.start(t);
+  }
+
   // ── Nettoyage ─────────────────────────────────────────────────────────────
   dispose() {
     this.stopMenuMusic();

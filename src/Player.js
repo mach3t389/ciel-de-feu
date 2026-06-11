@@ -50,6 +50,38 @@ export class Player {
     this._teamColor = options.teamColor || null;
     this._planePath = options.planePath || '/SK_Veh_Plane_Stunt_01.glb';
 
+    // ── Modificateurs d'améliorations ────────────────────────────────────────
+    // Appliqués via applyUpgradeModifiers() depuis Game.js après chargement
+    this._upgMods = {
+      healthBonus     : 0,       // HP supplémentaires (absolu)
+      speedMult       : 1.0,     // multiplicateur vitesse max
+      accelMult       : 1.0,     // multiplicateur accélération
+      maneuverMult    : 1.0,     // multiplicateur taux angulaires
+      rollMult        : 1.0,     // multiplicateur vitesse de roll
+      fuelMult        : 1.0,     // multiplicateur jauge carburant
+      ammoBonus       : 0,       // munitions supplémentaires (absolu)
+      fireCooldownMult: 1.0,     // multiplicateur cadence (< 1 = plus rapide)
+      damageMult      : 1.0,     // multiplicateur dégâts balles
+      resistTurrets   : 0,       // % réduction dégâts tourelles (0-1)
+      resistPlanes    : 0,       // % réduction dégâts avions
+      repairMult      : 1.0,     // multiplicateur vitesse réparation
+      rearmMult       : 1.0,     // multiplicateur vitesse réarmement
+      refuelMult      : 1.0,     // multiplicateur vitesse ravitaillement
+    };
+    // Caméra arrière (touche R) — activée par défaut, restreinte par l'équipement en partie réelle
+    this._tailCamEnabled = true;
+    // Missiles & leurres
+    this.missileCount = 0;
+    this.decoyCount   = 0;
+    this._maxMissiles = 0;
+    this._maxDecoys   = 0;
+
+    // Callbacks missiles/leurres
+    this.onFireMissile = null;  // () appelé quand le joueur tire un missile
+    this.onDeployDecoy = null;  // () appelé quand le joueur déploie un leurre
+    this._missileCooldown = 0;
+    this._decoyCooldown   = 0;
+
     // ── État de vol ──────────────────────────────────────────────────────────
     this.speed    = 30;
     this.altitude = START_ALT;
@@ -95,6 +127,10 @@ export class Player {
     this._pitchRate = 0;
     this._rollRate  = 0;
     this._yawRate   = 0;
+
+    // Entrées tactiles mobiles (injectées par MobileControls)
+    this._touchTurn  = 0;
+    this._touchPitch = 0;
 
     // Entrées normalisées [-1,1] pour animation des bones
     this._rollInput  = 0;
@@ -358,11 +394,21 @@ export class Player {
         if (!this.keys.tab_prev && this.onScoreboardShow) this.onScoreboardShow(true);
         this.keys.tab_prev = true;
       }
-      // R : vue arrière (maintenir)
-      if (e.key === 'r' || e.key === 'R') this.keys.lookBack = true;
+      // R : vue arrière (maintenir) — seulement si l'équipement caméra arrière est installé
+      if ((e.key === 'r' || e.key === 'R') && this._tailCamEnabled) this.keys.lookBack = true;
       // V : vue libre souris (maintenir)
       if (e.key === 'v' || e.key === 'V') this._vKeyActive = true;
       if (e.key === 'Escape') { if (this.onPause) this.onPause(); }
+      // F : tirer un missile
+      if ((e.key === 'f' || e.key === 'F') && !this.keys.f_prev) {
+        this.keys.f_prev = true;
+        if (this.onFireMissile) this.onFireMissile();
+      }
+      // G : déployer un leurre
+      if ((e.key === 'g' || e.key === 'G') && !this.keys.g_prev) {
+        this.keys.g_prev = true;
+        if (this.onDeployDecoy) this.onDeployDecoy();
+      }
     };
     const up = (e) => {
       if (e.key === 'w' || e.key === 'W') this.keys.w = false;
@@ -378,6 +424,8 @@ export class Player {
       if (e.key === 'h' || e.key === 'H') this.keys.h_prev = false;
       if (e.key === 'Tab') { this.keys.tab_prev = false; if (this.onScoreboardShow) this.onScoreboardShow(false); }
       if (e.key === 'r' || e.key === 'R') this.keys.lookBack = false;
+      if (e.key === 'f' || e.key === 'F') this.keys.f_prev = false;
+      if (e.key === 'g' || e.key === 'G') this.keys.g_prev = false;
       if (e.key === 'v' || e.key === 'V') this._vKeyActive = false;
     };
     // Clic gauche : tirer + (optionnellement) acquérir le pointer lock.
@@ -388,8 +436,9 @@ export class Player {
 
     const onMouseDown = (e) => {
       if (e.button !== 0) return;
+      if (e.sourceCapabilities?.firesTouchEvents) return;  // événement synthétique mobile → ignoré
       if (e.target.closest('button, a, input, [role="button"]')) return;
-      if (this.isDead) return;
+      if (this.isDead || this._blockPointerLock) return;
       this._mouseFireDown  = true;
       this._mouseFireLatch = true;   // tir garanti même si mouseup arrive avant la frame
       this.keys.space      = true;
@@ -449,6 +498,26 @@ export class Player {
     };
   }
 
+  // ── Applique les modificateurs issus des améliorations ───────────────────
+  applyUpgradeModifiers(mods, missileCount, decoyCount) {
+    Object.assign(this._upgMods, mods);
+    this._maxMissiles = missileCount;
+    this._maxDecoys   = decoyCount;
+    this.missileCount = missileCount;
+    this.decoyCount   = decoyCount;
+    // Appliquer au HP
+    this.health = Math.min(100 + (mods.healthBonus ?? 0), this.health + (mods.healthBonus ?? 0));
+    // Appliquer au carburant — capacité depuis stats positives, conso depuis stats négatives
+    this._maxFuelOverride = MAX_FUEL * (mods.fuelCapMult ?? mods.fuelMult ?? 1.0);
+    this.fuel = this._maxFuelOverride;  // toujours plein au départ
+    this._fuelBurnMult = mods.fuelBurnMult ?? 1.0;
+    // Appliquer aux munitions
+    this._maxAmmoOverride = MAX_AMMO + (mods.ammoBonus ?? 0);
+    this.ammo = this._maxAmmoOverride;
+    // Cadence de tir
+    this._fireRate = 0.18 * (mods.fireCooldownMult ?? 1.0);
+  }
+
   // Retire tous les écouteurs globaux — appelé par Game.destroy()
   dispose() {
     if (this._inputCleanup) { this._inputCleanup(); this._inputCleanup = null; }
@@ -487,18 +556,22 @@ export class Player {
 
     // Drain carburant proportionnel aux gaz utilisés
     if (this.engineOn) {
-      const fuelCost = FUEL_DRAIN + thrust * FUEL_BOOST;
+      const fuelCost = (FUEL_DRAIN + thrust * FUEL_BOOST) * (this._fuelBurnMult ?? 1.0);
       this.fuel = Math.max(0, this.fuel - fuelCost * delta);
       if (this.fuel <= 0) this.engineOn = false;
     }
 
     // ── Vitesse ──────────────────────────────────────────────────────────
+    const effMaxSpeed = MAX_SPEED * (this._upgMods.speedMult ?? 1.0);
+    const effAccel    = ACCEL    * (this._upgMods.accelMult  ?? 1.0);
+    this._lastDelta   = delta;
+
     if (this.isLanded) {
       this.speed = Math.max(0, this.speed - GROUND_ROLL_DRAG * delta);
     } else if (this.engineOn) {
       if (thrust > 0) {
         // RT/Shift maintenu → accélérer
-        this.speed = Math.min(MAX_SPEED, this.speed + ACCEL * thrust * delta);
+        this.speed = Math.min(effMaxSpeed, this.speed + effAccel * thrust * delta);
       } else if (brake > 0) {
         // LT/Ctrl maintenu → freiner (peut descendre sous MIN_SPEED)
         this.speed = Math.max(0, this.speed - DECEL * brake * delta);
@@ -547,13 +620,16 @@ export class Player {
     const kPitch = ramp('w') - ramp('s');
     const kYaw   = ramp('a') - ramp('d');
 
-    const mousePitch = -this._stickY;
-    const mouseRoll  = -this._stickX;  // en mode sim : souris X = roulis
-    const mouseTurn  = -this._stickX;  // en mode std : souris X = virage coordonné
+    const mousePitch = -this._stickY + (this._touchPitch ?? 0);
+    const mouseRoll  = -this._stickX + (this._touchTurn  ?? 0);  // en mode sim : souris X = roulis
+    const mouseTurn  = -this._stickX + (this._touchTurn  ?? 0);  // en mode std : souris X = virage coordonné
 
     // Chaque axe est clampé à [-1, 1] avant d'être multiplié par son taux max.
     // Garantit qu'aucune combinaison de périphériques ne dépasse la maniabilité maximale.
     const C = THREE.MathUtils.clamp;
+
+    const mMult = this._upgMods.maneuverMult ?? 1.0;
+    const rMult = this._upgMods.rollMult     ?? 1.0;
 
     if (simMode) {
       // ── MODE SIMULATEUR — style Battlefield ────────────────────────────────
@@ -561,27 +637,23 @@ export class Player {
       const pitchIn = C(mousePitch + this._gpPitch + kPitch, -1, 1);
       const yawIn   = C(kYaw + this._gpRoll,                 -1, 1);
 
-      this._rollRate  = rollIn  * SIM_ROLL_RATE  * maneuver;
-      this._pitchRate = pitchIn * SIM_PITCH_RATE * maneuver;
-      this._yawRate   = yawIn   * SIM_YAW_RATE   * maneuver;
+      this._rollRate  = rollIn  * SIM_ROLL_RATE  * maneuver * mMult * rMult;
+      this._pitchRate = pitchIn * SIM_PITCH_RATE * maneuver * mMult;
+      this._yawRate   = yawIn   * SIM_YAW_RATE   * maneuver * mMult;
 
       this._rollInput  = rollIn;
       this._pitchInput = pitchIn;
 
     } else {
       // ── MODE STANDARD — virage coordonné (style GTA V) ────────────────────
-      // turnIn : virage souris + manette, plafonné avant de dériver roll+yaw automatiques
       const turnIn  = C(mouseTurn + this._gpTurn, -1, 1);
-      // rollIn  : turn automatique + roulis acrobatique Q/E, plafonné
       const rollIn  = C(turnIn + kRoll,           -1, 1);
-      // pitchIn : toutes sources de tangage, plafonnées
       const pitchIn = C(mousePitch + this._gpPitch + kPitch, -1, 1);
-      // yawIn   : lacet auto du virage + A/D + LB/RB, plafonné
       const yawIn   = C(turnIn + kYaw + this._gpRoll,        -1, 1);
 
-      this._pitchRate = pitchIn * MAX_PITCH_RATE * maneuver;
-      this._rollRate  = rollIn  * MAX_ROLL_RATE   * maneuver;
-      this._yawRate   = yawIn   * MAX_YAW_RATE    * maneuver;
+      this._pitchRate = pitchIn * MAX_PITCH_RATE * maneuver * mMult;
+      this._rollRate  = rollIn  * MAX_ROLL_RATE   * maneuver * mMult * rMult;
+      this._yawRate   = yawIn   * MAX_YAW_RATE    * maneuver * mMult;
 
       this._rollInput  = rollIn;
       this._pitchInput = pitchIn;
@@ -660,8 +732,8 @@ export class Player {
       this._rsRamp = 0;
     }
 
-    // ── R3 (clic stick droit, btn 10) → regarder derrière ───────────────
-    this.keys.lookBack = gp.buttons[10]?.pressed ?? false;
+    // ── L3 (clic stick gauche, btn 10) → regarder derrière (si équipement installé) ──
+    this.keys.lookBack = this._tailCamEnabled && (gp.buttons[10]?.pressed ?? false);
 
     // ── A (btn 0) → tir ─────────────────────────────────────────────────
     const btnA = gp.buttons[0]?.pressed ?? false;
@@ -669,13 +741,20 @@ export class Player {
     if (!btnA) this.keys.space = false;
     this._gpBtnA_prev = btnA;
 
-    // ── B (btn 1) ou Y (btn 3) → changer de caméra ──────────────────────
+    // ── B (btn 1) → défense : déployer leurre / contre-mesure ───────────
     const btnB = gp.buttons[1]?.pressed ?? false;
-    const btnY = gp.buttons[3]?.pressed ?? false;
-    const camChange = (btnB && !this._gpBtnB_prev) || (btnY && !this._gpBtnY_prev);
-    if (camChange && this.onCameraChange) this.onCameraChange();
+    if (btnB && !this._gpBtnB_prev && this.onDeployDecoy) this.onDeployDecoy();
     this._gpBtnB_prev = btnB;
+
+    // ── Y (btn 3) → changer de caméra ───────────────────────────────────
+    const btnY = gp.buttons[3]?.pressed ?? false;
+    if (btnY && !this._gpBtnY_prev && this.onCameraChange) this.onCameraChange();
     this._gpBtnY_prev = btnY;
+
+    // ── X (btn 2) → missile ──────────────────────────────────────────────────
+    const btnX = gp.buttons[2]?.pressed ?? false;
+    if (btnX && !this._gpBtnX_prev && this.onFireMissile) this.onFireMissile();
+    this._gpBtnX_prev = btnX;
 
     // ── Menu / Start (btn 9) → pause ─────────────────────────────────────
     const btnMenu = gp.buttons[9]?.pressed ?? false;

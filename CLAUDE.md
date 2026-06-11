@@ -113,3 +113,8 @@ player.quaternion // THREE.Quaternion
 - Les axes des bones ont été déterminés par essai/erreur — ne pas reset
 - Pas de traînée complexe (physique simplifiée intentionnelle)
 - Pas de commentaires sauf si WHY non-évident
+
+## Règle i18n — OBLIGATOIRE
+- **Tout texte visible par l'utilisateur DOIT passer par `t('clé')`** — jamais de string FR ou EN hardcodée dans le JS/HTML
+- Si une clé n'existe pas encore, l'ajouter dans les deux sections (FR et EN) de `src/i18n.js` avant de l'utiliser
+- Exception autorisée : commentaires de code, noms de variables/fonctions, logs console de debug

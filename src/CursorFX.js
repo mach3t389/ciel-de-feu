@@ -28,7 +28,7 @@ export class CursorFX {
       width        : '100%',
       height       : '100%',
       pointerEvents: 'none',
-      zIndex       : '9999',
+      zIndex       : '10000',
     });
     this._canvas.width  = window.innerWidth;
     this._canvas.height = window.innerHeight;
