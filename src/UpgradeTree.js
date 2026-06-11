@@ -575,7 +575,7 @@ export const EQUIPMENT_CATALOG = {
       { id:'allegees1',  name:'Allégées I',      icon:'↑',  levelReq:12, pros:['Maniabilité +10','Carburant +5'],  cons:['Défense −5'],                       upgrades:['wings1'] },
       { id:'allegees2',  name:'Allégées II',     icon:'⬆',  levelReq:22, pros:['Maniabilité +20','Carburant +10'], cons:['Défense −10'],                      upgrades:['wings1','wings2'] },
     ]},
-    turbo:  { label:'TURBOCOMPRESSEUR', options:[
+    turbo:  { label:'TURBO', options:[
       { id:'none',       name:'Aucun',           icon:'○',  levelReq:1,  pros:[],                        cons:[],                                              upgrades:[] },
       { id:'installed',  name:'Installé',        icon:'✺',  levelReq:20, pros:['Vitesse +8','Accél. +8'], cons:['Maniab. −2','Carburant −18','Logistique −8'],  upgrades:['turbo'] },
     ]},
