@@ -3292,6 +3292,13 @@ export class Menu {
     });
     left.appendChild(newDot);
 
+    // Centrage absolu du sélecteur dans la barre (indépendant de left/right)
+    Object.assign(planeSelWrap.style, {
+      position : 'absolute',
+      left     : '50%',
+      transform: 'translateX(-50%)',
+    });
+
     bar.appendChild(left);
     bar.appendChild(planeSelWrap);
     bar.appendChild(right);
