@@ -1945,8 +1945,8 @@ export class UI {
 
       const inGunRange = dist < 1400;
       if (onScreen) {
-        if (inGunRange || isLockTgt) {
-          if (!inGunRange) ctx.globalAlpha = 0.5; // lock missile hors portée canon → discret
+        if (inGunRange || isLockTgt || isClosest) {
+          if (!inGunRange && !isLockTgt) ctx.globalAlpha = 0.45; // lointain → discret
           const dh = 7;
           const diamond = () => {
             ctx.beginPath();

@@ -3009,14 +3009,6 @@ export class Menu {
         <span style="font-size:8px;letter-spacing:2px;color:${M.dimCream};">${t('creditsLabel')}</span>
         <span class="pb-cred" style="font-size:15px;letter-spacing:1.5px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
       </div>
-      <span class="pb-badge" style="
-        position:absolute; top:2px; right:4px;
-        background:${M.accent}; color:#fff;
-        border-radius:50%; width:16px; height:16px;
-        display:none; align-items:center; justify-content:center;
-        font-size:9px; font-weight:bold; font-family:sans-serif;
-        box-shadow:0 0 6px ${M.accent}88;
-      "></span>
     `;
     left.addEventListener('mouseover', () => {
       left.style.background = 'rgba(212,200,138,0.06)';
@@ -3192,12 +3184,54 @@ export class Menu {
     left.appendChild(planeSep);
     left.appendChild(planeSelWrap);
 
+    // Bouton de notification de nouveaux déblocages — séparé, à droite du sélecteur d'avion
+    const unlockBtn = document.createElement('button');
+    Object.assign(unlockBtn.style, {
+      pointerEvents: 'auto',
+      background   : 'rgba(8,8,6,0.6)',
+      border       : `1px solid ${M.border}`,
+      color        : M.dimCream,
+      fontFamily   : 'Rajdhani, sans-serif',
+      fontSize     : '14px',
+      padding      : '4px 10px',
+      cursor       : 'pointer',
+      borderRadius : '4px',
+      display      : 'flex',
+      alignItems   : 'center',
+      gap          : '6px',
+      transition   : 'all 0.15s',
+      flexShrink   : '0',
+      position     : 'relative',
+    });
+    unlockBtn.title = t('myPlane') || 'Mon avion';
+    unlockBtn.innerHTML = `
+      <span style="font-size:13px;">🔓</span>
+      <span class="pb-badge" style="
+        display:none; align-items:center; justify-content:center;
+        background:${M.accent}; color:#fff;
+        border-radius:50%; min-width:16px; height:16px; padding:0 3px;
+        font-size:9px; font-weight:bold; font-family:sans-serif;
+        box-shadow:0 0 6px ${M.accent}88;
+      "></span>
+    `;
+    unlockBtn.addEventListener('mouseover', () => {
+      unlockBtn.style.color = M.cream;
+      unlockBtn.style.borderColor = M.yellow;
+    });
+    unlockBtn.addEventListener('mouseout', () => {
+      unlockBtn.style.color = M.dimCream;
+      unlockBtn.style.borderColor = M.border;
+    });
+    unlockBtn.addEventListener('click', () => this._showMyPlane());
+
     bar.appendChild(left);
+    bar.appendChild(unlockBtn);
     bar.appendChild(right);
     document.body.appendChild(bar);
-    this._profileBar     = bar;
-    this._profileLangBtn = langBtn;
+    this._profileBar       = bar;
+    this._profileLangBtn   = langBtn;
     this._planeSelectorBtn = planeBtn;
+    this._unlockBtn        = unlockBtn;
     this._refreshProfileBar();
   }
 
@@ -3220,14 +3254,19 @@ export class Menu {
     bar.querySelector('.pb-cred').textContent  = `✦ ${credFmt}`;
     // Badge "nouvelles options débloquées non vues"
     const badge = bar.querySelector('.pb-badge');
+    const n = prog.newOptionCount?.() ?? 0;
     if (badge) {
-      const n = prog.newOptionCount?.() ?? 0;
       if (n > 0) {
         badge.textContent = String(n);
         badge.style.display = 'flex';
       } else {
         badge.style.display = 'none';
       }
+    }
+    if (this._unlockBtn) {
+      this._unlockBtn.style.borderColor = n > 0 ? M.accent : M.border;
+      this._unlockBtn.style.color       = n > 0 ? M.cream  : M.dimCream;
+      this._unlockBtn.style.boxShadow   = n > 0 ? `0 0 8px ${M.accent}66` : 'none';
     }
     if (this._profileLangBtn) this._profileLangBtn.textContent = getLang() === 'fr' ? 'EN' : 'FR';
     if (this._planeSelectorBtn && this._progression) {
