@@ -3079,29 +3079,38 @@ export class UI {
     ctx.moveTo(0, H - 6); ctx.lineTo(6, H); ctx.moveTo(W - 6, H); ctx.lineTo(W, H - 6);
     ctx.strokeStyle = C.bezelHi; ctx.lineWidth = 1; ctx.stroke();
 
-    // Label
+    // Label en haut
     ctx.fillStyle = C.cream;
     ctx.font = '9px "Courier New",monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText(label, W / 2, 6);
 
-    // Valeur centrale
-    ctx.fillStyle = valColor;
-    ctx.font = 'bold 22px "Courier New",monospace';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(count), W / 2, H / 2 + 4);
+    // Ligne de séparation sous le label
+    ctx.strokeStyle = C.tickMinor; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(8, 18); ctx.lineTo(W - 8, 18); ctx.stroke();
 
-    // Petits symboles (jusqu'à 8 max pour rester lisible)
+    // Icônes au centre (zone haute)
     const shown = Math.min(8, max);
-    const cellW = (W - 16) / shown;
-    const y = H - 10;
-    ctx.font = '8px "Courier New",monospace';
+    const cellW = (W - 16) / Math.max(shown, 1);
+    const iconsY = H / 2 - 4;
+    ctx.font = '9px "Courier New",monospace';
     ctx.textBaseline = 'middle';
     for (let i = 0; i < shown; i++) {
       const isFull = i < Math.min(count, shown);
       ctx.fillStyle = isFull ? valColor : C.tickMinor;
-      ctx.fillText(isFull ? symFull : symEmpty, 8 + cellW * (i + 0.5), y);
+      ctx.textAlign = 'center';
+      ctx.fillText(isFull ? symFull : symEmpty, 8 + cellW * (i + 0.5), iconsY);
     }
+
+    // Ligne de séparation avant le chiffre
+    ctx.strokeStyle = C.tickMinor; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(8, H - 18); ctx.lineTo(W - 8, H - 18); ctx.stroke();
+
+    // Chiffre en bas
+    ctx.fillStyle = valColor;
+    ctx.font = 'bold 14px "Courier New",monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(count), W / 2, H - 9);
   }
 
   // Indicateur de verrouillage missile (cercle autour de la cible)
