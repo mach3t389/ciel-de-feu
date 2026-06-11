@@ -3148,9 +3148,9 @@ export class Menu {
     Object.assign(planeBtn.style, {
       background: 'transparent', border: `1px solid ${M.border}`,
       color: M.cream, fontFamily: 'Rajdhani, sans-serif',
-      fontSize: '11px', letterSpacing: '2px', fontWeight: '700',
-      padding: '5px 10px', cursor: 'pointer', borderRadius: '4px',
-      display: 'flex', alignItems: 'center', gap: '6px',
+      fontSize: '13px', letterSpacing: '2px', fontWeight: '700',
+      padding: '8px 16px', cursor: 'pointer', borderRadius: '4px',
+      display: 'flex', alignItems: 'center', gap: '8px',
       transition: 'all 0.15s', whiteSpace: 'nowrap',
     });
     planeBtn.addEventListener('mouseover', () => { planeBtn.style.borderColor = M.yellow; planeBtn.style.color = M.yellow; });
