@@ -1887,19 +1887,21 @@ export class Game {
       this._audio?.pauseEngine(true);   // couper moteur + moteurs ennemis en pause
       document.exitPointerLock();
       if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
-      // Nettoyer tout listener précédent avant d'en ajouter un nouveau
-      if (this._resumeHandler) {
-        document.removeEventListener('mousedown', this._resumeHandler);
+      // Sur mobile, pas de pointer lock → pas besoin de ce listener
+      if (!IS_MOBILE) {
+        if (this._resumeHandler) {
+          document.removeEventListener('mousedown', this._resumeHandler);
+        }
+        this._resumeHandler = (e) => {
+          if (e.target.closest('button, a, input')) return;
+          document.removeEventListener('mousedown', this._resumeHandler);
+          this._resumeHandler = null;
+          this._pauseCooldownUntil = performance.now() + 500;
+          this._setPause(false);
+          try { document.body.requestPointerLock(); } catch (_) {}
+        };
+        document.addEventListener('mousedown', this._resumeHandler);
       }
-      this._resumeHandler = (e) => {
-        if (e.target.closest('button, a, input')) return;
-        document.removeEventListener('mousedown', this._resumeHandler);
-        this._resumeHandler = null;
-        this._pauseCooldownUntil = performance.now() + 500; // ignore pointerlockchange pendant 500ms
-        this._setPause(false);
-        try { document.body.requestPointerLock(); } catch (_) {}
-      };
-      document.addEventListener('mousedown', this._resumeHandler);
     } else {
       this._audio?.pauseEngine(false);  // restaurer moteurs en reprenant
       if (this._resumeHandler) {
