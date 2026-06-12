@@ -444,43 +444,45 @@ export class MultiplayerManager {
   }
 
   _bindNetwork() {
-    this._network.on('player_update', ({ id, state }) => {
+    this._netHandlers = [];
+    const on = (type, fn) => { this._network.on(type, fn); this._netHandlers.push({ type, fn }); };
+
+    on('player_update', ({ id, state }) => {
       const p = this._players.get(id);
       if (p) p.applyState(state);
     });
 
-    this._network.on('player_joined', ({ player }) => {
+    on('player_joined', ({ player }) => {
       if (!this._players.has(player.id)) {
         this.addRemotePlayer(player.id, player);
       }
       this._emit('remote_player_joined', { id: player?.id, name: player?.name });
     });
 
-    this._network.on('player_left', ({ id }) => {
+    on('player_left', ({ id }) => {
       const p = this._players.get(id);
       if (p) this._emit('remote_player_left', { id, name: p.name });
       this.removeRemotePlayer(id);
     });
 
-    this._network.on('bullet_fired', ({ id, position, quaternion }) => {
+    on('bullet_fired', ({ id, position, quaternion }) => {
       this._emit('remoteBullet', { position, quaternion });
     });
 
-    this._network.on('player_hit', ({ targetId, damage, shooterId }) => {
+    on('player_hit', ({ targetId, damage, shooterId }) => {
       this._emit('remoteHit', { targetId, damage, shooterId });
     });
 
-    this._network.on('player_respawn', ({ id, position }) => {
+    on('player_respawn', ({ id, position }) => {
       const p = this._players.get(id);
       if (p) p.respawn(position);
     });
 
-    this._network.on('enemy_killed', ({ netId }) => {
+    on('enemy_killed', ({ netId }) => {
       this._emit('enemy_killed', { netId });
     });
 
-    // Positions des bots IA (FFA host-authoritative) — hôte → tous les clients
-    this._network.on('bot_state', ({ bots }) => {
+    on('bot_state', ({ bots }) => {
       if (!this._botsEnabled || !bots) return;
       for (const state of bots) {
         let bot = this._bots.get(state.netId);
@@ -492,8 +494,7 @@ export class MultiplayerManager {
       }
     });
 
-    // Scores des autres joueurs (kills / deaths) pour le tableau des scores
-    this._network.on('score_update', ({ id, kills, deaths, name }) => {
+    on('score_update', ({ id, kills, deaths, name }) => {
       const p = this._players.get(id);
       if (p) {
         if (kills  !== undefined) p.kills  = kills;
@@ -502,6 +503,13 @@ export class MultiplayerManager {
         this._emit('scoreboard_changed', {});
       }
     });
+  }
+
+  unbind() {
+    for (const { type, fn } of (this._netHandlers ?? [])) {
+      this._network?.off(type, fn);
+    }
+    this._netHandlers = [];
   }
 
   addRemotePlayer(id, info) {

@@ -248,6 +248,7 @@ export class MissileSystem {
 
   _mkFallbackMesh() {
     const group = new THREE.Group();
+    group.userData.selfOwned = true;
     // Corps principal — cylindre orange vif orienté sur X (axe avant du missile)
     const g = new THREE.CylinderGeometry(0.18, 0.12, 2.4, 8);
     const mat = new THREE.MeshLambertMaterial({ color: 0xff6600, emissive: 0xff2200, emissiveIntensity: 0.6 });
@@ -380,7 +381,13 @@ export class MissileSystem {
 
   _explodeMissile(ms) {
     const pos = ms.mesh ? ms.mesh.position.clone() : null;
-    if (ms.mesh) { this._scene.remove(ms.mesh); ms.mesh = null; }
+    if (ms.mesh) {
+      this._scene.remove(ms.mesh);
+      if (ms.mesh.userData.selfOwned) {
+        ms.mesh.traverse(c => { if (c.isMesh) { c.geometry?.dispose(); c.material?.dispose(); } });
+      }
+      ms.mesh = null;
+    }
     this._spawnExplosion(pos ?? new THREE.Vector3());
   }
 

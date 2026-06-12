@@ -1946,7 +1946,7 @@ export class Game {
     this.renderer.info.reset();
     this._frameCollisionChecks = 0;
     this._frameAIUpdates       = 0;
-    this._frameCount           = ((this._frameCount ?? 0) + 1) & 0xFFFF;
+    this._frameCount           = ((this._frameCount ?? 0) + 1) % 12000;
 
     // ── Timer de match (Versus / Équipes) ────────────────────────────────────
     if (this._timeRemaining !== null && !this._missionComplete) {
@@ -3237,6 +3237,7 @@ export class Game {
 
     if (this._loopId) cancelAnimationFrame(this._loopId);
     if (this._botBroadcastTimer) { clearInterval(this._botBroadcastTimer); this._botBroadcastTimer = null; }
+    this._multiplayerManager?.unbind?.();
     this._multiplayerManager?.removeAllBots?.();
     if (this._shieldMesh) { this._shieldMesh.parent?.remove(this._shieldMesh); this._shieldMesh = null; }
 
