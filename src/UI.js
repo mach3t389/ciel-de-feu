@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AudioManager } from './AudioManager.js';
 import { t, tCtrlLines, tCtrlBindings, getLang, setLang } from './i18n.js';
 import { IS_MOBILE } from './MobileControls.js';
+import { levelFromTotalXp } from './ProgressionSystem.js';
 
 // ── Palette WW2 cockpit ────────────────────────────────────────────────────────
 const C = {
@@ -608,7 +609,7 @@ export class UI {
       Object.assign(row.style, {
         display: 'flex', justifyContent: 'space-between',
         width: 'min(320px,88vw)', padding: '5px 0',
-        borderBottom: `1px solid ${C.border}`,
+        borderBottom: `1px solid ${C.bezelHi}`,
       });
       const lbl = document.createElement('span');
       lbl.textContent = label;
@@ -625,7 +626,7 @@ export class UI {
       const kd = s.totalDeaths > 0 ? (s.totalKills / s.totalDeaths).toFixed(2) : (s.totalKills || 0);
       const fh = Math.floor((s.flightTimeSec || 0) / 3600);
       const fm = Math.floor(((s.flightTimeSec || 0) % 3600) / 60);
-      wrap.appendChild(mkRow(t('statLevelLabel') || 'NIV', prog.level ?? 1, '#d4b84a'));
+      wrap.appendChild(mkRow(t('statLevelLabel') || 'NIV', levelFromTotalXp(prog.totalXp ?? 0).level, '#d4b84a'));
       wrap.appendChild(mkRow(t('statXpTotal')    || 'XP',  (prog.totalXp || 0).toLocaleString(), '#c8a840'));
       wrap.appendChild(mkRow(t('statCredits')    || 'CREDITS', (prog.credits || 0).toLocaleString(), '#c8a840'));
       wrap.appendChild(mkRow(t('gamesPlayed')    || 'PARTIES', s.totalGames || 0));

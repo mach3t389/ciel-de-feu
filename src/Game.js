@@ -3239,6 +3239,7 @@ export class Game {
     // Événements
     if (this._keydownHandler) document.removeEventListener('keydown',           this._keydownHandler);
     if (this._pllHandler)     document.removeEventListener('pointerlockchange', this._pllHandler);
+    if (this._resumeHandler)  { document.removeEventListener('mousedown', this._resumeHandler); this._resumeHandler = null; }
     window.removeEventListener('resize', this._resizeHandler);
     this.player?.dispose();   // retire les écouteurs souris/clavier globaux du Player
 
