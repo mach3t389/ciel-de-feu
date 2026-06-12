@@ -952,7 +952,7 @@ export class UI {
       sep1b.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
       wrap.appendChild(sep1b);
 
-      // ── Mode de contrôle ──────────────────────────────────────────────────
+      // ── Contrôles : mode + raccourcis ────────────────────────────────────
       wrap.appendChild(secLabel(t('ctrlMode')));
 
       const ctrlModes = [
@@ -961,7 +961,7 @@ export class UI {
       ];
       const ctrlDesc = document.createElement('div');
       ctrlDesc.style.cssText = `font-size:9px;letter-spacing:1px;color:${C.dimCream};line-height:1.6;
-        max-width:320px;text-align:center;margin-top:6px;margin-bottom:18px;min-height:14px;`;
+        max-width:320px;text-align:center;margin-top:6px;margin-bottom:12px;min-height:14px;`;
       const curCtrl = localStorage.getItem('ctrlMode') || 'standard';
       ctrlDesc.textContent = ctrlModes.find(m => m.value === curCtrl)?.desc ?? '';
 
@@ -987,6 +987,14 @@ export class UI {
       wrap.appendChild(ctrlRow);
       wrap.appendChild(ctrlDesc);
 
+      const btnControls = mkSBtn(t('controls') || 'COMMANDES', C.dimCream);
+      btnControls.style.marginBottom = '18px';
+      btnControls.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._showPauseControls();
+      });
+      wrap.appendChild(btnControls);
+
       // ── Langue ────────────────────────────────────────────────────────────
       const sep2 = document.createElement('div');
       sep2.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
@@ -1008,7 +1016,6 @@ export class UI {
         b.addEventListener('click', () => {
           if (getLang() === code) return;
           setLang(code);
-          // Reconstruction du panel pour appliquer la nouvelle langue
           this._pauseSettingsOverlay?.remove();
           this._pauseSettingsOverlay = null;
           this._showPauseSettings();
@@ -1016,17 +1023,6 @@ export class UI {
         langRow.appendChild(b);
       });
       wrap.appendChild(langRow);
-
-      // ── Commandes ─────────────────────────────────────────────────────────
-      const sep3 = document.createElement('div');
-      sep3.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
-      wrap.appendChild(sep3);
-      const btnControls = mkSBtn(t('controls') || 'COMMANDES', C.dimCream);
-      btnControls.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showPauseControls();
-      });
-      wrap.appendChild(btnControls);
 
       if (IS_MOBILE) {
         const btnScoreboard = mkSBtn(t('scoreboardTitle'), C.dimCream);
