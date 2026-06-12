@@ -102,7 +102,7 @@ export class UI {
       left         : '50%',
       transform    : 'translate(-50%, -50%)',
       color        : '#44ff88',
-      fontFamily   : '"Courier New", monospace',
+      fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '15px',
       letterSpacing: '4px',
       textTransform: 'uppercase',
@@ -176,7 +176,7 @@ export class UI {
       this._tipText = document.createElement('div');
       Object.assign(this._tipText.style, {
         color        : '#d4c88a',
-        fontFamily   : '"Courier New", monospace',
+        fontFamily   : 'Rajdhani, sans-serif',
         fontSize     : '11px',
         letterSpacing: '1.5px',
         lineHeight   : '1.7',
@@ -201,7 +201,7 @@ export class UI {
         fontSize     : '9px',
         letterSpacing: '1.5px',
         color        : 'rgba(212,200,138,0.38)',
-        fontFamily   : '"Courier New", monospace',
+        fontFamily   : 'Rajdhani, sans-serif',
         display      : 'none',
         textTransform: 'uppercase',
         flexShrink   : '0',
@@ -214,7 +214,7 @@ export class UI {
         fontSize     : '9px',
         letterSpacing: '1.5px',
         color        : 'rgba(212,200,138,0.3)',
-        fontFamily   : '"Courier New", monospace',
+        fontFamily   : 'Rajdhani, sans-serif',
         textTransform: 'uppercase',
         flexShrink   : '0',
       });
@@ -226,7 +226,7 @@ export class UI {
         border       : '1px solid rgba(212,200,138,0.28)',
         borderRadius : '2px',
         color        : 'rgba(212,200,138,0.55)',
-        fontFamily   : '"Courier New", monospace',
+        fontFamily   : 'Rajdhani, sans-serif',
         fontSize     : '9px',
         letterSpacing: '1.5px',
         padding      : '3px 10px',
@@ -479,7 +479,7 @@ export class UI {
           border: `1px solid ${active ? C.cream : '#3a3020'}`,
           background: active ? 'rgba(212,200,138,0.12)' : 'transparent',
           color: active ? C.cream : C.dimCream,
-          fontFamily: '"Courier New",monospace', fontSize: '12px',
+          fontFamily: 'Rajdhani, sans-serif', fontSize: '12px',
           letterSpacing: '3px', cursor: 'pointer', transition: 'all 0.15s',
         });
       };
@@ -554,7 +554,7 @@ export class UI {
     Object.assign(calibBtn.style, {
       width: '100%', padding: '13px 0', borderRadius: '4px',
       border: `1px solid ${C.cream}`, background: 'transparent',
-      color: C.cream, fontFamily: '"Courier New",monospace',
+      color: C.cream, fontFamily: 'Rajdhani, sans-serif',
       fontSize: '12px', letterSpacing: '3px', cursor: 'pointer', transition: 'background 0.15s',
     });
     calibBtn.addEventListener('click', () => {
@@ -584,7 +584,7 @@ export class UI {
     const sensVal = document.createElement('div');
     sensVal.textContent = Number(mc.gyroSensitivity).toFixed(1) + '×';
     Object.assign(sensVal.style, {
-      fontFamily: '"Courier New",monospace', fontSize: '13px',
+      fontFamily: 'Rajdhani, sans-serif', fontSize: '13px',
       color: C.cream, minWidth: '36px', textAlign: 'right',
     });
 
@@ -621,7 +621,7 @@ export class UI {
       alignItems: 'center', justifyContent: 'flex-start',
       overflowY: 'auto', paddingTop: '30px', paddingBottom: '30px',
       background: 'rgba(0,0,0,0.92)',
-      fontFamily: '"Courier New",monospace',
+      fontFamily: 'Rajdhani, sans-serif',
       color: C.cream, zIndex: '700',
     });
 
@@ -673,7 +673,7 @@ export class UI {
     Object.assign(btnBack.style, {
       marginTop: '20px', background: 'transparent',
       border: `1px solid ${C.dimCream}`, borderRadius: '4px',
-      color: C.dimCream, fontFamily: '"Courier New",monospace',
+      color: C.dimCream, fontFamily: 'Rajdhani, sans-serif',
       fontSize: '11px', letterSpacing: '3px', padding: '8px 24px',
       cursor: 'pointer',
     });
@@ -687,260 +687,265 @@ export class UI {
   }
 
   _showPauseSettings() {
-    // Toujours reconstruire pour refléter l'état courant (lang, gfx, ctrl)
     if (this._pauseSettingsOverlay) {
       this._pauseSettingsOverlay.remove();
       this._pauseSettingsOverlay = null;
     }
 
-    if (!this._pauseSettingsOverlay) {
-      this._pauseSettingsLang = getLang();
-      const wrap = document.createElement('div');
-      Object.assign(wrap.style, {
-        position: 'fixed', inset: '0',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'flex-start',
-        overflowY: 'auto',
-        paddingTop: IS_MOBILE ? '20px' : '40px',
-        paddingBottom: '20px',
-        background: 'rgba(0,0,0,0.88)',
-        fontFamily: '"Courier New",monospace',
-        color: C.cream, zIndex: '700',
+    this._pauseSettingsLang = getLang();
+    const W = IS_MOBILE ? 'min(340px,92vw)' : '340px';
+
+    // ── Fond plein écran scrollable ───────────────────────────────────────
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, {
+      position: 'fixed', inset: '0',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'flex-start',
+      overflowY: 'auto', paddingTop: IS_MOBILE ? '16px' : '32px',
+      paddingBottom: '32px',
+      background: 'rgba(0,0,0,0.92)',
+      fontFamily: 'Rajdhani, sans-serif',
+      color: C.cream, zIndex: '700',
+    });
+
+    // ── Panel centré ──────────────────────────────────────────────────────
+    const panel = document.createElement('div');
+    Object.assign(panel.style, {
+      width: W, background: '#12110a',
+      border: '1px solid #3a3020', borderRadius: '6px', overflow: 'hidden',
+    });
+
+    // ── Header ────────────────────────────────────────────────────────────
+    const hdr = document.createElement('div');
+    Object.assign(hdr.style, {
+      background: '#0c0b08', borderBottom: '1px solid #3a3020',
+      padding: '18px 22px 14px',
+    });
+    const titleRow = document.createElement('div');
+    Object.assign(titleRow.style, { display: 'flex', alignItems: 'center', gap: '10px' });
+    const hr = () => { const d = document.createElement('div'); Object.assign(d.style, { flex: '1', height: '1px', background: '#3a3020' }); return d; };
+    const star = document.createElement('span'); star.textContent = '✦'; star.style.cssText = 'color:#cc3300;font-size:10px;flex-shrink:0;';
+    const ttl = document.createElement('div'); ttl.textContent = t('settings');
+    ttl.style.cssText = 'font-size:17px;font-weight:800;letter-spacing:6px;color:#d4c88a;white-space:nowrap;';
+    titleRow.appendChild(hr()); titleRow.appendChild(star); titleRow.appendChild(ttl); titleRow.appendChild(star.cloneNode(true)); titleRow.appendChild(hr());
+    hdr.appendChild(titleRow);
+    panel.appendChild(hdr);
+
+    // ── Corps ─────────────────────────────────────────────────────────────
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:20px 22px;display:flex;flex-direction:column;gap:0;';
+
+    const secTitle = (txt) => {
+      const row = document.createElement('div');
+      Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 10px' });
+      const line = () => { const d = document.createElement('div'); Object.assign(d.style, { flex: '1', height: '1px', background: '#3a3020' }); return d; };
+      const lbl = document.createElement('span');
+      lbl.textContent = txt;
+      lbl.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:3px;color:#7a7050;white-space:nowrap;flex-shrink:0;';
+      row.appendChild(line()); row.appendChild(lbl); row.appendChild(line());
+      return row;
+    };
+
+    const sep = () => { const d = document.createElement('div'); d.style.cssText = 'height:1px;background:#3a3020;margin:16px 0;'; return d; };
+
+    const mkActionBtn = (label, col = C.dimCream) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      Object.assign(b.style, {
+        background: 'transparent', border: `1px solid #3a3020`,
+        borderRadius: '4px', color: col,
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '13px',
+        fontWeight: '700', letterSpacing: '3px', textTransform: 'uppercase',
+        padding: '11px 16px', textAlign: 'left', cursor: 'pointer',
+        width: '100%', boxSizing: 'border-box',
+        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+        outline: 'none',
       });
+      const on  = () => { b.style.background = col; b.style.color = '#0a0a06'; b.style.borderColor = col; };
+      const off = () => { b.style.background = 'transparent'; b.style.color = col; b.style.borderColor = '#3a3020'; };
+      b.addEventListener('mouseover', on); b.addEventListener('mouseout', off);
+      b.addEventListener('focus', on);     b.addEventListener('blur', off);
+      b.addEventListener('touchstart', on,  { passive: true });
+      b.addEventListener('touchend',   off, { passive: true });
+      b.addEventListener('touchcancel',off, { passive: true });
+      return b;
+    };
 
-      const mkSBtn = (label, col) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        Object.assign(b.style, {
-          background: 'transparent', border: `1px solid ${col}`,
-          borderRadius: '4px',
-          color: col, fontFamily: '"Courier New",monospace',
-          fontSize: '11px', letterSpacing: '3px',
-          padding: '8px 24px', cursor: 'pointer', outline: 'none',
-          pointerEvents: 'auto', transition: 'background 0.15s, color 0.15s',
-          marginBottom: '8px',
-        });
-        b.addEventListener('mouseover', () => { b.style.background = col; b.style.color = '#0a0a06'; });
-        b.addEventListener('mouseout',  () => { b.style.background = 'transparent'; b.style.color = col; });
-        return b;
-      };
-
-      const title = document.createElement('div');
-      title.textContent = t('settings');
-      title.style.cssText = `font-size:32px;font-weight:bold;letter-spacing:8px;margin-bottom:8px;`;
-      const divider = document.createElement('div');
-      divider.style.cssText = `width:200px;height:1px;background:${C.dimCream};opacity:0.2;margin-bottom:22px;`;
-
-      const secLabel = (txt) => {
-        const d = document.createElement('div');
-        d.textContent = txt;
-        d.style.cssText = `font-size:9px;letter-spacing:3px;color:${C.dimCream};margin-bottom:8px;`;
-        return d;
-      };
-
-      wrap.appendChild(title);
-      wrap.appendChild(divider);
-
-      // ── Audio ──────────────────────────────────────────────────────────────
-      wrap.appendChild(secLabel(t('audio')));
-
-      const mkSlider = (label, storageKey, baseVol, busKey) => {
-        const box = document.createElement('div');
-        Object.assign(box.style, { display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px', width: IS_MOBILE ? 'min(300px,80vw)' : '300px' });
-        const top = document.createElement('div');
-        Object.assign(top.style, { display:'flex', justifyContent:'space-between' });
-        const lbl = document.createElement('span');
-        lbl.textContent = label;
-        lbl.style.cssText = `font-size:10px;letter-spacing:2px;color:${C.dimCream};`;
-        const pct = document.createElement('span');
-        const initVal = parseFloat(localStorage.getItem(storageKey) ?? '1');
-        pct.textContent = Math.round(initVal * 100) + '%';
-        pct.style.cssText = `font-size:10px;letter-spacing:2px;color:${C.cream};min-width:36px;text-align:right;`;
-        top.appendChild(lbl); top.appendChild(pct); box.appendChild(top);
-        const slider = document.createElement('input');
-        slider.type = 'range'; slider.min = '0'; slider.max = '100';
-        slider.value = Math.round(initVal * 100);
-        Object.assign(slider.style, { width:'100%', accentColor: C.cream, cursor:'pointer', background:'transparent' });
-        slider.addEventListener('input', () => {
-          const v = parseInt(slider.value) / 100;
-          pct.textContent = slider.value + '%';
-          localStorage.setItem(storageKey, v);
-          if (this._audioRef?._bus?.[busKey]) {
-            this._audioRef._bus[busKey].gain.setTargetAtTime(baseVol * v, this._audioRef._ctx.currentTime, 0.05);
-          }
-        });
-        box.appendChild(slider);
-        return box;
-      };
-
-      wrap.appendChild(mkSlider(t('musicVol'), 'audio_music', 0.38, 'ambient'));
-      wrap.appendChild(mkSlider(t('sfxVol'),   'audio_sfx',   0.55, 'sfx'));
-
-      const sep = document.createElement('div');
-      sep.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
-      wrap.appendChild(sep);
-
-      // ── Qualité graphique ─────────────────────────────────────────────────
-      wrap.appendChild(secLabel(t('graphicsQuality')));
-
-      const gfxModes = [
-        { value: 0, label: t('gfxHigh'), desc: t('gfxHighDesc') },
-        { value: 1, label: t('gfxMed'),  desc: t('gfxMedDesc')  },
-        { value: 2, label: t('gfxLow'),  desc: t('gfxLowDesc')  },
-      ];
-      const curGfx = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
-      const gfxDesc = document.createElement('div');
-      gfxDesc.style.cssText = `font-size:9px;letter-spacing:1px;color:${C.dimCream};line-height:1.6;
-        max-width:320px;text-align:center;margin-top:6px;margin-bottom:18px;min-height:14px;`;
-      gfxDesc.textContent = gfxModes.find(m => m.value === curGfx)?.desc ?? '';
-
-      const gfxRow = document.createElement('div');
-      gfxRow.style.cssText = 'display:flex;gap:8px;width:300px;margin-bottom:4px;';
-      gfxModes.forEach(({ value, label, desc }) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        b.className = 'choice-btn';
-        b.style.setProperty('--cb-color',  C.cream);
-        b.style.setProperty('--cb-border', C.dimCream);
-        b.style.setProperty('--cb-fill',   C.cream);
-        b.style.setProperty('--cb-hover',  `${C.cream}22`);
-        b.setAttribute('data-active', value === curGfx ? '1' : '0');
-        b.addEventListener('click', () => {
-          gfxRow.querySelectorAll('.choice-btn').forEach(btn => btn.setAttribute('data-active', '0'));
-          b.setAttribute('data-active', '1');
-          gfxDesc.textContent = desc;
-          this._gfxRef?.(value);
-        });
-        gfxRow.appendChild(b);
+    const mkSlider = (label, storageKey, baseVol, busKey) => {
+      const box = document.createElement('div');
+      box.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-bottom:14px;';
+      const top = document.createElement('div');
+      top.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;';
+      const lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = 'font-size:12px;font-weight:700;letter-spacing:2px;color:#7a7050;';
+      const pct = document.createElement('span');
+      const initVal = parseFloat(localStorage.getItem(storageKey) ?? '1');
+      pct.textContent = Math.round(initVal * 100) + '%';
+      pct.style.cssText = `font-size:12px;font-weight:700;letter-spacing:1px;color:${C.cream};min-width:36px;text-align:right;`;
+      top.appendChild(lbl); top.appendChild(pct); box.appendChild(top);
+      const slider = document.createElement('input');
+      slider.type = 'range'; slider.min = '0'; slider.max = '100';
+      slider.value = Math.round(initVal * 100);
+      Object.assign(slider.style, { width: '100%', accentColor: C.cream, cursor: 'pointer', background: 'transparent' });
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value) / 100;
+        pct.textContent = slider.value + '%';
+        localStorage.setItem(storageKey, v);
+        if (this._audioRef?._bus?.[busKey])
+          this._audioRef._bus[busKey].gain.setTargetAtTime(baseVol * v, this._audioRef._ctx.currentTime, 0.05);
       });
-      wrap.appendChild(gfxRow);
-      wrap.appendChild(gfxDesc);
+      box.appendChild(slider);
+      return box;
+    };
 
-      const sep1b = document.createElement('div');
-      sep1b.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
-      wrap.appendChild(sep1b);
+    // ── Audio ─────────────────────────────────────────────────────────────
+    body.appendChild(secTitle(t('audio')));
+    body.appendChild(mkSlider(t('musicVol'), 'audio_music', 0.38, 'ambient'));
+    body.appendChild(mkSlider(t('sfxVol'),   'audio_sfx',   0.55, 'sfx'));
+    body.appendChild(sep());
 
-      // ── Contrôles : mode + raccourcis ────────────────────────────────────
-      wrap.appendChild(secLabel(t('ctrlMode')));
-
-      const ctrlModes = [
-        { value: 'standard',  label: t('ctrlStd'), desc: t('ctrlStdDesc') },
-        { value: 'simulator', label: t('ctrlSim'), desc: t('ctrlSimDesc') },
-      ];
-      const ctrlDesc = document.createElement('div');
-      ctrlDesc.style.cssText = `font-size:9px;letter-spacing:1px;color:${C.dimCream};line-height:1.6;
-        max-width:320px;text-align:center;margin-top:6px;margin-bottom:12px;min-height:14px;`;
-      const curCtrl = localStorage.getItem('ctrlMode') || 'standard';
-      ctrlDesc.textContent = ctrlModes.find(m => m.value === curCtrl)?.desc ?? '';
-
-      const ctrlRow = document.createElement('div');
-      ctrlRow.style.cssText = 'display:flex;gap:8px;width:280px;margin-bottom:4px;';
-      ctrlModes.forEach(({ value, label, desc }) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        b.className = 'choice-btn';
-        b.style.setProperty('--cb-color',  C.cream);
-        b.style.setProperty('--cb-border', C.dimCream);
-        b.style.setProperty('--cb-fill',   C.cream);
-        b.style.setProperty('--cb-hover',  `${C.cream}22`);
-        b.setAttribute('data-active', value === curCtrl ? '1' : '0');
-        b.addEventListener('click', () => {
-          localStorage.setItem('ctrlMode', value);
-          ctrlRow.querySelectorAll('.choice-btn').forEach(btn => btn.setAttribute('data-active', '0'));
-          b.setAttribute('data-active', '1');
-          ctrlDesc.textContent = desc;
-        });
-        ctrlRow.appendChild(b);
+    // ── Qualité graphique ─────────────────────────────────────────────────
+    body.appendChild(secTitle(t('graphicsQuality')));
+    const gfxModes = [
+      { value: 0, label: t('gfxHigh'), desc: t('gfxHighDesc') },
+      { value: 1, label: t('gfxMed'),  desc: t('gfxMedDesc')  },
+      { value: 2, label: t('gfxLow'),  desc: t('gfxLowDesc')  },
+    ];
+    const curGfx = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
+    const gfxDesc = document.createElement('div');
+    gfxDesc.style.cssText = 'font-size:11px;letter-spacing:1px;color:#7a7050;line-height:1.5;margin-top:6px;margin-bottom:14px;min-height:16px;';
+    gfxDesc.textContent = gfxModes.find(m => m.value === curGfx)?.desc ?? '';
+    const gfxRow = document.createElement('div');
+    gfxRow.style.cssText = 'display:flex;gap:6px;';
+    gfxModes.forEach(({ value, label, desc }) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = 'choice-btn';
+      b.style.setProperty('--cb-color', C.cream); b.style.setProperty('--cb-border', '#3a3020');
+      b.style.setProperty('--cb-fill',  C.cream); b.style.setProperty('--cb-hover', `${C.cream}22`);
+      b.setAttribute('data-active', value === curGfx ? '1' : '0');
+      b.addEventListener('click', () => {
+        gfxRow.querySelectorAll('.choice-btn').forEach(btn => btn.setAttribute('data-active', '0'));
+        b.setAttribute('data-active', '1'); gfxDesc.textContent = desc; this._gfxRef?.(value);
       });
-      wrap.appendChild(ctrlRow);
-      wrap.appendChild(ctrlDesc);
+      gfxRow.appendChild(b);
+    });
+    body.appendChild(gfxRow);
+    body.appendChild(gfxDesc);
+    body.appendChild(sep());
 
-      const btnControls = mkSBtn(t('controls') || 'COMMANDES', C.dimCream);
-      btnControls.style.marginBottom = '18px';
-      btnControls.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showPauseControls();
+    // ── Contrôles ─────────────────────────────────────────────────────────
+    body.appendChild(secTitle(t('ctrlMode')));
+    const ctrlModes = [
+      { value: 'standard',  label: t('ctrlStd'), desc: t('ctrlStdDesc') },
+      { value: 'simulator', label: t('ctrlSim'), desc: t('ctrlSimDesc') },
+    ];
+    const curCtrl = localStorage.getItem('ctrlMode') || 'standard';
+    const ctrlDesc = document.createElement('div');
+    ctrlDesc.style.cssText = 'font-size:11px;letter-spacing:1px;color:#7a7050;line-height:1.5;margin-top:6px;margin-bottom:12px;min-height:16px;';
+    ctrlDesc.textContent = ctrlModes.find(m => m.value === curCtrl)?.desc ?? '';
+    const ctrlRow = document.createElement('div');
+    ctrlRow.style.cssText = 'display:flex;gap:6px;';
+    ctrlModes.forEach(({ value, label, desc }) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = 'choice-btn';
+      b.style.setProperty('--cb-color', C.cream); b.style.setProperty('--cb-border', '#3a3020');
+      b.style.setProperty('--cb-fill',  C.cream); b.style.setProperty('--cb-hover', `${C.cream}22`);
+      b.setAttribute('data-active', value === curCtrl ? '1' : '0');
+      b.addEventListener('click', () => {
+        localStorage.setItem('ctrlMode', value);
+        ctrlRow.querySelectorAll('.choice-btn').forEach(btn => btn.setAttribute('data-active', '0'));
+        b.setAttribute('data-active', '1'); ctrlDesc.textContent = desc;
       });
-      wrap.appendChild(btnControls);
+      ctrlRow.appendChild(b);
+    });
+    body.appendChild(ctrlRow);
+    body.appendChild(ctrlDesc);
+    const btnControls = mkActionBtn(t('controls') || 'COMMANDES');
+    btnControls.style.marginBottom = '4px';
+    btnControls.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseControls(); });
+    body.appendChild(btnControls);
+    body.appendChild(sep());
 
-      // ── Langue ────────────────────────────────────────────────────────────
-      const sep2 = document.createElement('div');
-      sep2.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
-      wrap.appendChild(sep2);
-      wrap.appendChild(secLabel(t('lang')));
-
-      const langRow = document.createElement('div');
-      langRow.style.cssText = 'display:flex;gap:8px;width:280px;margin-bottom:18px;';
-
-      [{ code: 'fr', label: t('langFR') }, { code: 'en', label: t('langEN') }].forEach(({ code, label }) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        b.className = 'choice-btn';
-        b.style.setProperty('--cb-color',  C.cream);
-        b.style.setProperty('--cb-border', C.dimCream);
-        b.style.setProperty('--cb-fill',   C.cream);
-        b.style.setProperty('--cb-hover',  `${C.cream}22`);
-        b.setAttribute('data-active', getLang() === code ? '1' : '0');
-        b.addEventListener('click', () => {
-          if (getLang() === code) return;
-          setLang(code);
-          this._pauseSettingsOverlay?.remove();
-          this._pauseSettingsOverlay = null;
-          this._showPauseSettings();
-        });
-        langRow.appendChild(b);
+    // ── Langue ────────────────────────────────────────────────────────────
+    body.appendChild(secTitle(t('lang')));
+    const langRow = document.createElement('div');
+    langRow.style.cssText = 'display:flex;gap:6px;margin-bottom:16px;';
+    [{ code: 'fr', label: t('langFR') }, { code: 'en', label: t('langEN') }].forEach(({ code, label }) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = 'choice-btn';
+      b.style.setProperty('--cb-color', C.cream); b.style.setProperty('--cb-border', '#3a3020');
+      b.style.setProperty('--cb-fill',  C.cream); b.style.setProperty('--cb-hover', `${C.cream}22`);
+      b.setAttribute('data-active', getLang() === code ? '1' : '0');
+      b.addEventListener('click', () => {
+        if (getLang() === code) return;
+        setLang(code);
+        this._pauseSettingsOverlay?.remove(); this._pauseSettingsOverlay = null;
+        this._showPauseSettings();
       });
-      wrap.appendChild(langRow);
+      langRow.appendChild(b);
+    });
+    body.appendChild(langRow);
 
-      if (IS_MOBILE) {
-        const btnScoreboard = mkSBtn(t('scoreboardTitle'), C.dimCream);
-        btnScoreboard.addEventListener('click', (e) => {
-          e.stopPropagation();
-          wrap.style.display = 'none';
-          this.showScoreboard(true);
-          if (this._scoreboardOverlay) {
-            this._scoreboardOverlay.style.pointerEvents = 'auto';
-            this._scoreboardOverlay.style.cursor = 'pointer';
-            const close = () => {
-              this.showScoreboard(false);
-              if (this._scoreboardOverlay) this._scoreboardOverlay.style.pointerEvents = 'none';
-              wrap.style.display = 'flex';
-            };
-            this._scoreboardOverlay.addEventListener('click', close, { once: true });
-          }
-        });
-        wrap.appendChild(btnScoreboard);
-      }
-
-      // ── Retour + bug report ───────────────────────────────────────────────
-      const btnBack = mkSBtn(t('back'), C.dimCream);
-      btnBack.addEventListener('click', (e) => {
+    // ── Scoreboard (mobile) ───────────────────────────────────────────────
+    if (IS_MOBILE) {
+      const btnScoreboard = mkActionBtn(t('scoreboardTitle'));
+      btnScoreboard.style.marginBottom = '4px';
+      btnScoreboard.addEventListener('click', (e) => {
         e.stopPropagation();
         wrap.style.display = 'none';
-        requestAnimationFrame(() => this._pauseOverlay?.querySelectorAll('button')?.[0]?.focus());
+        this.showScoreboard(true);
+        if (this._scoreboardOverlay) {
+          this._scoreboardOverlay.style.pointerEvents = 'auto';
+          this._scoreboardOverlay.style.cursor = 'pointer';
+          const close = () => {
+            this.showScoreboard(false);
+            if (this._scoreboardOverlay) this._scoreboardOverlay.style.pointerEvents = 'none';
+            wrap.style.display = 'flex';
+          };
+          this._scoreboardOverlay.addEventListener('click', close, { once: true });
+        }
       });
-      wrap.appendChild(btnBack);
-
-      const btnBugSettings = document.createElement('button');
-      btnBugSettings.textContent = '⚑  ' + t('reportBug');
-      Object.assign(btnBugSettings.style, {
-        background: 'transparent', border: 'none', color: '#5a4030',
-        fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
-        padding: '10px 0', cursor: 'pointer', textTransform: 'uppercase',
-        transition: 'color 0.12s', marginTop: '4px',
-      });
-      btnBugSettings.addEventListener('mouseover', () => { btnBugSettings.style.color = '#8a6040'; });
-      btnBugSettings.addEventListener('mouseout',  () => { btnBugSettings.style.color = '#5a4030'; });
-      btnBugSettings.addEventListener('click', (e) => { e.stopPropagation(); showBugReport(this._bugContextFn); });
-      wrap.appendChild(btnBugSettings);
-
-      document.body.appendChild(wrap);
-      this._pauseSettingsOverlay = wrap;
+      body.appendChild(btnScoreboard);
+      body.appendChild(sep());
     }
+
+    // ── Retour ────────────────────────────────────────────────────────────
+    const btnBack = mkActionBtn(t('back'));
+    btnBack.addEventListener('click', (e) => {
+      e.stopPropagation();
+      wrap.style.display = 'none';
+      requestAnimationFrame(() => this._pauseOverlay?.querySelectorAll('button')?.[0]?.focus());
+    });
+    body.appendChild(btnBack);
+
+    panel.appendChild(body);
+
+    // ── Bug report ────────────────────────────────────────────────────────
+    const bugRow = document.createElement('div');
+    bugRow.style.cssText = 'border-top:1px solid #3a3020;padding:4px 0;';
+    const btnBugSettings = document.createElement('button');
+    btnBugSettings.textContent = '⚑  ' + t('reportBug');
+    Object.assign(btnBugSettings.style, {
+      background: 'transparent', border: 'none', color: '#5a4030',
+      fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
+      padding: '8px 22px', cursor: 'pointer', textTransform: 'uppercase',
+      width: '100%', textAlign: 'left', transition: 'color 0.12s',
+    });
+    btnBugSettings.addEventListener('mouseover', () => { btnBugSettings.style.color = '#8a6040'; });
+    btnBugSettings.addEventListener('mouseout',  () => { btnBugSettings.style.color = '#5a4030'; });
+    btnBugSettings.addEventListener('click', (e) => { e.stopPropagation(); showBugReport(this._bugContextFn); });
+    bugRow.appendChild(btnBugSettings);
+    panel.appendChild(bugRow);
+
+    wrap.appendChild(panel);
+    document.body.appendChild(wrap);
+    this._pauseSettingsOverlay = wrap;
     this._pauseSettingsOverlay.style.display = 'flex';
-    requestAnimationFrame(() =>
-      this._pauseSettingsOverlay?.querySelector('button')?.focus()
-    );
+    requestAnimationFrame(() => this._pauseSettingsOverlay?.querySelector('button')?.focus());
   }
 
   _showPauseControls() {
@@ -955,7 +960,7 @@ export class UI {
       position: 'fixed', inset: '0',
       display: 'flex', flexDirection: 'column',
       background: 'rgba(6,6,5,0.97)',
-      fontFamily: '"Courier New",monospace',
+      fontFamily: 'Rajdhani, sans-serif',
       color: C.cream, zIndex: '700',
     });
 
@@ -1289,7 +1294,7 @@ export class UI {
     d.textContent = t(key);
     Object.assign(d.style, {
       color,
-      fontFamily   : '"Courier New",monospace',
+      fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '12px',
       letterSpacing: '4px',
       background   : 'rgba(10,4,4,0.80)',
@@ -1350,7 +1355,7 @@ export class UI {
     Object.assign(root.style, {
       position: 'fixed', inset: '0',
       pointerEvents: 'none', userSelect: 'none',
-      fontFamily: "'Courier New', Courier, monospace",
+      fontFamily: 'Rajdhani, sans-serif',
     });
 
     // Mire gérée par Game.js (sprite Three.js au-dessus des balles)
@@ -1435,7 +1440,7 @@ export class UI {
     // Compteur de vague persistant (survie uniquement)
     this._waveTopEl = document.createElement('div');
     Object.assign(this._waveTopEl.style, {
-      fontFamily   : '"Courier New",monospace',
+      fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '14px', letterSpacing: '4px', fontWeight: 'bold',
       color        : '#d4c88a',
       background   : 'rgba(8,8,4,0.78)',
@@ -1449,7 +1454,7 @@ export class UI {
     // Timer de match (caché par défaut, s'affiche sous le scoreboard)
     this._timerEl = document.createElement('div');
     Object.assign(this._timerEl.style, {
-      fontFamily   : '"Courier New",monospace',
+      fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '16px',
       letterSpacing: '5px',
       fontWeight   : 'bold',
@@ -1478,7 +1483,7 @@ export class UI {
     // Indicateur moteur coupé / posé (sous le panneau mission)
     this._engineStatus = document.createElement('div');
     Object.assign(this._engineStatus.style, {
-      fontFamily   : '"Courier New",monospace',
+      fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '13px',
       letterSpacing: '4px',
       fontWeight   : 'bold',
@@ -1580,7 +1585,7 @@ export class UI {
       this._tick(ctx, cx, cy, arcR, a, 14, 1.5, t==='E'?'#c84040':C.cream);
       const lr = arcR-24;
       ctx.fillStyle = t==='E' ? '#c84040' : C.cream;
-      ctx.font = '8px "Courier New",monospace';
+      ctx.font = '8px Rajdhani, sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(t, cx+Math.cos(a)*lr, cy+Math.sin(a)*lr);
     }
@@ -1621,7 +1626,7 @@ export class UI {
       this._tick(ctx, cx, cy, arcR, a, 14, 1.5, col);
       const lr = arcR-24;
       ctx.fillStyle = col;
-      ctx.font = '7px "Courier New",monospace';
+      ctx.font = '7px Rajdhani, sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(t, cx+Math.cos(a)*lr, cy+Math.sin(a)*lr);
     }
@@ -1674,12 +1679,12 @@ export class UI {
 
       if (LABELS[deg]) {
         ctx.fillStyle = C.cream;
-        ctx.font = 'bold 11px "Courier New",monospace';
+        ctx.font = 'bold 11px Rajdhani, sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='bottom';
         ctx.fillText(LABELS[deg], x, y0 - tickH - 2);
       } else if (isMed) {
         ctx.fillStyle = C.dimCream;
-        ctx.font = '8px "Courier New",monospace';
+        ctx.font = '8px Rajdhani, sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='bottom';
         ctx.fillText(deg, x, y0 - tickH - 1);
       }
@@ -1701,7 +1706,7 @@ export class UI {
     ctx.strokeStyle='#5a5040'; ctx.lineWidth=1;
     ctx.strokeRect(W/2-boxW/2, 3, boxW, boxH);
     ctx.fillStyle = C.cream;
-    ctx.font = 'bold 11px "Courier New",monospace';
+    ctx.font = 'bold 11px Rajdhani, sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(Math.round(headDeg).toString().padStart(3,'0')+'°', W/2, 3+boxH/2);
 
@@ -1750,7 +1755,7 @@ export class UI {
         // Symbole d'altitude (seulement pour le plus proche)
         if (isClosest) {
           ctx.fillStyle = col;
-          ctx.font = '9px "Courier New",monospace';
+          ctx.font = '9px Rajdhani, sans-serif';
           ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
           ctx.fillText(altSym, mx, 22);
         }
@@ -1832,7 +1837,7 @@ export class UI {
       const dy = e.position.y - player.position.y;
       if (Math.abs(dy) > 30) {
         ctx.fillStyle = col;
-        ctx.font = '8px "Courier New",monospace';
+        ctx.font = '8px Rajdhani, sans-serif';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.fillText(dy > 0 ? '↑' : '↓', ex + dotR + 2, ey);
       }
@@ -1887,7 +1892,7 @@ export class UI {
 
     // Label RADAR
     ctx.fillStyle = C.dimCream;
-    ctx.font = '7px "Courier New",monospace';
+    ctx.font = '7px Rajdhani, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.fillText(t('radarLabel'), cx, H - 4);
   }
@@ -1962,7 +1967,7 @@ export class UI {
 
       // Label type (AA uniquement, petit et discret)
       if (g.kind === 'mg') {
-        ctx.font = '8px "Courier New",monospace';
+        ctx.font = '8px Rajdhani, sans-serif';
         ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         ctx.fillText('AA', sx, sy - s - 1);
       }
@@ -2011,14 +2016,14 @@ export class UI {
         ctx.fillStyle = 'rgba(40,200,100,0.22)'; ctx.fill();
         ctx.strokeStyle = col; ctx.lineWidth = 2.2; ctx.stroke();
         // Texte
-        ctx.font = 'bold 11px "Courier New",monospace';
+        ctx.font = 'bold 11px Rajdhani, sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         const tw = Math.max(ctx.measureText('✚ BASE').width, ctx.measureText(distStr).width);
         ctx.fillStyle = 'rgba(0,0,0,0.65)';
         ctx.fillRect(sx - tw/2 - 5, sy - dh*2 - 36, tw + 10, 32);
         ctx.fillStyle = col;
         ctx.fillText('✚ BASE', sx, sy - dh*2 - 19);
-        ctx.font = '10px "Courier New",monospace';
+        ctx.font = '10px Rajdhani, sans-serif';
         ctx.fillText(distStr, sx, sy - dh*2 - 6);
       } else {
         const angle = inFront
@@ -2033,10 +2038,10 @@ export class UI {
         ctx.fillStyle = col;
         ctx.fillRect(-hs3, -hs3, hs3*2, hs3*2);
         ctx.fillStyle = col;
-        ctx.font = 'bold 10px "Courier New",monospace';
+        ctx.font = 'bold 10px Rajdhani, sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         ctx.fillText('✚ BASE', 0, -26);
-        ctx.font = '9px "Courier New",monospace';
+        ctx.font = '9px Rajdhani, sans-serif';
         ctx.fillText(distStr, 0, -14);
         ctx.restore();
       }
@@ -2127,7 +2132,7 @@ export class UI {
           ctx.moveTo(sx - dh, sy - dh); ctx.lineTo(sx, sy - dh*2); ctx.lineTo(sx + dh, sy - dh);
           ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.stroke();
           if (dist < 400) {
-            ctx.font = '9px "Courier New",monospace';
+            ctx.font = '9px Rajdhani, sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             ctx.fillStyle = col;
             ctx.fillText(distStr, sx, sy - dh*2 - 4);
@@ -2195,7 +2200,7 @@ export class UI {
 
           // Label distance uniquement pour le plus proche en portée canon
           if (isClosest && inGunRange) {
-            ctx.font = '11px "Courier New",monospace';
+            ctx.font = '11px Rajdhani, sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             const tw = ctx.measureText(distStr).width;
             ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -2238,7 +2243,7 @@ export class UI {
           ctx.save();
           ctx.translate(ex, ey);
           ctx.fillStyle = col;
-          ctx.font = '9px "Courier New",monospace';
+          ctx.font = '9px Rajdhani, sans-serif';
           ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
           ctx.fillText(distStr, 0, -14);
           ctx.restore();
@@ -2337,7 +2342,7 @@ export class UI {
     });
     const lbl = document.createElement('div');
     lbl.textContent = t('ammoLabel');
-    lbl.style.cssText = 'font-size:8px;letter-spacing:2px;color:#6a6040;margin-bottom:4px;font-family:"Courier New",monospace;';
+    lbl.style.cssText = 'font-size:8px;letter-spacing:2px;color:#6a6040;margin-bottom:4px;font-family:Rajdhani, sans-serif;';
     this._ammoCanvas = this._mkCanvas(126, 38);
     wrap.appendChild(lbl);
     wrap.appendChild(this._ammoCanvas);
@@ -2370,7 +2375,7 @@ export class UI {
       // chiffre
       const col = ammo<20 ? '#d04040' : ammo<50 ? '#c87820' : C.cream;
       ctx.fillStyle = col;
-      ctx.font = `bold ${Math.round(H*0.7)}px "Courier New",monospace`;
+      ctx.font = `bold ${Math.round(H*0.7)}px Rajdhani, sans-serif`;
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(digits[i], x+dW/2, H/2+1);
       // reflet
@@ -2406,7 +2411,7 @@ export class UI {
       if (major) {
         const lr = arcR - 28;
         ctx.fillStyle = C.cream;
-        ctx.font = '10px "Courier New",monospace';
+        ctx.font = '10px Rajdhani, sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(v, cx+Math.cos(angle)*lr, cy+Math.sin(angle)*lr);
       }
@@ -2421,7 +2426,7 @@ export class UI {
 
     // valeur numérique uniquement (pas de label texte)
     ctx.fillStyle = C.cream;
-    ctx.font = 'bold 13px "Courier New",monospace';
+    ctx.font = 'bold 13px Rajdhani, sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(Math.round(cfg.value)+' '+cfg.unit, cx, cy+42);
   }
@@ -2623,7 +2628,7 @@ export class UI {
       padding    : '6px 20px',
       display    : 'none',   // masqué par défaut (affiché seulement en TDM)
       gap        : '28px',
-      fontFamily : '"Courier New",monospace',
+      fontFamily : 'Rajdhani, sans-serif',
       boxShadow  : 'inset 0 0 10px rgba(0,0,0,0.7)',
       whiteSpace : 'nowrap',
     });
@@ -2784,7 +2789,7 @@ export class UI {
         position: 'fixed', inset: '0',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: C.menuBackdrop,
-        fontFamily: '"Courier New",monospace',
+        fontFamily: 'Rajdhani, sans-serif',
         pointerEvents: 'none', zIndex: '510',
       });
       const panel = document.createElement('div');
@@ -2833,7 +2838,7 @@ export class UI {
     if (IS_MOBILE) return wrap; // pas de raccourcis clavier sur mobile
     Object.assign(wrap.style, {
       position:'absolute', top:'20px', left:'20px',
-      fontFamily:'"Courier New",monospace',
+      fontFamily:'Rajdhani, sans-serif',
       pointerEvents:'none',
     });
 
@@ -2891,7 +2896,7 @@ export class UI {
       borderRadius: '6px',
       padding    : '4px 16px',
       display    : 'none',
-      fontFamily : '"Courier New",monospace',
+      fontFamily : 'Rajdhani, sans-serif',
       boxShadow  : 'inset 0 0 8px rgba(0,0,0,0.6)',
       whiteSpace : 'nowrap',
     });
@@ -2951,7 +2956,7 @@ export class UI {
       position:'fixed', inset:'0',
       background: C.menuBackdrop,
       display:'flex', alignItems:'center', justifyContent:'center',
-      fontFamily:'"Courier New",monospace',
+      fontFamily:'Rajdhani, sans-serif',
       color:C.cream, pointerEvents:'auto',
       zIndex:'800',
     });
@@ -3014,7 +3019,7 @@ export class UI {
       position:'fixed', inset:'0',
       background:'rgba(4,5,3,0.97)',
       display:'flex', alignItems:'center', justifyContent:'center',
-      fontFamily:'"Courier New",monospace',
+      fontFamily:'Rajdhani, sans-serif',
       color:'#d4c88a', zIndex:'850', pointerEvents:'auto',
     });
 
@@ -3169,7 +3174,7 @@ export class UI {
     ctx.moveTo(0, H - 6); ctx.lineTo(6, H); ctx.moveTo(W - 6, H); ctx.lineTo(W, H - 6);
     ctx.strokeStyle = C.bezelHi; ctx.lineWidth = 1; ctx.stroke();
 
-    ctx.fillStyle = C.cream; ctx.font = '9px "Courier New",monospace';
+    ctx.fillStyle = C.cream; ctx.font = '9px Rajdhani, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText('MISSILES', W / 2, 5);
 
@@ -3179,16 +3184,16 @@ export class UI {
 
     const drawRow = (type, count, max, sym, symEmpty, y0) => {
       const valColor = count === 0 ? '#cc3322' : C.cream;
-      ctx.fillStyle = C.tickMinor; ctx.font = '8px "Courier New",monospace';
+      ctx.fillStyle = C.tickMinor; ctx.font = '8px Rajdhani, sans-serif';
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.fillText(type, 7, y0 + 3);
-      ctx.fillStyle = valColor; ctx.font = 'bold 14px "Courier New",monospace';
+      ctx.fillStyle = valColor; ctx.font = 'bold 14px Rajdhani, sans-serif';
       ctx.textAlign = 'right'; ctx.textBaseline = 'top';
       ctx.fillText(String(count).padStart(2, ' '), W - 7, y0 + 1);
       const shown = Math.min(6, max);
       const cellW = (W - 16) / Math.max(shown, 1);
       const symY = y0 + 30;
-      ctx.font = '8px "Courier New",monospace'; ctx.textBaseline = 'middle';
+      ctx.font = '8px Rajdhani, sans-serif'; ctx.textBaseline = 'middle';
       for (let i = 0; i < shown; i++) {
         const isFull = i < Math.min(count, shown);
         ctx.fillStyle = isFull ? valColor : C.tickMinor;
@@ -3231,7 +3236,7 @@ export class UI {
     const LABELS = { ecm:'ECM', shield_front:t('adShieldFront'), shield_rear:t('adShieldRear'), shield_full:t('adShield360') };
     const label = LABELS[type] ?? t('adDefense');
     ctx.fillStyle = C.cream;
-    ctx.font = '9px "Courier New",monospace';
+    ctx.font = '9px Rajdhani, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText(label, W / 2, 6);
 
@@ -3248,7 +3253,7 @@ export class UI {
       stateColor = '#44cc88';
     }
     ctx.fillStyle = stateColor;
-    ctx.font = 'bold 13px "Courier New",monospace';
+    ctx.font = 'bold 13px Rajdhani, sans-serif';
     ctx.textBaseline = 'middle';
     ctx.fillText(stateText, W / 2, H / 2 + 2);
 
@@ -3292,7 +3297,7 @@ export class UI {
 
     // Label en haut
     ctx.fillStyle = C.cream;
-    ctx.font = '9px "Courier New",monospace';
+    ctx.font = '9px Rajdhani, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText(label, W / 2, 6);
 
@@ -3304,7 +3309,7 @@ export class UI {
     const shown = Math.min(8, max);
     const cellW = (W - 16) / Math.max(shown, 1);
     const iconsY = H / 2 - 4;
-    ctx.font = '9px "Courier New",monospace';
+    ctx.font = '9px Rajdhani, sans-serif';
     ctx.textBaseline = 'middle';
     for (let i = 0; i < shown; i++) {
       const isFull = i < Math.min(count, shown);
@@ -3319,7 +3324,7 @@ export class UI {
 
     // Chiffre en bas
     ctx.fillStyle = valColor;
-    ctx.font = 'bold 14px "Courier New",monospace';
+    ctx.font = 'bold 14px Rajdhani, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(String(count), W / 2, H - 9);
   }
@@ -3346,7 +3351,7 @@ export class UI {
       border       : `1.5px solid ${borderColor}`,
       borderRadius : '4px',
       color        : textColor,
-      fontFamily   : '"Courier New",monospace',
+      fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '14px',
       letterSpacing: '3px',
       padding      : '12px 32px',
@@ -3388,7 +3393,7 @@ export class UI {
       position:'fixed', inset:'0',
       background: C.menuBackdrop,
       display:'flex', alignItems:'center', justifyContent:'center',
-      fontFamily:'"Courier New",monospace',
+      fontFamily:'Rajdhani, sans-serif',
       color:C.cream, pointerEvents:'auto',
       zIndex: '800',
     });
@@ -3481,7 +3486,7 @@ export class UI {
       Object.assign(this._survivalWaveBar.style, {
         position   : 'fixed', top: '14px', left: '50%',
         transform  : 'translateX(-50%)',
-        fontFamily : '"Courier New",monospace',
+        fontFamily : 'Rajdhani, sans-serif',
         fontSize   : '10px',
         letterSpacing: '4px',
         color      : '#d4c88a',
@@ -3505,7 +3510,7 @@ export class UI {
       Object.assign(this._survivalBanner.style, {
         position: 'fixed', top: '18%', left: '50%',
         transform: 'translateX(-50%)',
-        fontFamily: '"Courier New",monospace',
+        fontFamily: 'Rajdhani, sans-serif',
         textAlign: 'center',
         pointerEvents: 'none', zIndex: '600',
         transition: 'opacity 0.4s',
@@ -3544,7 +3549,7 @@ export class UI {
       Object.assign(this._survivalCdEl.style, {
         position: 'fixed', top: '30%', left: '50%',
         transform: 'translateX(-50%)',
-        fontFamily: '"Courier New",monospace',
+        fontFamily: 'Rajdhani, sans-serif',
         textAlign: 'center',
         pointerEvents: 'none', zIndex: '600',
       });
@@ -3571,7 +3576,7 @@ export class UI {
         bottom      : '38%',
         left        : '50%',
         transform   : 'translateX(-50%)',
-        fontFamily  : '"Courier New",monospace',
+        fontFamily  : 'Rajdhani, sans-serif',
         textAlign   : 'center',
         pointerEvents: 'none',
         zIndex      : '601',
@@ -3620,7 +3625,7 @@ export class UI {
         position: 'fixed', top: '64px', left: '50%',
         transform: 'translateX(-50%)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-        fontFamily: '"Courier New",monospace',
+        fontFamily: 'Rajdhani, sans-serif',
         pointerEvents: 'none', zIndex: '650',
       });
       document.body.appendChild(this._noticeStack);
@@ -3657,7 +3662,7 @@ export class UI {
       position: 'fixed', inset: '0',
       background: C.menuBackdrop,   // fond gris uniforme
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: '"Courier New",monospace',
+      fontFamily: 'Rajdhani, sans-serif',
       color: C.cream, pointerEvents: 'auto',
       zIndex: '800',
     });

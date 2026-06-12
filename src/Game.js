@@ -873,6 +873,7 @@ export class Game {
 
     // Callback réapparaître : remet le joueur à sa base, restaure carburant/santé
     const onRespawn = () => {
+      if (this.stats) this.stats.deaths++;
       this.player.health   = 100;
       this.player.fuel     = 100;
       this.player.isDead   = false;
