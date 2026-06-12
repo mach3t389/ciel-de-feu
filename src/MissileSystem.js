@@ -221,7 +221,7 @@ export class MissileSystem {
     mesh.scale.setScalar(0.5);  // plus visible que la valeur chargée (0.25)
 
     this._scene.add(mesh);
-    this._playLaunchSound();
+    this._playLaunchSound(type);
 
     const baseTrackTime   = this._lockParams?.trackTime ?? 4.0;
     const trackingLevel   = this._lockParams?.trackingLevel ?? 0;
@@ -472,35 +472,74 @@ export class MissileSystem {
     buildType(this._modelAG ?? this._modelAA, agSlots, 0, -Math.PI / 2,        0, 'ag');
   }
 
-  _playLaunchSound() {
+  _playLaunchSound(type = 'aa') {
     try {
-      const ctx = this._getCtx();
-      const t = ctx.currentTime;
-      // Whoosh + clunk de lancement
-      const len = Math.floor(ctx.sampleRate * 0.22);
-      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.06));
+      const ctx = this._audio?._ctx ?? this._getCtx();
+      const out = this._audio?._bus?.sfx ?? ctx.destination;
+      const sr  = ctx.sampleRate;
+      const t0  = ctx.currentTime;
+
+      // ── Utilitaire : bruit blanc dans un buffer ───────────────────────────
+      const mkNoise = (dur, shape) => {
+        const len = Math.floor(sr * dur);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d   = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * shape(i / len);
+        const src = ctx.createBufferSource(); src.buffer = buf;
+        return src;
+      };
+      // ── Utilitaire : gain avec enveloppe simple ───────────────────────────
+      const mkEnv = (atk, peak, decay) => {
+        const g = ctx.createGain(); g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(peak, t0 + atk);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + atk + decay);
+        return g;
+      };
+
+      if (type === 'aa') {
+        // ── AA : claquement sec d'éjection + sifflement moteur qui s'éloigne ─
+        // 1. Impulsion d'éjection : bruit large bande très court
+        const snap = mkNoise(0.06, x => Math.exp(-x * 18));
+        const snapHp = ctx.createBiquadFilter(); snapHp.type = 'highpass'; snapHp.frequency.value = 600;
+        const snapG = mkEnv(0.002, 0.9, 0.055);
+        snap.connect(snapHp); snapHp.connect(snapG); snapG.connect(out);
+        snap.start(t0);
+
+        // 2. Souffle de propulsion — bruit filtré passe-bande montant
+        const whoosh = mkNoise(0.55, x => Math.pow(x < 0.05 ? x / 0.05 : 1, 1) * Math.exp(-x * 3.5));
+        const whooshBp = ctx.createBiquadFilter(); whooshBp.type = 'bandpass';
+        whooshBp.frequency.setValueAtTime(1800, t0 + 0.02);
+        whooshBp.frequency.linearRampToValueAtTime(4500, t0 + 0.55);
+        whooshBp.Q.value = 1.2;
+        const whooshG = mkEnv(0.015, 0.55, 0.50);
+        whoosh.connect(whooshBp); whooshBp.connect(whooshG); whooshG.connect(out);
+        whoosh.start(t0 + 0.01);
+
+      } else {
+        // ── AG : grondement d'éjection lourd + propulsion soutenue ───────────
+        // 1. Thud grave d'éjection
+        const thud = mkNoise(0.12, x => Math.exp(-x * 12));
+        const thudLp = ctx.createBiquadFilter(); thudLp.type = 'lowpass'; thudLp.frequency.value = 280;
+        const thudG = mkEnv(0.004, 1.1, 0.11);
+        thud.connect(thudLp); thudLp.connect(thudG); thudG.connect(out);
+        thud.start(t0);
+
+        // 2. Rumble moteur — bruit large bande grave, enveloppe progressive
+        const rumble = mkNoise(0.70, x => (x < 0.08 ? x / 0.08 : 1) * Math.exp(-x * 2.2));
+        const rumbleLp = ctx.createBiquadFilter(); rumbleLp.type = 'lowpass';
+        rumbleLp.frequency.setValueAtTime(380, t0);
+        rumbleLp.frequency.linearRampToValueAtTime(820, t0 + 0.70);
+        const rumbleG = mkEnv(0.03, 0.75, 0.60);
+        rumble.connect(rumbleLp); rumbleLp.connect(rumbleG); rumbleG.connect(out);
+        rumble.start(t0 + 0.03);
+
+        // 3. Couche mid — ajoute de la texture au moteur
+        const mid = mkNoise(0.50, x => (x < 0.1 ? x / 0.1 : 1) * Math.exp(-x * 3.0));
+        const midBp = ctx.createBiquadFilter(); midBp.type = 'bandpass'; midBp.frequency.value = 900; midBp.Q.value = 0.7;
+        const midG = mkEnv(0.04, 0.35, 0.42);
+        mid.connect(midBp); midBp.connect(midG); midG.connect(out);
+        mid.start(t0 + 0.04);
       }
-      const src  = ctx.createBufferSource(); src.buffer = buf;
-      const hp   = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 400;
-      const env  = ctx.createGain();
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(1.2, t + 0.01);
-      env.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-      src.connect(hp); hp.connect(env); env.connect(ctx.destination);
-      src.start(t);
-      // Tonalité grave de départ moteur missile
-      const osc = ctx.createOscillator(); osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(120, t);
-      osc.frequency.exponentialRampToValueAtTime(600, t + 0.15);
-      const envO = ctx.createGain();
-      envO.gain.setValueAtTime(0.3, t);
-      envO.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
-      osc.connect(lp); lp.connect(envO); envO.connect(ctx.destination);
-      osc.start(t); osc.stop(t + 0.19);
     } catch (_) {}
   }
 
