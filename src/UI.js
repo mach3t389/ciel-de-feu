@@ -777,9 +777,12 @@ export class UI {
         fields.push({ name: '🔁 Reproduction', value: taSteps.value.trim().substring(0, 1024), inline: false });
       }
       if (ctx.mode) fields.push({ name: '🎮 Mode', value: String(ctx.mode), inline: true });
-      if (ctx.map  !== undefined) fields.push({ name: '🗺️ Carte', value: String(ctx.map), inline: true });
+      if (ctx.map  !== undefined) fields.push({ name: '🗺️ Carte', value: t(`mapName_${ctx.map}`) || String(ctx.map), inline: true });
       if (ctx.wave !== undefined) fields.push({ name: '🌊 Vague', value: String(ctx.wave), inline: true });
-      fields.push({ name: t('bugFieldScreen'), value: `${window.screen.width}×${window.screen.height}`, inline: true });
+      const _dpr = window.devicePixelRatio || 1;
+      const _phys = `${Math.round(window.screen.width * _dpr)}×${Math.round(window.screen.height * _dpr)}`;
+      const _vp   = `${window.innerWidth}×${window.innerHeight}`;
+      fields.push({ name: t('bugFieldScreen'), value: `${_phys} (DPR ${_dpr}) · viewport ${_vp}`, inline: false });
       fields.push({ name: '🌐 Navigateur', value: navigator.userAgent.substring(0, 100), inline: false });
 
       try {
