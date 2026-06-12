@@ -1312,17 +1312,17 @@ export class UI {
   // ── Cadran vitesse ─────────────────────────────────────────────────────────
   _drawSpeedDial(speed) {
     const ticks = [];
-    for (let v = 0; v <= 120; v += 10) ticks.push({ v, major: v % 20 === 0 });
+    for (let v = 0; v <= 180; v += 20) ticks.push({ v, major: v % 60 === 0 });
     this._drawDial(this._speedCanvas, {
       value : speed,
-      max   : 120,
+      max   : 180,
       ticks,
       label : t('speedLabel'),
       unit  : 'km/h',
       zones : [
-        { from:0,       to:30/120,  color:'#4a1008' },
-        { from:30/120,  to:80/120,  color:'#1a3a10' },
-        { from:80/120,  to:1,       color:'#5a3a08' },
+        { from:0,       to:30/180,  color:'#4a1008' },
+        { from:30/180,  to:120/180, color:'#1a3a10' },
+        { from:120/180, to:1,       color:'#5a3a08' },
       ],
     });
   }

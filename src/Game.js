@@ -345,8 +345,8 @@ export class Game {
       // Calculer les modificateurs de gameplay
       const mods = {
         healthBonus     : Math.round((stats.health - 100) / 100 * 100),  // HP bonus
-        speedMult       : (100 + (stats.speed - 100) / 100 * 20) / 100 * (1 + loadMod.speed),
-        accelMult       : (1 + loadMod.accel),
+        speedMult       : (100 + (stats.speed - 100) / 100 * 75) / 100 * (1 + loadMod.speed),
+        accelMult       : (100 + (stats.accel - 100) / 100 * 75) / 100 * (1 + loadMod.accel),
         maneuverMult    : (1 + (stats.maneuverability - 100) / 500 + loadMod.maneuverability),
         rollMult        : (1 + (stats.rollSpeed !== undefined ? (stats.rollSpeed - 100) / 400 : 0)),
         fuelCapMult     : Math.max(1.0, stats.fuel / 100),          // réservoir plus grand si stats positives
@@ -1270,7 +1270,7 @@ export class Game {
       });
       document.body.appendChild(this._dbgCanvas);
     }
-    const rows = ['[I] DEBUG IA  (role/skill état | j=joueur b=base | hp alt clr)', ''];
+    const rows = ['[I] DEBUG IA  (role/skill state | j=player b=base | hp alt clr)', ''];
     const tag = { attacker: 'ATK', defender: 'DEF', wingman: 'WNG' };
     const sk  = { rookie: 'rk', regular: 'rg', ace: 'AC' };
     for (const e of this.enemies.slice(0, 12)) {
@@ -1357,9 +1357,9 @@ export class Game {
 
     const W = 400, lh = 14, pad = 7;
     const rows = [
-      `[F6] TEXTURES  ${texMap.size} uniques · ~${(total / 1048576).toFixed(1)} MB estimé`,
+      `[F6] TEXTURES  ${texMap.size} unique · ~${(total / 1048576).toFixed(1)} MB`,
       '──────────────────────────────────────────',
-      'Nom                 Résol      Mém(KB) ×',
+      'Nom                 Resol      Mem(KB) x',
       '──────────────────────────────────────────',
       ...top.map(e =>
         `${e.label.padEnd(19)} ${(e.w + '×' + e.h).padEnd(10)} ${String(Math.round(e.mem / 1024)).padStart(6)} ×${e.uses}`
@@ -1498,7 +1498,7 @@ export class Game {
     const ls   = this._lodStats ?? {};
     const dc   = this._dcStats  ?? {};
     const visibleClouds = this._cloudMeshes?.filter(c => c.mesh.visible).length ?? '—';
-    const gfxLabels = ['OFF [F4 LOW]', 'LOW [F4 ULTRA]', 'ULTRA [F4 désact.]'];
+    const gfxLabels = ['OFF [F4 LOW]', 'LOW [F4 ULTRA]', 'ULTRA [F4 off]'];
     const gfx = gfxLabels[this._lowGraphics] ?? '—';
 
     // Helpers triangles
@@ -1525,7 +1525,7 @@ export class Game {
       `  Arbres         DC:${dc.dcTree ?? '—'}`,
       `  Roches         DC:${dc.dcRock ?? '—'}`,
       `  Buissons       DC:${dc.dcBush ?? '—'}`,
-      `  Bâtiments      DC:${dc.dcBldg ?? '—'}`,
+      `  Batiments      DC:${dc.dcBldg ?? '—'}`,
       `  Autres         DC:${dcOther}  (avions/sol/UI)`,
       sep,
       `Triangles        ${triK}k`,
@@ -1543,14 +1543,14 @@ export class Game {
       `Arbres     ${ms.trees    ?? '—'} (${triK2(ms.triTrees)})`,
       `Roches     ${ms.rocks    ?? '—'} (${triK2(ms.triRocks)})`,
       `Buissons   ${ms.bushes   ?? '—'} (${triK2(ms.triBushes)})`,
-      `Bâtiments  ${ms.buildings ?? '—'} (${triK2(ms.triBuildings)})`,
+      `Batiments  ${ms.buildings ?? '—'} (${triK2(ms.triBuildings)})`,
       `Tourelles        ${gs.turrets  ?? '—'}`,
       `Tanks            ${gs.tanks    ?? '—'}`,
-      `Véhicules        ${gs.vehicles ?? '—'}`,
+      `Vehicules        ${gs.vehicles ?? '—'}`,
       sep,
       `[F5] Top 20 meshes   [F6] Textures`,
       sep,
-      `Mémoire JS       ${mem}`,
+      `Memoire JS       ${mem}`,
       sep,
       `LOW GRAPHICS     ${gfx}`,
     ];
