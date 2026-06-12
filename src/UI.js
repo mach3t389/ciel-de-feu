@@ -1121,6 +1121,16 @@ export class UI {
     bar.appendChild(backBtn);
     wrap.appendChild(bar);
 
+    // ── Badge mode actif dans la barre de titre ────────────────────────────
+    const modeBadge = document.createElement('div');
+    modeBadge.textContent = isSim ? (t('ctrlSim') || 'SIMULATEUR') : (t('ctrlStd') || 'STANDARD');
+    Object.assign(modeBadge.style, {
+      fontSize: '9px', letterSpacing: '3px', color: '#cc3300',
+      fontFamily: 'Rajdhani,sans-serif', fontWeight: '700',
+      padding: '0 20px', display: 'flex', alignItems: 'center', flexShrink: '0',
+    });
+    bar.insertBefore(modeBadge, backBtn);
+
     // ── Mobile : panneau gyro/joystick ──────────────────────────────────────
     if (IS_MOBILE && this._mobileControls) {
       wrap.appendChild(this._buildMobileCtrlPanel());
@@ -1129,46 +1139,15 @@ export class UI {
       return;
     }
 
-    // ── Mode tabs ──
-    let activeMode = isSim ? 'sim' : 'std';
-    const tabBar = document.createElement('div');
-    Object.assign(tabBar.style, {
-      display: 'flex', flexShrink: '0',
-      borderBottom: '1px solid #3a3020',
-      background: 'rgba(8,8,6,0.95)',
-    });
-    const mkTab = (label, key) => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      b.dataset.mode = key;
-      const active = () => key === activeMode;
-      const refresh = () => {
-        Object.assign(b.style, {
-          padding: '12px 32px', background: active() ? '#1a180f' : 'transparent',
-          border: 'none', borderBottom: active() ? '2px solid #cc3300' : '2px solid transparent',
-          color: active() ? C.cream : '#6a6040',
-          fontFamily: 'Rajdhani,sans-serif', fontSize: '13px', letterSpacing: '3px',
-          fontWeight: active() ? '800' : '600', cursor: 'pointer', transition: 'all 0.15s',
-        });
-      };
-      refresh();
-      b.addEventListener('click', () => { activeMode = key; rebuildContent(); tabBar.querySelectorAll('button').forEach(t => t.dispatchEvent(new Event('refresh'))); });
-      b.addEventListener('refresh', refresh);
-      return b;
-    };
-    tabBar.appendChild(mkTab(t('ctrlStd') || 'STANDARD', 'std'));
-    tabBar.appendChild(mkTab(t('ctrlSim') || 'SIMULATEUR', 'sim'));
-    wrap.appendChild(tabBar);
-
     // ── Content area ──
     const content = document.createElement('div');
     Object.assign(content.style, { flex: '1', display: 'flex', overflow: 'hidden' });
     wrap.appendChild(content);
 
     const _bind = tCtrlBindings();
-    const BINDINGS_STD = _bind.std;
-    const BINDINGS_SIM = _bind.sim;
-    const GAMEPAD      = _bind.gamepad;
+    const activeMode = isSim ? 'sim' : 'std';
+    const BINDINGS   = activeMode === 'sim' ? _bind.sim : _bind.std;
+    const GAMEPAD    = _bind.gamepad;
 
     const mkCol = (flex, title) => {
       const col = document.createElement('div');
@@ -1213,22 +1192,17 @@ export class UI {
       return row;
     };
 
-    const rebuildContent = () => {
-      content.innerHTML = '';
-      const bindings = activeMode === 'sim' ? BINDINGS_SIM : BINDINGS_STD;
-      const { col: kbCol, scroll: kbScroll } = mkCol('3', _bind.colKb);
-      for (const [key, action] of bindings) kbScroll.appendChild(mkRow(key, action));
-      content.appendChild(kbCol);
+    const { col: kbCol, scroll: kbScroll } = mkCol('3', _bind.colKb);
+    for (const [key, action] of BINDINGS) kbScroll.appendChild(mkRow(key, action));
+    content.appendChild(kbCol);
 
-      const divider = document.createElement('div');
-      Object.assign(divider.style, { width: '1px', background: '#3a3020', flexShrink: '0' });
-      content.appendChild(divider);
+    const vDivider = document.createElement('div');
+    Object.assign(vDivider.style, { width: '1px', background: '#3a3020', flexShrink: '0' });
+    content.appendChild(vDivider);
 
-      const { col: gpCol, scroll: gpScroll } = mkCol('2', _bind.colGp);
-      for (const [key, action, col] of GAMEPAD) gpScroll.appendChild(mkRow(key, action, col || null));
-      content.appendChild(gpCol);
-    };
-    rebuildContent();
+    const { col: gpCol, scroll: gpScroll } = mkCol('2', _bind.colGp);
+    for (const [key, action, col] of GAMEPAD) gpScroll.appendChild(mkRow(key, action, col || null));
+    content.appendChild(gpCol);
 
     this._pauseCtrlOverlay = wrap;
     document.body.appendChild(wrap);
