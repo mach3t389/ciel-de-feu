@@ -209,7 +209,7 @@ function mkPanelLeft(width = '400px') {
   const d = el('div', { style: {
     position     : 'absolute',
     left         : isMob ? '50%' : '5%',
-    top          : isMob ? '50%' : 'calc(50% + 26px)',
+    top          : 'calc(50% + 26px)',
     transform    : isMob ? 'translate(-50%, -50%)' : 'translateY(-50%)',
     display      : 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px',
     zIndex       : '3', width: `min(${width}, 95vw)`,

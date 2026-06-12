@@ -2658,6 +2658,7 @@ export class UI {
 
   _buildKeys() {
     const wrap = document.createElement('div');
+    if (IS_MOBILE) return wrap; // pas de raccourcis clavier sur mobile
     Object.assign(wrap.style, {
       position:'absolute', top:'20px', left:'20px',
       fontFamily:'"Courier New",monospace',
