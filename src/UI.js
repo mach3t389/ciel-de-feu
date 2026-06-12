@@ -291,96 +291,123 @@ export class UI {
     if (!this._pauseOverlay) {
       const wrap = document.createElement('div');
       Object.assign(wrap.style, {
-        position      : 'fixed', inset: '0',
-        display       : 'flex', flexDirection: 'column',
-        alignItems    : 'center', justifyContent: 'center',
-        background    : C.menuBackdrop,
-        fontFamily    : '"Courier New",monospace',
-        color         : C.cream,
-        pointerEvents : 'auto',
-        zIndex        : '600',
+        position: 'fixed', inset: '0',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: C.menuBackdrop,
+        fontFamily: 'Rajdhani, sans-serif',
+        color: C.cream,
+        pointerEvents: 'auto',
+        zIndex: '600',
       });
 
-      const title = document.createElement('div');
-      title.textContent = t('pauseTitle');
-      title.style.cssText = `font-size:48px;font-weight:bold;letter-spacing:12px;opacity:0.9;margin-bottom:8px;`;
+      // ── Panel ──
+      const panel = document.createElement('div');
+      Object.assign(panel.style, {
+        background: '#12110a', border: '1px solid #3a3020',
+        borderRadius: '6px', width: IS_MOBILE ? 'min(300px,88vw)' : '300px',
+        overflow: 'hidden',
+      });
 
-      const divider = document.createElement('div');
-      divider.style.cssText = `width:120px;height:1px;background:${C.dimCream};opacity:0.2;margin-bottom:20px;`;
+      // ── En-tête avec titre décoratif ──
+      const header = document.createElement('div');
+      Object.assign(header.style, {
+        background: '#0c0b08', borderBottom: '1px solid #3a3020',
+        padding: '20px 24px 16px', display: 'flex', flexDirection: 'column', gap: '6px',
+      });
+      const titleRow = document.createElement('div');
+      Object.assign(titleRow.style, { display: 'flex', alignItems: 'center', gap: '10px' });
+      const hr = () => { const d = document.createElement('div'); Object.assign(d.style, { flex: '1', height: '1px', background: '#3a3020' }); return d; };
+      const star = document.createElement('span'); star.textContent = '✦'; star.style.cssText = 'color:#cc3300;font-size:10px;flex-shrink:0;';
+      const titleTxt = document.createElement('div'); titleTxt.textContent = t('pauseTitle');
+      titleTxt.style.cssText = 'font-size:17px;font-weight:800;letter-spacing:6px;color:#d4c88a;white-space:nowrap;';
+      const star2 = star.cloneNode(true);
+      titleRow.appendChild(hr()); titleRow.appendChild(star); titleRow.appendChild(titleTxt); titleRow.appendChild(star2); titleRow.appendChild(hr());
+      header.appendChild(titleRow);
+      panel.appendChild(header);
 
-      // Boutons pause — taille identique, style cockpit uniforme
+      // ── Liste de boutons ──
+      const list = document.createElement('div');
+      list.style.cssText = 'padding:8px;display:flex;flex-direction:column;gap:4px;';
+
       const mkPBtn = (label, col, primary = false) => {
         const b = document.createElement('button');
         b.textContent = label;
         Object.assign(b.style, {
-          background   : primary ? `rgba(212,200,138,0.08)` : 'transparent',
-          border       : `1px solid ${col}`,
+          background   : primary ? 'rgba(212,200,138,0.07)' : 'transparent',
+          border       : `1px solid ${primary ? col : '#3a3020'}`,
           borderRadius : '4px',
           color        : col,
-          fontFamily   : '"Courier New",monospace',
-          fontSize     : '12px',
-          letterSpacing: '4px',
-          padding      : '11px 0',
-          width        : '240px',
-          textAlign    : 'center',
+          fontFamily   : 'Rajdhani, sans-serif',
+          fontSize     : '14px',
+          fontWeight   : '700',
+          letterSpacing: '3px',
+          padding      : '12px 16px',
+          textAlign    : 'left',
+          textTransform: 'uppercase',
           cursor       : 'pointer',
           pointerEvents: 'auto',
-          transition   : 'background 0.15s, color 0.15s',
+          transition   : 'background 0.12s, color 0.12s, border-color 0.12s',
           outline      : 'none',
-          marginBottom : '8px',
-          display      : 'block',
+          width        : '100%',
+          boxSizing    : 'border-box',
         });
-        b.addEventListener('mouseover', () => { b.style.background = col; b.style.color = '#0a0a06'; });
-        b.addEventListener('mouseout',  () => { b.style.background = primary ? `rgba(212,200,138,0.08)` : 'transparent'; b.style.color = col; });
+        const on  = () => { b.style.background = col; b.style.color = '#0a0a06'; b.style.borderColor = col; };
+        const off = () => { b.style.background = primary ? 'rgba(212,200,138,0.07)' : 'transparent'; b.style.color = col; b.style.borderColor = primary ? col : '#3a3020'; };
+        b.addEventListener('mouseover',   on);
+        b.addEventListener('mouseout',    off);
+        b.addEventListener('focus',       on);
+        b.addEventListener('blur',        off);
+        b.addEventListener('touchstart',  on,  { passive: true });
+        b.addEventListener('touchend',    off, { passive: true });
+        b.addEventListener('touchcancel', off, { passive: true });
         return b;
       };
 
       const btnResume = mkPBtn(t('resume'), C.cream, true);
-      btnResume.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._pauseResumeCb) this._pauseResumeCb();
-      });
+      btnResume.addEventListener('click', (e) => { e.stopPropagation(); if (this._pauseResumeCb) this._pauseResumeCb(); });
 
       const btnRespawn = mkPBtn(t('respawnBtn'), C.dimCream);
       btnRespawn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (this._pauseIsSurvival) {
-          if (this._pauseQuitCb) this._pauseQuitCb();
-        } else {
-          if (this._pauseRespawnCb) this._pauseRespawnCb();
-        }
+        if (this._pauseIsSurvival) { if (this._pauseQuitCb) this._pauseQuitCb(); }
+        else { if (this._pauseRespawnCb) this._pauseRespawnCb(); }
       });
       this._btnPauseRespawn = btnRespawn;
 
       const btnSettings = mkPBtn(t('settingsBtn'), C.dimCream);
-      btnSettings.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showPauseSettings();
+      btnSettings.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseSettings(); });
+
+      const sep = document.createElement('div');
+      sep.style.cssText = `height:1px;background:#3a3020;margin:4px 0;`;
+
+      const btnMenu = mkPBtn(t('mainMenu'), '#cc4422');
+      btnMenu.addEventListener('click', (e) => { e.stopPropagation(); if (this._pauseQuitCb) this._pauseQuitCb(); });
+
+      const btnBug = document.createElement('button');
+      btnBug.textContent = '⚑  ' + t('reportBug');
+      Object.assign(btnBug.style, {
+        background: 'transparent', border: 'none', color: '#5a4030',
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
+        padding: '8px 16px', textAlign: 'left', cursor: 'pointer', width: '100%',
+        textTransform: 'uppercase', transition: 'color 0.12s',
       });
+      btnBug.addEventListener('mouseover', () => { btnBug.style.color = '#8a6040'; });
+      btnBug.addEventListener('mouseout',  () => { btnBug.style.color = '#5a4030'; });
+      btnBug.addEventListener('click', (e) => { e.stopPropagation(); this._showBugReport(); });
 
+      list.appendChild(btnResume);
+      list.appendChild(btnRespawn);
+      list.appendChild(btnSettings);
+      list.appendChild(sep);
+      list.appendChild(btnMenu);
+      panel.appendChild(list);
 
+      const bugRow = document.createElement('div');
+      bugRow.style.cssText = `border-top:1px solid #3a3020;padding:4px 0;`;
+      bugRow.appendChild(btnBug);
+      panel.appendChild(bugRow);
 
-      const btnMenu = mkPBtn(t('mainMenu'), C.dimCream);
-      btnMenu.style.marginTop = '4px';
-      btnMenu.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._pauseQuitCb) this._pauseQuitCb();
-      });
-
-      const btnBug = mkPBtn(t('reportBug'), '#8a6040');
-      btnBug.style.cssText += 'font-size:10px;opacity:0.7;margin-top:6px;';
-      btnBug.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showBugReport();
-      });
-
-      wrap.appendChild(title);
-      wrap.appendChild(divider);
-      wrap.appendChild(btnResume);
-      wrap.appendChild(btnRespawn);
-      wrap.appendChild(btnSettings);
-      wrap.appendChild(btnMenu);
-      wrap.appendChild(btnBug);
+      wrap.appendChild(panel);
       document.body.appendChild(wrap);
       this._pauseOverlay = wrap;
     }
@@ -1219,101 +1246,132 @@ export class UI {
     if (!this._escOverlay) {
       const wrap = document.createElement('div');
       Object.assign(wrap.style, {
-        position      : 'fixed', inset: '0',
-        display       : 'flex', flexDirection: 'column',
-        alignItems    : 'center', justifyContent: 'center',
-        background    : C.menuBackdrop,
-        fontFamily    : '"Courier New",monospace',
-        color         : C.cream,
-        pointerEvents : 'auto',
-        zIndex        : '600',
+        position: 'fixed', inset: '0',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: C.menuBackdrop,
+        fontFamily: 'Rajdhani, sans-serif',
+        color: C.cream,
+        pointerEvents: 'auto',
+        zIndex: '600',
       });
 
-      const title = document.createElement('div');
-      title.textContent = t('pauseTitle');
-      title.style.cssText = `font-size:48px;font-weight:bold;letter-spacing:12px;opacity:0.9;margin-bottom:8px;`;
+      // ── Panel ──
+      const panel = document.createElement('div');
+      Object.assign(panel.style, {
+        background: '#12110a', border: '1px solid #3a3020',
+        borderRadius: '6px', width: IS_MOBILE ? 'min(300px,88vw)' : '300px',
+        overflow: 'hidden',
+      });
 
+      // ── En-tête ──
+      const header = document.createElement('div');
+      Object.assign(header.style, {
+        background: '#0c0b08', borderBottom: '1px solid #3a3020',
+        padding: '20px 24px 14px', display: 'flex', flexDirection: 'column', gap: '6px',
+      });
+      const titleRow = document.createElement('div');
+      Object.assign(titleRow.style, { display: 'flex', alignItems: 'center', gap: '10px' });
+      const hr = () => { const d = document.createElement('div'); Object.assign(d.style, { flex: '1', height: '1px', background: '#3a3020' }); return d; };
+      const star = document.createElement('span'); star.textContent = '✦'; star.style.cssText = 'color:#cc3300;font-size:10px;flex-shrink:0;';
+      const titleTxt = document.createElement('div'); titleTxt.textContent = t('pauseTitle');
+      titleTxt.style.cssText = 'font-size:17px;font-weight:800;letter-spacing:6px;color:#d4c88a;white-space:nowrap;';
+      const star2 = star.cloneNode(true);
+      titleRow.appendChild(hr()); titleRow.appendChild(star); titleRow.appendChild(titleTxt); titleRow.appendChild(star2); titleRow.appendChild(hr());
+      header.appendChild(titleRow);
       const note = document.createElement('div');
       note.textContent = t('gameGoesOn');
-      note.style.cssText = 'font-size:9px;letter-spacing:3px;color:#7a7050;margin-bottom:18px;';
+      note.style.cssText = 'font-size:10px;letter-spacing:2px;color:#5a5030;text-align:center;';
+      header.appendChild(note);
+      panel.appendChild(header);
 
-      const divider = document.createElement('div');
-      divider.style.cssText = `width:120px;height:1px;background:${C.dimCream};opacity:0.2;margin-bottom:20px;`;
-
-      // Même style de bouton que le menu pause (mkPBtn)
+      // ── Boutons ──
       const mkPBtn = (label, col, primary = false) => {
         const b = document.createElement('button');
         b.textContent = label;
         Object.assign(b.style, {
-          background   : primary ? `rgba(212,200,138,0.08)` : 'transparent',
-          border       : `1px solid ${col}`,
+          background   : primary ? 'rgba(212,200,138,0.07)' : 'transparent',
+          border       : `1px solid ${primary ? col : '#3a3020'}`,
           borderRadius : '4px',
           color        : col,
-          fontFamily   : '"Courier New",monospace',
-          fontSize     : '12px',
-          letterSpacing: '4px',
-          padding      : '11px 0',
-          width        : '240px',
-          textAlign    : 'center',
+          fontFamily   : 'Rajdhani, sans-serif',
+          fontSize     : '14px',
+          fontWeight   : '700',
+          letterSpacing: '3px',
+          padding      : '12px 16px',
+          textAlign    : 'left',
+          textTransform: 'uppercase',
           cursor       : 'pointer',
           pointerEvents: 'auto',
-          transition   : 'background 0.15s, color 0.15s',
+          transition   : 'background 0.12s, color 0.12s, border-color 0.12s',
           outline      : 'none',
-          marginBottom : '8px',
-          display      : 'block',
+          width        : '100%',
+          boxSizing    : 'border-box',
         });
-        b.addEventListener('mouseover', () => { b.style.background = col; b.style.color = '#0a0a06'; });
-        b.addEventListener('mouseout',  () => { b.style.background = primary ? `rgba(212,200,138,0.08)` : 'transparent'; b.style.color = col; });
+        const on  = () => { b.style.background = col; b.style.color = '#0a0a06'; b.style.borderColor = col; };
+        const off = () => { b.style.background = primary ? 'rgba(212,200,138,0.07)' : 'transparent'; b.style.color = col; b.style.borderColor = primary ? col : '#3a3020'; };
+        b.addEventListener('mouseover',   on);
+        b.addEventListener('mouseout',    off);
+        b.addEventListener('focus',       on);
+        b.addEventListener('blur',        off);
+        b.addEventListener('touchstart',  on,  { passive: true });
+        b.addEventListener('touchend',    off, { passive: true });
+        b.addEventListener('touchcancel', off, { passive: true });
         return b;
       };
+
+      const list = document.createElement('div');
+      list.style.cssText = 'padding:8px;display:flex;flex-direction:column;gap:4px;';
 
       const btnResume = mkPBtn(t('resume'), C.cream, true);
       btnResume.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (this._escResumeCb) this._escResumeCb();   // resync Game + re-lock souris
+        if (this._escResumeCb) this._escResumeCb();
         else this.showEscMenu(false);
       });
 
       const btnRespawn = mkPBtn(t('respawnBtn'), C.dimCream);
-      btnRespawn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._escRespawnCb) this._escRespawnCb();
-      });
+      btnRespawn.addEventListener('click', (e) => { e.stopPropagation(); if (this._escRespawnCb) this._escRespawnCb(); });
 
       const btnSettings = mkPBtn(t('settingsBtn'), C.dimCream);
       btnSettings.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseSettings(); });
 
-
       const btnEndGame = mkPBtn(t('endGameBtn'), '#cc6633');
       btnEndGame.style.display = 'none';
-      btnEndGame.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._escEndGameCb) this._escEndGameCb();
-      });
+      btnEndGame.addEventListener('click', (e) => { e.stopPropagation(); if (this._escEndGameCb) this._escEndGameCb(); });
       this._escBtnEndGame = btnEndGame;
 
-      const btnMenu = mkPBtn(t('mainMenu'), C.dimCream);
-      btnMenu.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this._escQuitCb) this._escQuitCb();
-      });
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:#3a3020;margin:4px 0;';
 
-      const btnBugEsc = mkPBtn(t('reportBug'), '#8a6040');
-      btnBugEsc.style.cssText += 'font-size:10px;opacity:0.7;margin-top:6px;';
-      btnBugEsc.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showBugReport();
-      });
+      const btnMenu = mkPBtn(t('mainMenu'), '#cc4422');
+      btnMenu.addEventListener('click', (e) => { e.stopPropagation(); if (this._escQuitCb) this._escQuitCb(); });
 
-      wrap.appendChild(title);
-      wrap.appendChild(note);
-      wrap.appendChild(divider);
-      wrap.appendChild(btnResume);
-      wrap.appendChild(btnRespawn);
-      wrap.appendChild(btnEndGame);
-      wrap.appendChild(btnSettings);
-      wrap.appendChild(btnMenu);
-      wrap.appendChild(btnBugEsc);
+      list.appendChild(btnResume);
+      list.appendChild(btnRespawn);
+      list.appendChild(btnEndGame);
+      list.appendChild(btnSettings);
+      list.appendChild(sep);
+      list.appendChild(btnMenu);
+      panel.appendChild(list);
+
+      const btnBugEsc = document.createElement('button');
+      btnBugEsc.textContent = '⚑  ' + t('reportBug');
+      Object.assign(btnBugEsc.style, {
+        background: 'transparent', border: 'none', color: '#5a4030',
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
+        padding: '8px 16px', textAlign: 'left', cursor: 'pointer', width: '100%',
+        textTransform: 'uppercase', transition: 'color 0.12s',
+      });
+      btnBugEsc.addEventListener('mouseover', () => { btnBugEsc.style.color = '#8a6040'; });
+      btnBugEsc.addEventListener('mouseout',  () => { btnBugEsc.style.color = '#5a4030'; });
+      btnBugEsc.addEventListener('click', (e) => { e.stopPropagation(); this._showBugReport(); });
+
+      const bugRow = document.createElement('div');
+      bugRow.style.cssText = 'border-top:1px solid #3a3020;padding:4px 0;';
+      bugRow.appendChild(btnBugEsc);
+      panel.appendChild(bugRow);
+
+      wrap.appendChild(panel);
       document.body.appendChild(wrap);
       this._escOverlay = wrap;
     }
