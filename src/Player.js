@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { IS_MOBILE } from './MobileControls.js';
 
 // ── Constantes de vol ────────────────────────────────────────────────────────
 const MIN_SPEED            = 30;  // vitesse de croisière minimale (moteur on, sans gaz)
@@ -435,8 +436,9 @@ export class Player {
     this._pointerLockPending = false;
 
     const onMouseDown = (e) => {
+      if (IS_MOBILE) return;
       if (e.button !== 0) return;
-      if (e.sourceCapabilities?.firesTouchEvents) return;  // événement synthétique mobile → ignoré
+      if (e.sourceCapabilities?.firesTouchEvents) return;
       if (e.target.closest('button, a, input, [role="button"]')) return;
       if (this.isDead || this._blockPointerLock) return;
       this._mouseFireDown  = true;

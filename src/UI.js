@@ -1157,32 +1157,43 @@ export class UI {
     // Mire gérée par Game.js (sprite Three.js au-dessus des balles)
 
     // Cadrans principaux bas-gauche et bas-droite
-    this._speedCanvas = this._mkCanvas(160, 160);
-    this._altCanvas   = this._mkCanvas(160, 160);
+    const _dialSz = IS_MOBILE ? 110 : 160;
+    this._speedCanvas = this._mkCanvas(_dialSz, _dialSz);
+    this._altCanvas   = this._mkCanvas(_dialSz, _dialSz);
     this._place(this._speedCanvas, { bottom:'20px', left:'20px' }, root);
     this._place(this._altCanvas,   { bottom:'20px', right:'20px' }, root);
 
     // Cadrans secondaires (fuel + dommages) centrés au-dessus du ruban de cap
-    this._fuelCanvas = this._mkCanvas(110, 110);
-    this._dmgCanvas  = this._mkCanvas(110, 110);
-    this._place(this._fuelCanvas, { bottom:'100px', left:'calc(50% - 135px)' }, root);
-    this._place(this._dmgCanvas,  { bottom:'100px', left:'calc(50% + 25px)' }, root);
+    const _secSz = IS_MOBILE ? 76 : 110;
+    this._fuelCanvas = this._mkCanvas(_secSz, _secSz);
+    this._dmgCanvas  = this._mkCanvas(_secSz, _secSz);
+    const _secOff = IS_MOBILE ? '90px' : '100px';
+    const _secL   = IS_MOBILE ? 'calc(50% - 94px)' : 'calc(50% - 135px)';
+    const _secR   = IS_MOBILE ? 'calc(50% + 18px)'  : 'calc(50% + 25px)';
+    this._place(this._fuelCanvas, { bottom:_secOff, left:_secL }, root);
+    this._place(this._dmgCanvas,  { bottom:_secOff, left:_secR }, root);
 
     // Compteurs missiles (gauche) et leurres (droite), encadrés WW2 alignés sur les cadrans secondaires
-    this._missileCanvas = this._mkCanvas(95, 70);
-    this._decoyCanvas   = this._mkCanvas(95, 70);
-    this._place(this._missileCanvas, { bottom:'120px', left:'calc(50% - 240px)' }, root);
-    this._place(this._decoyCanvas,   { bottom:'120px', left:'calc(50% + 145px)' }, root);
+    const _cntW = IS_MOBILE ? 70 : 95, _cntH = IS_MOBILE ? 52 : 70;
+    this._missileCanvas = this._mkCanvas(_cntW, _cntH);
+    this._decoyCanvas   = this._mkCanvas(_cntW, _cntH);
+    const _cntBot = IS_MOBILE ? '108px' : '120px';
+    const _cntL   = IS_MOBILE ? 'calc(50% - 170px)' : 'calc(50% - 240px)';
+    const _cntR   = IS_MOBILE ? 'calc(50% + 100px)'  : 'calc(50% + 145px)';
+    this._place(this._missileCanvas, { bottom:_cntBot, left:_cntL }, root);
+    this._place(this._decoyCanvas,   { bottom:_cntBot, left:_cntR }, root);
 
     // Ruban de cap (bas-centre)
-    this._headCanvas = this._mkCanvas(300, 54);
+    const _headW = IS_MOBILE ? 220 : 300;
+    this._headCanvas = this._mkCanvas(_headW, 54);
     this._place(this._headCanvas, {
       bottom:'26px', left:'50%', transform:'translateX(-50%)',
     }, root);
 
     // Radar (coin inférieur droit, au-dessus du cadran altitude)
-    this._radarCanvas = this._mkCanvas(130, 130);
-    this._place(this._radarCanvas, { bottom:'200px', right:'20px' }, root);
+    const _radarSz = IS_MOBILE ? 90 : 130;
+    this._radarCanvas = this._mkCanvas(_radarSz, _radarSz);
+    this._place(this._radarCanvas, { bottom: IS_MOBILE ? '148px' : '200px', right:'20px' }, root);
 
     // Canvas plein écran pour marqueurs monde + flèches hors-écran
     this._worldCanvas = document.createElement('canvas');

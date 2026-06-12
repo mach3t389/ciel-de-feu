@@ -198,8 +198,8 @@ export class MobileControls {
         const angle   = Math.atan2(dy, dx);
         const cx = Math.cos(angle) * clamped;
         const cy = Math.sin(angle) * clamped;
-        p._touchTurn  = cx / this._radius;
-        p._touchPitch = cy / this._radius;
+        p._touchTurn  = -(cx / this._radius);
+        p._touchPitch = -(cy / this._radius);
         this._joyKnob.style.left = (this._baseX + cx) + 'px';
         this._joyKnob.style.top  = (this._baseY + cy) + 'px';
       }
