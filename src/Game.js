@@ -105,6 +105,11 @@ export class Game {
     this.ui            = new UI();
     this.ui.setRespawnCallback(() => this._respawn());
     if (this._mobileControls) this.ui.setMobileControls(this._mobileControls);
+    this.ui.setBugReportContext(() => ({
+      mode: this._config?.mode  ?? '—',
+      map : this._config?.map   ?? '—',
+      wave: this._survivalWave  ?? undefined,
+    }));
 
     // ── Environnement ───────────────────────────────────────────────────────
     this._buildSky();
@@ -3269,6 +3274,7 @@ export class Game {
     this.ui?._pauseSettingsOverlay?.remove();
     this.ui?._pauseCtrlOverlay?.remove();
     this.ui?._inGameStatsOverlay?.remove();
+    this.ui?._bugReportOverlay?.remove();
     this.ui?._survivalBanner?.remove();
     this.ui?._survivalCdEl?.remove();
     this.ui?._spectatorEl?.remove();

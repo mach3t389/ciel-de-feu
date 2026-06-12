@@ -4,6 +4,8 @@ import { t, tCtrlLines, tCtrlBindings, getLang, setLang } from './i18n.js';
 import { IS_MOBILE } from './MobileControls.js';
 import { levelFromTotalXp } from './ProgressionSystem.js';
 
+const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1515048299319529533/42qfkPq7hv0JAuqEQ9tDIHVyufUb8qGkqN0wm3iglN-6PLO1mw2S9w3t0W7AzhA0SkKy';
+
 // ── Palette WW2 cockpit ────────────────────────────────────────────────────────
 const C = {
   cream    : '#d4c88a',
@@ -33,6 +35,8 @@ export class UI {
     this._onMenu         = null;   // retour menu/lobby (sinon reload page)
     this._onReplay       = null;   // recommence la même partie (solo)
     this._survivalMode   = false;
+    this._bugContextFn       = null;
+    this._bugReportOverlay   = null;
     this._hitMarkerTimer     = 0;
     this._playerHitTimer     = 0;
     this._muzzleFlashTimer   = 0;
@@ -374,6 +378,13 @@ export class UI {
         if (this._pauseQuitCb) this._pauseQuitCb();
       });
 
+      const btnBug = mkPBtn(t('reportBug'), '#8a6040');
+      btnBug.style.cssText += 'font-size:10px;opacity:0.7;margin-top:6px;';
+      btnBug.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._showBugReport();
+      });
+
       wrap.appendChild(title);
       wrap.appendChild(divider);
       wrap.appendChild(btnResume);
@@ -382,6 +393,7 @@ export class UI {
       wrap.appendChild(btnControls);
       wrap.appendChild(btnStats);
       wrap.appendChild(btnMenu);
+      wrap.appendChild(btnBug);
       document.body.appendChild(wrap);
       this._pauseOverlay = wrap;
     }
@@ -410,6 +422,8 @@ export class UI {
   setMobileControls(mc) {
     this._mobileControls = mc;
   }
+
+  setBugReportContext(fn) { this._bugContextFn = fn; }
 
   // ── Panneau contrôles mobiles (gyro / joystick / sensibilité) ─────────────
   _buildMobileCtrlPanel() {
@@ -658,6 +672,163 @@ export class UI {
     });
     wrap.appendChild(btnBack);
     document.body.appendChild(wrap);
+  }
+
+  _showBugReport() {
+    if (this._bugReportOverlay) {
+      this._bugReportOverlay.remove();
+      this._bugReportOverlay = null;
+      return;
+    }
+
+    const wrap = document.createElement('div');
+    this._bugReportOverlay = wrap;
+    Object.assign(wrap.style, {
+      position: 'fixed', inset: '0',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.88)',
+      fontFamily: '"Courier New",monospace',
+      color: C.cream, zIndex: '800',
+      pointerEvents: 'auto',
+    });
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      background: C.panelMid,
+      border: `1px solid ${C.bezelHi}`,
+      borderRadius: '6px',
+      padding: '24px',
+      width: 'min(420px,90vw)',
+      display: 'flex', flexDirection: 'column', gap: '10px',
+    });
+
+    const title = document.createElement('div');
+    title.textContent = t('bugReportTitle');
+    title.style.cssText = `font-size:14px;font-weight:bold;letter-spacing:6px;color:${C.cream};margin-bottom:2px;`;
+    box.appendChild(title);
+
+    const mkLabel = (text) => {
+      const l = document.createElement('div');
+      l.textContent = text;
+      l.style.cssText = `font-size:9px;letter-spacing:2px;color:${C.dimCream};text-transform:uppercase;margin-bottom:2px;`;
+      return l;
+    };
+
+    const mkTextarea = (placeholder, rows) => {
+      const ta = document.createElement('textarea');
+      ta.placeholder = placeholder;
+      ta.rows = rows;
+      Object.assign(ta.style, {
+        background: 'rgba(255,255,255,0.05)',
+        border: `1px solid ${C.bezelHi}`,
+        borderRadius: '3px',
+        color: C.cream,
+        fontFamily: '"Courier New",monospace',
+        fontSize: '11px',
+        lineHeight: '1.5',
+        padding: '8px',
+        resize: 'vertical',
+        width: '100%',
+        boxSizing: 'border-box',
+      });
+      return ta;
+    };
+
+    box.appendChild(mkLabel(t('bugDesc')));
+    const taDesc = mkTextarea(t('bugDescPh'), 4);
+    box.appendChild(taDesc);
+
+    box.appendChild(mkLabel(t('bugSteps')));
+    const taSteps = mkTextarea(t('bugStepsPh'), 3);
+    box.appendChild(taSteps);
+
+    const errEl = document.createElement('div');
+    errEl.style.cssText = `font-size:10px;color:#cc4444;letter-spacing:1px;min-height:14px;`;
+    box.appendChild(errEl);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = `display:flex;gap:10px;justify-content:flex-end;`;
+
+    const mkBtn = (label, primary) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      Object.assign(b.style, {
+        background    : primary ? 'rgba(212,200,138,0.12)' : 'transparent',
+        border        : `1px solid ${primary ? C.cream : C.bezelHi}`,
+        borderRadius  : '3px',
+        color         : primary ? C.cream : C.dimCream,
+        fontFamily    : '"Courier New",monospace',
+        fontSize      : '10px',
+        letterSpacing : '2px',
+        padding       : '8px 18px',
+        cursor        : 'pointer',
+      });
+      return b;
+    };
+
+    const btnCancel = mkBtn(t('back'), false);
+    btnCancel.addEventListener('click', (e) => {
+      e.stopPropagation();
+      wrap.remove();
+      this._bugReportOverlay = null;
+    });
+
+    const btnSend = mkBtn(t('bugSend'), true);
+    btnSend.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const desc = taDesc.value.trim();
+      if (!desc) { errEl.textContent = t('bugRequired'); return; }
+      errEl.textContent = '';
+      btnSend.textContent = t('bugSending');
+      btnSend.disabled = true;
+
+      const ctx = this._bugContextFn?.() ?? {};
+      const fields = [
+        { name: '📋 Description', value: desc.substring(0, 1024), inline: false },
+      ];
+      if (taSteps.value.trim()) {
+        fields.push({ name: '🔁 Reproduction', value: taSteps.value.trim().substring(0, 1024), inline: false });
+      }
+      if (ctx.mode) fields.push({ name: '🎮 Mode', value: String(ctx.mode), inline: true });
+      if (ctx.map  !== undefined) fields.push({ name: '🗺️ Carte', value: String(ctx.map), inline: true });
+      if (ctx.wave !== undefined) fields.push({ name: '🌊 Vague', value: String(ctx.wave), inline: true });
+      fields.push({ name: t('bugFieldScreen'), value: `${window.screen.width}×${window.screen.height}`, inline: true });
+      fields.push({ name: '🌐 Navigateur', value: navigator.userAgent.substring(0, 100), inline: false });
+
+      try {
+        const res = await fetch(DISCORD_WEBHOOK, {
+          method : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({
+            embeds: [{
+              title    : '🐛 Bug Report — Ciel de Feu',
+              color    : 0xcc3300,
+              fields,
+              timestamp: new Date().toISOString(),
+              footer   : { text: 'Ciel de Feu Bug Reporter' },
+            }],
+          }),
+        });
+        if (res.ok || res.status === 204) {
+          btnSend.textContent = t('bugSent');
+          btnSend.style.color = '#88cc44';
+          setTimeout(() => { wrap.remove(); this._bugReportOverlay = null; }, 2000);
+        } else {
+          throw new Error(res.status);
+        }
+      } catch (_) {
+        btnSend.textContent = t('bugError');
+        btnSend.style.color = '#cc4444';
+        btnSend.disabled = false;
+      }
+    });
+
+    btnRow.appendChild(btnCancel);
+    btnRow.appendChild(btnSend);
+    box.appendChild(btnRow);
+    wrap.appendChild(box);
+    document.body.appendChild(wrap);
+    setTimeout(() => taDesc.focus(), 50);
   }
 
   _showPauseSettings() {
@@ -1138,6 +1309,13 @@ export class UI {
         if (this._escQuitCb) this._escQuitCb();
       });
 
+      const btnBugEsc = mkPBtn(t('reportBug'), '#8a6040');
+      btnBugEsc.style.cssText += 'font-size:10px;opacity:0.7;margin-top:6px;';
+      btnBugEsc.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._showBugReport();
+      });
+
       wrap.appendChild(title);
       wrap.appendChild(note);
       wrap.appendChild(divider);
@@ -1147,6 +1325,7 @@ export class UI {
       wrap.appendChild(btnSettings);
       wrap.appendChild(btnCtrlsEsc);
       wrap.appendChild(btnMenu);
+      wrap.appendChild(btnBugEsc);
       document.body.appendChild(wrap);
       this._escOverlay = wrap;
     }
