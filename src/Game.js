@@ -1976,11 +1976,11 @@ export class Game {
     // la préférence "Ne plus afficher" (localStorage). Le bouton de dismiss est
     // câblé via _onTutorialDisabled pour interrompre la séquence en cours.
     if (this._tutSkipChecked == null) {
-      const disabled = (() => {
+      const disabled = IS_MOBILE || (() => {
         try { return localStorage.getItem('cielDeFeu_tutorialDisabled') === '1'; }
         catch (_) { return false; }
       })();
-      const forceShow = this._isTraining || !!this._practiceMode;
+      const forceShow = !IS_MOBILE && (this._isTraining || !!this._practiceMode);
       this._tutSkipChecked = disabled && !forceShow;
       this._tutDismissible = !forceShow;
       if (this.ui) this.ui._onTutorialDisabled = () => { this._tutDone = true; };
@@ -3189,6 +3189,7 @@ export class Game {
   }
 
   _buildPointerLockOverlay() {
+    if (IS_MOBILE) return;
     const hint = document.createElement('div');
     Object.assign(hint.style, {
       position: 'fixed', bottom: '38%', left: '50%',
