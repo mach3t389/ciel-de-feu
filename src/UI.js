@@ -3,8 +3,7 @@ import { AudioManager } from './AudioManager.js';
 import { t, tCtrlLines, tCtrlBindings, getLang, setLang } from './i18n.js';
 import { IS_MOBILE } from './MobileControls.js';
 import { levelFromTotalXp } from './ProgressionSystem.js';
-
-const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1515048299319529533/42qfkPq7hv0JAuqEQ9tDIHVyufUb8qGkqN0wm3iglN-6PLO1mw2S9w3t0W7AzhA0SkKy';
+import { showBugReport } from './BugReport.js';
 
 // ── Palette WW2 cockpit ────────────────────────────────────────────────────────
 const C = {
@@ -36,7 +35,6 @@ export class UI {
     this._onReplay       = null;   // recommence la même partie (solo)
     this._survivalMode   = false;
     this._bugContextFn       = null;
-    this._bugReportOverlay   = null;
     this._hitMarkerTimer     = 0;
     this._playerHitTimer     = 0;
     this._muzzleFlashTimer   = 0;
@@ -393,7 +391,7 @@ export class UI {
       });
       btnBug.addEventListener('mouseover', () => { btnBug.style.color = '#8a6040'; });
       btnBug.addEventListener('mouseout',  () => { btnBug.style.color = '#5a4030'; });
-      btnBug.addEventListener('click', (e) => { e.stopPropagation(); this._showBugReport(); });
+      btnBug.addEventListener('click', (e) => { e.stopPropagation(); showBugReport(this._bugContextFn); });
 
       list.appendChild(btnResume);
       list.appendChild(btnRespawn);
@@ -688,166 +686,6 @@ export class UI {
     document.body.appendChild(wrap);
   }
 
-  _showBugReport() {
-    if (this._bugReportOverlay) {
-      this._bugReportOverlay.remove();
-      this._bugReportOverlay = null;
-      return;
-    }
-
-    const wrap = document.createElement('div');
-    this._bugReportOverlay = wrap;
-    Object.assign(wrap.style, {
-      position: 'fixed', inset: '0',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,0,0.88)',
-      fontFamily: '"Courier New",monospace',
-      color: C.cream, zIndex: '800',
-      pointerEvents: 'auto',
-    });
-
-    const box = document.createElement('div');
-    Object.assign(box.style, {
-      background: C.panelMid,
-      border: `1px solid ${C.bezelHi}`,
-      borderRadius: '6px',
-      padding: '24px',
-      width: 'min(420px,90vw)',
-      display: 'flex', flexDirection: 'column', gap: '10px',
-    });
-
-    const title = document.createElement('div');
-    title.textContent = t('bugReportTitle');
-    title.style.cssText = `font-size:14px;font-weight:bold;letter-spacing:6px;color:${C.cream};margin-bottom:2px;`;
-    box.appendChild(title);
-
-    const mkLabel = (text) => {
-      const l = document.createElement('div');
-      l.textContent = text;
-      l.style.cssText = `font-size:9px;letter-spacing:2px;color:${C.dimCream};text-transform:uppercase;margin-bottom:2px;`;
-      return l;
-    };
-
-    const mkTextarea = (placeholder, rows) => {
-      const ta = document.createElement('textarea');
-      ta.placeholder = placeholder;
-      ta.rows = rows;
-      Object.assign(ta.style, {
-        background: 'rgba(255,255,255,0.05)',
-        border: `1px solid ${C.bezelHi}`,
-        borderRadius: '3px',
-        color: C.cream,
-        fontFamily: '"Courier New",monospace',
-        fontSize: '11px',
-        lineHeight: '1.5',
-        padding: '8px',
-        resize: 'vertical',
-        width: '100%',
-        boxSizing: 'border-box',
-      });
-      return ta;
-    };
-
-    box.appendChild(mkLabel(t('bugDesc')));
-    const taDesc = mkTextarea(t('bugDescPh'), 4);
-    box.appendChild(taDesc);
-
-    box.appendChild(mkLabel(t('bugSteps')));
-    const taSteps = mkTextarea(t('bugStepsPh'), 3);
-    box.appendChild(taSteps);
-
-    const errEl = document.createElement('div');
-    errEl.style.cssText = `font-size:10px;color:#cc4444;letter-spacing:1px;min-height:14px;`;
-    box.appendChild(errEl);
-
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = `display:flex;gap:10px;justify-content:flex-end;`;
-
-    const mkBtn = (label, primary) => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      Object.assign(b.style, {
-        background    : primary ? 'rgba(212,200,138,0.12)' : 'transparent',
-        border        : `1px solid ${primary ? C.cream : C.bezelHi}`,
-        borderRadius  : '3px',
-        color         : primary ? C.cream : C.dimCream,
-        fontFamily    : '"Courier New",monospace',
-        fontSize      : '10px',
-        letterSpacing : '2px',
-        padding       : '8px 18px',
-        cursor        : 'pointer',
-      });
-      return b;
-    };
-
-    const btnCancel = mkBtn(t('back'), false);
-    btnCancel.addEventListener('click', (e) => {
-      e.stopPropagation();
-      wrap.remove();
-      this._bugReportOverlay = null;
-    });
-
-    const btnSend = mkBtn(t('bugSend'), true);
-    btnSend.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const desc = taDesc.value.trim();
-      if (!desc) { errEl.textContent = t('bugRequired'); return; }
-      errEl.textContent = '';
-      btnSend.textContent = t('bugSending');
-      btnSend.disabled = true;
-
-      const ctx = this._bugContextFn?.() ?? {};
-      const fields = [
-        { name: '📋 Description', value: desc.substring(0, 1024), inline: false },
-      ];
-      if (taSteps.value.trim()) {
-        fields.push({ name: '🔁 Reproduction', value: taSteps.value.trim().substring(0, 1024), inline: false });
-      }
-      if (ctx.mode) fields.push({ name: '🎮 Mode', value: String(ctx.mode), inline: true });
-      if (ctx.map  !== undefined) fields.push({ name: '🗺️ Carte', value: t(`mapName_${ctx.map}`) || String(ctx.map), inline: true });
-      if (ctx.wave !== undefined) fields.push({ name: '🌊 Vague', value: String(ctx.wave), inline: true });
-      const _dpr = window.devicePixelRatio || 1;
-      const _phys = `${Math.round(window.screen.width * _dpr)}×${Math.round(window.screen.height * _dpr)}`;
-      const _vp   = `${window.innerWidth}×${window.innerHeight}`;
-      fields.push({ name: t('bugFieldScreen'), value: `${_phys} (DPR ${_dpr}) · viewport ${_vp}`, inline: false });
-      fields.push({ name: '🌐 Navigateur', value: navigator.userAgent.substring(0, 100), inline: false });
-
-      try {
-        const res = await fetch(DISCORD_WEBHOOK, {
-          method : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body   : JSON.stringify({
-            embeds: [{
-              title    : '🐛 Bug Report — Ciel de Feu',
-              color    : 0xcc3300,
-              fields,
-              timestamp: new Date().toISOString(),
-              footer   : { text: 'Ciel de Feu Bug Reporter' },
-            }],
-          }),
-        });
-        if (res.ok || res.status === 204) {
-          btnSend.textContent = t('bugSent');
-          btnSend.style.color = '#88cc44';
-          setTimeout(() => { wrap.remove(); this._bugReportOverlay = null; }, 2000);
-        } else {
-          throw new Error(res.status);
-        }
-      } catch (_) {
-        btnSend.textContent = t('bugError');
-        btnSend.style.color = '#cc4444';
-        btnSend.disabled = false;
-      }
-    });
-
-    btnRow.appendChild(btnCancel);
-    btnRow.appendChild(btnSend);
-    box.appendChild(btnRow);
-    wrap.appendChild(box);
-    document.body.appendChild(wrap);
-    setTimeout(() => taDesc.focus(), 50);
-  }
-
   _showPauseSettings() {
     // Toujours reconstruire pour refléter l'état courant (lang, gfx, ctrl)
     if (this._pauseSettingsOverlay) {
@@ -1074,7 +912,7 @@ export class UI {
         wrap.appendChild(btnScoreboard);
       }
 
-      // ── Retour ────────────────────────────────────────────────────────────
+      // ── Retour + bug report ───────────────────────────────────────────────
       const btnBack = mkSBtn(t('back'), C.dimCream);
       btnBack.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1082,6 +920,19 @@ export class UI {
         requestAnimationFrame(() => this._pauseOverlay?.querySelectorAll('button')?.[0]?.focus());
       });
       wrap.appendChild(btnBack);
+
+      const btnBugSettings = document.createElement('button');
+      btnBugSettings.textContent = '⚑  ' + t('reportBug');
+      Object.assign(btnBugSettings.style, {
+        background: 'transparent', border: 'none', color: '#5a4030',
+        fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
+        padding: '10px 0', cursor: 'pointer', textTransform: 'uppercase',
+        transition: 'color 0.12s', marginTop: '4px',
+      });
+      btnBugSettings.addEventListener('mouseover', () => { btnBugSettings.style.color = '#8a6040'; });
+      btnBugSettings.addEventListener('mouseout',  () => { btnBugSettings.style.color = '#5a4030'; });
+      btnBugSettings.addEventListener('click', (e) => { e.stopPropagation(); showBugReport(this._bugContextFn); });
+      wrap.appendChild(btnBugSettings);
 
       document.body.appendChild(wrap);
       this._pauseSettingsOverlay = wrap;
@@ -1364,7 +1215,7 @@ export class UI {
       });
       btnBugEsc.addEventListener('mouseover', () => { btnBugEsc.style.color = '#8a6040'; });
       btnBugEsc.addEventListener('mouseout',  () => { btnBugEsc.style.color = '#5a4030'; });
-      btnBugEsc.addEventListener('click', (e) => { e.stopPropagation(); this._showBugReport(); });
+      btnBugEsc.addEventListener('click', (e) => { e.stopPropagation(); showBugReport(this._bugContextFn); });
 
       const bugRow = document.createElement('div');
       bugRow.style.cssText = 'border-top:1px solid #3a3020;padding:4px 0;';

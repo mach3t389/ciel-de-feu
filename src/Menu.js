@@ -6,6 +6,7 @@ import { t, tTips, tModeInfo, tModeBullets, tCtrlKb, tCtrlGp, getLang, setLang, 
 import { ProgressionSystem, xpToNextLevel, calcRewards } from './ProgressionSystem.js';
 import { UPGRADES, CAT_ORDER, CAT_LABELS, BASE_STATS, computeStats, loadModifiers, serviceTimeMult, EQUIPMENT_CATALOG, DEFAULT_LOADOUT, loadoutToUpgradeIds, interleaveSlots, OPTION_COSTS } from './UpgradeTree.js';
 import { IS_MOBILE } from './MobileControls.js';
+import { showBugReport } from './BugReport.js';
 
 // ── Scrollbar cockpit — injectée une seule fois ───────────────────────────────
 (() => {
@@ -2054,11 +2055,28 @@ export class Menu {
     titleEl.addEventListener('click', onDevClick);
     devHint.addEventListener('click', onDevClick);
 
-    // ── Retour ─────────────────────────────────────────────────────────────────
+    // ── Retour + bug report ────────────────────────────────────────────────────
     wrap.appendChild(mkDivider());
     const btnBack = mkBtn(t('back'), M.dimCream);
     btnBack.addEventListener('click', () => returnFn());
     wrap.appendChild(btnBack);
+
+    const btnBug = document.createElement('button');
+    btnBug.textContent = '⚑  ' + t('reportBug');
+    Object.assign(btnBug.style, {
+      background: 'transparent', border: 'none', color: '#5a4030',
+      fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
+      padding: '10px 0', cursor: 'pointer', textTransform: 'uppercase',
+      width: '100%', textAlign: 'left', transition: 'color 0.12s',
+      marginTop: '4px',
+    });
+    btnBug.addEventListener('mouseover', () => { btnBug.style.color = '#8a6040'; });
+    btnBug.addEventListener('mouseout',  () => { btnBug.style.color = '#5a4030'; });
+    btnBug.addEventListener('touchstart', () => { btnBug.style.color = '#8a6040'; }, { passive: true });
+    btnBug.addEventListener('touchend',   () => { btnBug.style.color = '#5a4030'; }, { passive: true });
+    btnBug.addEventListener('click', () => showBugReport());
+    wrap.appendChild(btnBug);
+
     this._root.appendChild(wrap);
   }
 

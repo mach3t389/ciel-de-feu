@@ -19,6 +19,7 @@ import { AudioManager } from './AudioManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
 import { t } from './i18n.js';
 import { MobileControls, IS_MOBILE } from './MobileControls.js';
+import { isBugReportOpen, closeBugReport } from './BugReport.js';
 
 const PLANE_PATHS = {
   blanc: '/Avions/SK_Veh_Plane_Stunt_01_AvionBlanc.glb',
@@ -1899,7 +1900,7 @@ export class Game {
         }
         this._resumeHandler = (e) => {
           if (e.target.closest('button, a, input, textarea, select')) return;
-          if (this.ui?._bugReportOverlay || this.ui?._inGameStatsOverlay ||
+          if (isBugReportOpen() || this.ui?._inGameStatsOverlay ||
               this.ui?._pauseSettingsOverlay || this.ui?._pauseCtrlOverlay) return;
           document.removeEventListener('mousedown', this._resumeHandler);
           this._resumeHandler = null;
@@ -3276,7 +3277,7 @@ export class Game {
     this.ui?._pauseSettingsOverlay?.remove();
     this.ui?._pauseCtrlOverlay?.remove();
     this.ui?._inGameStatsOverlay?.remove();
-    this.ui?._bugReportOverlay?.remove();
+    closeBugReport();
     this.ui?._survivalBanner?.remove();
     this.ui?._survivalCdEl?.remove();
     this.ui?._spectatorEl?.remove();
