@@ -307,7 +307,7 @@ export class Player {
     if (this.pivot.position.y <= groundY + 1.5) {
       this.pivot.position.y = groundY + 1.5;
 
-      if (!this.isLanded) {
+      if (!this.isLanded && !(this._takeoffCooldown > 0)) {
         // Chute libre ou piqué brutal → destruction immédiate
         if (impactSpeed > 28) {
           this.health = 0;
@@ -552,9 +552,13 @@ export class Player {
     // Redémarrage moteur : Shift/RT + carburant dispo
     if (!this.engineOn && (thrust > 0.05) && this.fuel > 0) {
       this.engineOn = true;
-      if (this.isLanded) this.isLanded = false;
+      if (this.isLanded) {
+        this.isLanded = false;
+        this._takeoffCooldown = 0.6; // immunise contre le re-check de sol pendant 600ms
+      }
       if (this.speed < ENGINE_CUTOFF + 2) this.speed = ENGINE_CUTOFF + 2;
     }
+    if (this._takeoffCooldown > 0) this._takeoffCooldown -= delta;
 
     // Drain carburant proportionnel aux gaz utilisés
     if (this.engineOn) {

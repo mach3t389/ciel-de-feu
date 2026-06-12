@@ -3212,10 +3212,10 @@ export class UI {
     this._deadOverlay = overlay;
     Object.assign(overlay.style, {
       position:'fixed', inset:'0',
-      background: C.menuBackdrop,   // fond gris uniforme (cohérent avec pause / victoire)
+      background: C.menuBackdrop,
       display:'flex', alignItems:'center', justifyContent:'center',
       fontFamily:'"Courier New",monospace',
-      color:C.cream, pointerEvents:'none',
+      color:C.cream, pointerEvents:'all',
       zIndex: '800',
     });
 
