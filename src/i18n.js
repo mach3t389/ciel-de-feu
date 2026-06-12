@@ -1089,9 +1089,14 @@ const EQUIP_LABELS_EN = {
   'COCKPIT':'COCKPIT', 'RÉPARATION':'REPAIR', 'RÉARMEMENT':'REARM',
   'RAVITAILLEMENT':'REFUEL', 'MAINTENANCE':'MAINTENANCE', 'RADAR':'RADAR',
   'ROULIS':'ROLL', 'FUMIGÈNE':'SMOKE GEN.', 'CAMÉRA ARRIÈRE':'REAR CAMERA',
+  // Slots manquants
+  'MISSILES AA':'AIR-TO-AIR MISSILES', 'MISSILES AS':'AIR-TO-GROUND MISSILES',
+  'DÉFENSE ACTIVE':'ACTIVE DEFENSE', 'GUIDAGE':'GUIDANCE', 'ACQUISITION':'ACQUISITION',
   // Noms d'options
   'Standard':'Standard', 'Agrandi I':'Enlarged I', 'Agrandi II':'Enlarged II',
   'Amélioré I':'Upgraded I', 'Amélioré II':'Upgraded II',
+  'Haute Vitesse I':'High Speed I', 'Haute Vitesse II':'High Speed II',
+  'Haute Puissance I':'High Power I', 'Haute Puissance II':'High Power II',
   'Allégées I':'Lightweight I', 'Allégées II':'Lightweight II',
   'Aucun':'None', 'Aucune':'None', 'Installé':'Installed', 'Installée':'Installed',
   '100 rds':'100 rds', '200 rds':'200 rds', '300 rds':'300 rds',
@@ -1120,6 +1125,9 @@ const EQUIP_LABELS_EN = {
 const EQUIP_PHRASES_EN = [
   ['Brouille missiles ennemis', 'Jams enemy missiles'],
   ['Alerte ennemis dans le dos', 'Alerts to threats behind'],
+  ['dégâts (tourelles)', 'damage (turrets)'],
+  ['dégâts (avions)', 'damage (aircraft)'],
+  ['Collision', 'Collision'],
   ['leurres anti-missile', 'anti-missile decoys'],
   ['Brouille lock missile', 'Jams missile lock'],
   ['dégâts frontaux', 'frontal damage'],
@@ -1377,6 +1385,20 @@ const EQUIP_DESC_EN = {
     '−30% all damage. Active 5s, recharge 25s.',
   '−40% tous les dégâts. Actif 7s, recharge 18s.':
     '−40% all damage. Active 7s, recharge 18s.',
+  // Moteurs (nouveaux types)
+  'Moteur optimisé pour la vitesse de pointe : cylindrée élevée, peu de couple bas régime.':
+    'Engine optimized for top speed: high displacement, low low-end torque.',
+  'Version course : vitesse de pointe maximale, forte consommation.':
+    'Racing version: maximum top speed, high fuel consumption.',
+  'Moteur à fort couple : reprise immédiate et maniabilité accrue, vitesse de pointe modérée.':
+    'High-torque engine: instant response and improved maneuverability, moderate top speed.',
+  'Version combat : accélération maximale, idéal pour les dogfights serrés.':
+    'Combat version: maximum acceleration, ideal for tight dogfights.',
+  // Turbo et filtre altitude (descriptions mises à jour)
+  'Suralimentation permanente : vitesse de pointe et accélération nettement accrues, consommation augmentée.':
+    'Permanent supercharging: top speed and acceleration significantly increased, higher fuel use.',
+  'Filtre à air haute altitude : performances maintenues au-delà de 500m. Entretien et consommation légèrement accrus.':
+    'High-altitude air filter: performance maintained above 500m. Slightly increased maintenance and fuel use.',
 };
 
 export function tEquip(str) {
