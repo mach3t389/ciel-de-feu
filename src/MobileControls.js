@@ -125,13 +125,15 @@ export class MobileControls {
 
     // Missile — bouton moyen
     this._missBtn = this._el('div',
-      btnStyle(`right:120px; bottom:168px; width:56px; height:56px; font-size:20px;`),
-      '🚀');
+      btnStyle(`right:120px; bottom:168px; width:56px; height:64px; font-size:18px; flex-direction:column; gap:2px;`),
+      '');
+    this._missBtn.innerHTML = `<span style="font-size:18px;line-height:1">🚀</span><span style="font-size:8px;letter-spacing:2px;font-family:'Courier New',monospace">MSL</span>`;
 
     // Leurre — bouton petit
     this._decoyBtn = this._el('div',
-      btnStyle(`right:22px; bottom:152px; width:48px; height:48px; font-size:16px;`),
-      '✦');
+      btnStyle(`right:22px; bottom:152px; width:48px; height:58px; font-size:14px; flex-direction:column; gap:2px;`),
+      '');
+    this._decoyBtn.innerHTML = `<span style="font-size:14px;line-height:1">✦</span><span style="font-size:7px;letter-spacing:2px;font-family:'Courier New',monospace">DCY</span>`;
 
     // Pause — coin haut-droit
     this._pauseBtn = this._el('div', `
