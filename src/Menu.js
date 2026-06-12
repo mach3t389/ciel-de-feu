@@ -402,7 +402,7 @@ export class Menu {
   }
 
   // Point d'entrée → retourne une Promise résolue avec la config finale
-  show() {
+  show(startAt = null) {
     return new Promise(resolve => {
       this._resolve = resolve;
       // Libérer le pointer lock résiduel (chrome affiche "appuyez sur Echap" sinon)
@@ -422,7 +422,7 @@ export class Menu {
           document.addEventListener('keydown',     resume, { once: true });
         }
       }
-      this._showMain();
+      if (startAt === 'stats') { this._showStats(); } else { this._showMain(); }
       this._startGamepadNav();
     });
   }

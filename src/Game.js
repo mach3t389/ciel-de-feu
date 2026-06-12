@@ -879,7 +879,8 @@ export class Game {
     };
 
     const onResume = () => this._setPause(false);
-    this.ui.showPause(false, onQuit, onResume, onRespawn, this._isSurvival);
+    const onStats  = () => this._quit('stats');
+    this.ui.showPause(false, onQuit, onResume, onRespawn, this._isSurvival, onStats);
 
     // Boutons des écrans de fin : menu = retour menu ; rejouer = même partie
     // (solo uniquement — réutiliser une connexion réseau au replay n'a pas de sens).

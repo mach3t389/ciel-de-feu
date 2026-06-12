@@ -282,7 +282,7 @@ export class UI {
     setTimeout(() => { if (this._tipEl) this._tipEl.style.display = 'none'; }, 450);
   }
 
-  showPause(visible, onQuit = null, onResume = null, onRespawn = null, isSurvival = null) {
+  showPause(visible, onQuit = null, onResume = null, onRespawn = null, isSurvival = null, onStats = null) {
     if (!this._pauseOverlay) {
       const wrap = document.createElement('div');
       Object.assign(wrap.style, {
@@ -292,7 +292,7 @@ export class UI {
         background    : C.menuBackdrop,
         fontFamily    : '"Courier New",monospace',
         color         : C.cream,
-        pointerEvents : 'none',
+        pointerEvents : 'all',
         zIndex        : '500',
       });
 
@@ -359,6 +359,13 @@ export class UI {
         this._showPauseControls();
       });
 
+      const btnStats = mkPBtn(t('stats'), C.dimCream);
+      btnStats.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this._pauseStatsCb) this._pauseStatsCb();
+      });
+      this._btnPauseStats = btnStats;
+
       const btnMenu = mkPBtn(t('mainMenu'), C.dimCream);
       btnMenu.style.marginTop = '4px';
       btnMenu.addEventListener('click', (e) => {
@@ -372,6 +379,7 @@ export class UI {
       wrap.appendChild(btnRespawn);
       wrap.appendChild(btnSettings);
       wrap.appendChild(btnControls);
+      wrap.appendChild(btnStats);
       wrap.appendChild(btnMenu);
       document.body.appendChild(wrap);
       this._pauseOverlay = wrap;
@@ -379,6 +387,10 @@ export class UI {
     if (onQuit    !== null) this._pauseQuitCb    = onQuit;
     if (onResume  !== null) this._pauseResumeCb  = onResume;
     if (onRespawn !== null) this._pauseRespawnCb = onRespawn;
+    if (onStats   !== null) {
+      this._pauseStatsCb = onStats;
+      if (this._btnPauseStats) this._btnPauseStats.style.display = 'block';
+    }
     if (isSurvival !== null) {
       this._pauseIsSurvival = isSurvival;
       if (this._btnPauseRespawn) {
@@ -967,7 +979,7 @@ export class UI {
         background    : C.menuBackdrop,
         fontFamily    : '"Courier New",monospace',
         color         : C.cream,
-        pointerEvents : 'none',
+        pointerEvents : 'all',
         zIndex        : '500',
       });
 
