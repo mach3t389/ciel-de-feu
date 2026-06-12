@@ -787,6 +787,7 @@ export class Game {
         this._setPause(false);
         this.ui.showSurvivalEnd(() => this._quit());
       } else {
+        this._setPause(false);  // nettoie _resumeHandler avant que la promise resolve
         this._quit();
       }
     };
@@ -812,7 +813,7 @@ export class Game {
       if (visible) document.exitPointerLock();
       else {
         this._pauseCooldownUntil = performance.now() + 400; // évite la réouverture immédiate
-        document.body.requestPointerLock();
+        try { document.body.requestPointerLock(); } catch (_) {}
       }
     };
 
@@ -1802,7 +1803,7 @@ export class Game {
     }
 
     this._mobileControls?.setVisible(true);
-    document.body.requestPointerLock();
+    try { document.body.requestPointerLock(); } catch (_) {}
   }
 
   // Volume d'explosion atténué par la distance — pour les kills qui ne sont PAS
@@ -1871,13 +1872,14 @@ export class Game {
 
   // ── Pause ────────────────────────────────────────────────────────────────
   _setPause(paused) {
+    if (this._destroyed) return;
     this.isPaused = paused;
     if (paused) this._mobileControls?.reset();
-    this.ui.showPause(paused, () => this._quit(), () => {
+    this.ui.showPause(paused, null, () => {
       // Reprendre via le bouton UI (manette / clavier)
       this._pauseCooldownUntil = performance.now() + 500;
       this._setPause(false);
-      document.body.requestPointerLock();
+      try { document.body.requestPointerLock(); } catch (_) {}
     });
     if (paused) {
       // Marquer le bouton Start comme déjà enfoncé pour éviter un dépause immédiat
@@ -1895,7 +1897,7 @@ export class Game {
         this._resumeHandler = null;
         this._pauseCooldownUntil = performance.now() + 500; // ignore pointerlockchange pendant 500ms
         this._setPause(false);
-        document.body.requestPointerLock();
+        try { document.body.requestPointerLock(); } catch (_) {}
       };
       document.addEventListener('mousedown', this._resumeHandler);
     } else {
