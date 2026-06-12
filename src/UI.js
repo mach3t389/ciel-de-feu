@@ -360,13 +360,6 @@ export class UI {
 
 
 
-      const btnStats = mkPBtn(t('stats'), C.dimCream);
-      btnStats.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showInGameStats();
-      });
-      this._btnPauseStats = btnStats;
-
       const btnMenu = mkPBtn(t('mainMenu'), C.dimCream);
       btnMenu.style.marginTop = '4px';
       btnMenu.addEventListener('click', (e) => {
@@ -386,7 +379,6 @@ export class UI {
       wrap.appendChild(btnResume);
       wrap.appendChild(btnRespawn);
       wrap.appendChild(btnSettings);
-      wrap.appendChild(btnStats);
       wrap.appendChild(btnMenu);
       wrap.appendChild(btnBug);
       document.body.appendChild(wrap);
@@ -1035,6 +1027,26 @@ export class UI {
         this._showPauseControls();
       });
       wrap.appendChild(btnControls);
+
+      if (IS_MOBILE) {
+        const btnScoreboard = mkSBtn(t('scoreboardTitle'), C.dimCream);
+        btnScoreboard.addEventListener('click', (e) => {
+          e.stopPropagation();
+          wrap.style.display = 'none';
+          this.showScoreboard(true);
+          if (this._scoreboardOverlay) {
+            this._scoreboardOverlay.style.pointerEvents = 'auto';
+            this._scoreboardOverlay.style.cursor = 'pointer';
+            const close = () => {
+              this.showScoreboard(false);
+              if (this._scoreboardOverlay) this._scoreboardOverlay.style.pointerEvents = 'none';
+              wrap.style.display = 'flex';
+            };
+            this._scoreboardOverlay.addEventListener('click', close, { once: true });
+          }
+        });
+        wrap.appendChild(btnScoreboard);
+      }
 
       // ── Retour ────────────────────────────────────────────────────────────
       const btnBack = mkSBtn(t('back'), C.dimCream);
