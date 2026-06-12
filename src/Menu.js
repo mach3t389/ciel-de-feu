@@ -187,34 +187,37 @@ function mkLabel(text) {
 
 // Panel cockpit centré — style uniforme pour tous les écrans
 function mkPanel(width = '400px') {
+  const isMob = window.innerWidth < 700;
   return el('div', { style: {
     position     : 'absolute', left: '50%', top: '50%',
     transform    : 'translate(-50%, -50%)',
     display      : 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '14px',
-    zIndex       : '3', width,
+    zIndex       : '3', width: `min(${width}, 94vw)`,
+    maxHeight    : 'calc(100dvh - 80px)', overflowY: 'auto',
     background   : 'rgba(6,8,4,0.84)',
     border       : '1px solid #3a3020',
     borderRadius : '8px',
-    padding      : '28px 32px',
+    padding      : isMob ? '18px 16px' : '28px 32px',
     boxShadow    : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
   }});
 }
 
 // Panel ancré à gauche — pour les écrans multijoueur
 function mkPanelLeft(width = '400px') {
-  // Centré dans l'espace SOUS la topbar (52px) pour éviter tout chevauchement.
-  // Le centre virtuel passe de 50vh à (52px + (100vh-52px)/2) = calc(50% + 26px).
-  // maxHeight réduit d'autant pour rester confortable.
+  const isMob = window.innerWidth < 700;
+  // Sur mobile : centré. Sur desktop : ancré à gauche.
   const d = el('div', { style: {
-    position     : 'absolute', left: '5%', top: 'calc(50% + 26px)',
-    transform    : 'translateY(-50%)',
+    position     : 'absolute',
+    left         : isMob ? '50%' : '5%',
+    top          : isMob ? '50%' : 'calc(50% + 26px)',
+    transform    : isMob ? 'translate(-50%, -50%)' : 'translateY(-50%)',
     display      : 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px',
-    zIndex       : '3', width,
-    maxHeight    : 'calc(100vh - 80px)', overflowY: 'auto',
+    zIndex       : '3', width: `min(${width}, 95vw)`,
+    maxHeight    : isMob ? 'calc(100dvh - 70px)' : 'calc(100vh - 80px)', overflowY: 'auto',
     background   : 'rgba(6,8,4,0.88)',
     border       : '1px solid #3a3020',
     borderRadius : '8px',
-    padding      : '28px 32px',
+    padding      : isMob ? '16px 14px' : '28px 32px',
     boxShadow    : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
   }});
   d.classList.add('menu-panel');
@@ -797,22 +800,25 @@ export class Menu {
     this._config.team = homePlane.color;
     this._syncPreviewPlane(homeIdx);
 
-    // Panel cockpit — encadré dark style jeu, ancré à gauche
+    // Panel cockpit — encadré dark style jeu
+    const _mainIsMob = window.innerWidth < 700;
     const panel = el('div', { style: {
       position      : 'absolute',
-      left          : '5%',
-      top           : '50%',
-      transform     : 'translateY(-50%)',
+      left          : _mainIsMob ? '50%' : '5%',
+      top           : _mainIsMob ? '50%' : '50%',
+      transform     : _mainIsMob ? 'translate(-50%, -50%)' : 'translateY(-50%)',
       display       : 'flex',
       flexDirection : 'column',
       alignItems    : 'stretch',
       gap           : '10px',
       zIndex        : '3',
-      width         : '340px',
+      width         : `min(340px, 90vw)`,
+      maxHeight     : 'calc(100dvh - 70px)',
+      overflowY     : 'auto',
       background    : 'rgba(6,8,4,0.84)',
       border        : '1px solid #3a3020',
       borderRadius  : '8px',
-      padding       : '28px 32px',
+      padding       : _mainIsMob ? '18px 18px' : '28px 32px',
       boxShadow     : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
     }});
 
@@ -887,17 +893,18 @@ export class Menu {
     nav.appendChild(tipDots);
     nav.appendChild(mkArrow('›', +1));
 
-    // Panel couleurs inversées — fond clair, texte sombre — moins dominant que le panel de gauche
+    // Panel astuces — masqué sur mobile (l'espace est trop limité)
     const tipPanel = el('div', { style: {
       position    : 'absolute', bottom: '56px',
       left        : '50%', transform: 'translateX(-50%)',
-      width       : '440px',
+      width       : 'min(440px, 90vw)',
       background  : 'rgba(212,200,138,0.18)',
       border      : '1px solid rgba(212,200,138,0.30)',
       borderRadius: '6px',
       padding     : '14px 24px',
       zIndex      : '3',
       backdropFilter: 'blur(2px)',
+      display     : _mainIsMob ? 'none' : '',
     }});
 
     const tipTitle = el('div', { style: {
@@ -982,24 +989,28 @@ export class Menu {
     const showEnemyCnt = hasEnemies && this._config.mode !== 'survival';
     const hasPlayers   = this._config.mode === 'coop' || this._config.mode === 'multiplayer';
 
-    // Panel gauche — avion preview visible à droite
+    // Panel config — responsive
+    const _cfgIsMob = window.innerWidth < 700;
     const wrap = el('div', { style: {
-      position     : 'absolute', left: '5%', top: '50%',
-      transform    : 'translateY(-50%)',
+      position     : 'absolute',
+      left         : _cfgIsMob ? '50%' : '5%',
+      top          : '50%',
+      transform    : _cfgIsMob ? 'translate(-50%, -50%)' : 'translateY(-50%)',
       display      : 'flex', flexDirection: 'column', gap: '10px',
-      zIndex       : '3', width: '760px',
+      zIndex       : '3', width: 'min(760px, 96vw)',
+      maxHeight    : 'calc(100dvh - 70px)', overflowY: 'auto',
       background   : 'rgba(6,8,4,0.84)',
       border       : '1px solid #3a3020',
       borderRadius : '8px',
-      padding      : '16px 28px',
+      padding      : _cfgIsMob ? '14px 14px' : '16px 28px',
       boxShadow    : 'inset 0 0 30px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.4)',
     }});
 
     wrap.appendChild(mkSectionTitle(modeLabels[this._config.mode]));
     wrap.appendChild(mkDivider());
 
-    // Corps : colonne gauche + séparateur + colonne droite (carte)
-    const body = el('div', { style: { display: 'flex', gap: '32px', alignItems: 'flex-start' }});
+    // Corps : colonne gauche + séparateur + colonne droite (carte) — empilées sur mobile
+    const body = el('div', { style: { display: 'flex', flexDirection: _cfgIsMob ? 'column' : 'row', gap: _cfgIsMob ? '12px' : '32px', alignItems: 'flex-start' }});
 
     // ── Colonne gauche ───────────────────────────────────────────────────────
     const colL = el('div', { style: { flex: '1', display: 'flex', flexDirection: 'column', gap: '8px' }});
@@ -1084,10 +1095,11 @@ export class Menu {
     }
 
     // ── Colonne droite : carte ───────────────────────────────────────────────
-    const colR = el('div', { style: { width: '290px', flexShrink: '0', display: 'flex', flexDirection: 'column', gap: '8px' }});
+    const colR = el('div', { style: { width: _cfgIsMob ? '100%' : '290px', flexShrink: '0', display: 'flex', flexDirection: 'column', gap: '8px' }});
     colR.appendChild(mkLabel(t('map')));
     const mapCanvas = document.createElement('canvas');
-    mapCanvas.width = 290; mapCanvas.height = 200;
+    const _mapW = _cfgIsMob ? Math.min(290, window.innerWidth - 60) : 290;
+    mapCanvas.width = _mapW; mapCanvas.height = Math.round(_mapW * 200 / 290);
     Object.assign(mapCanvas.style, { display: 'block', border: `1px solid ${M.border}` });
     this._drawMapPreview(mapCanvas, this._config.map);
     // Conteneur stats contextuel (rechargé si la carte change)
@@ -1110,7 +1122,7 @@ export class Menu {
     colR.appendChild(statsContainer);
 
     body.appendChild(colL);
-    body.appendChild(el('div', { style: { width: '1px', background: M.border, alignSelf: 'stretch' }}));
+    if (!_cfgIsMob) body.appendChild(el('div', { style: { width: '1px', background: M.border, alignSelf: 'stretch' }}));
     body.appendChild(colR);
     wrap.appendChild(body);
 
@@ -1274,12 +1286,12 @@ export class Menu {
     // Réseau déclaré tôt (référencé dans les callbacks des groupes)
     let nm = null;
 
-    // ── Panel gauche large — même ancrage que les autres menus ──
+    // ── Panel lobby — responsive ──
+    const _lobIsMob = window.innerWidth < 700;
     const wrap = mkPanelLeft('980px');
     wrap.style.gap = '0';
-    // Hauteur fixe pour permettre à la liste joueurs de s'étirer (flex: 1 sur playerSection)
-    wrap.style.height    = '82vh';
-    wrap.style.maxHeight = '82vh';
+    wrap.style.height    = _lobIsMob ? 'calc(100dvh - 65px)' : '82vh';
+    wrap.style.maxHeight = _lobIsMob ? 'calc(100dvh - 65px)' : '82vh';
     wrap.style.overflowY = 'hidden';
 
     // Header
@@ -1303,8 +1315,8 @@ export class Menu {
     wrap.appendChild(header);
     wrap.appendChild(el('div', { style: { height: '1px', background: M.border, marginBottom: '16px' }}));
 
-    // ── Corps deux colonnes — flex: 1 pour que les colonnes s'étendent jusqu'en bas ──
-    const body = el('div', { style: { display: 'flex', gap: '24px', alignItems: 'stretch', flex: '1', minHeight: '0', overflow: 'hidden' }});
+    // ── Corps — flex: 1, colonnes côte-à-côte sur desktop, empilées sur mobile ──
+    const body = el('div', { style: { display: 'flex', flexDirection: _lobIsMob ? 'column' : 'row', gap: '16px', alignItems: 'stretch', flex: '1', minHeight: '0', overflow: _lobIsMob ? 'auto' : 'hidden' }});
 
     // Helpers
     const lbl = (txt) => el('div', { text: txt, style: {
@@ -1489,7 +1501,7 @@ export class Menu {
 
     // ── Colonne droite : joueurs (extensible) + carte + stats (collés en bas) ──
     const rightCol = el('div', { style: {
-      width: '320px', flexShrink: '0',
+      width: _lobIsMob ? '100%' : '320px', flexShrink: '0',
       display: 'flex', flexDirection: 'column',
     }});
 
@@ -3070,14 +3082,15 @@ export class Menu {
   // ── Topbar persistante : profil + boutons utilitaires ─────────────────────
   _buildProfileBar() {
     const bar = document.createElement('div');
+    const _pbIsMob = window.innerWidth < 700;
     Object.assign(bar.style, {
       position      : 'fixed',
       top           : '0', left: '0', right: '0',
       zIndex        : '2000',
       height        : '52px',
-      padding       : '0 20px',
+      padding       : _pbIsMob ? '0 10px' : '0 20px',
       display       : 'flex', alignItems: 'center', justifyContent: 'space-between',
-      gap           : '24px',
+      gap           : _pbIsMob ? '8px' : '24px',
       background    : 'rgba(8,8,6,0.92)',
       borderBottom  : `1px solid ${M.border}`,
       fontFamily    : 'Rajdhani, sans-serif',
@@ -3098,7 +3111,23 @@ export class Menu {
       position: 'relative',
     });
     left.title = t('myPlane');
-    left.innerHTML = `
+    left.innerHTML = _pbIsMob ? `
+      <div style="display:flex;flex-direction:column;gap:1px;min-width:0;">
+        <div style="display:flex;align-items:baseline;gap:6px;">
+          <span class="pb-plane-icon" style="font-size:11px;color:${M.yellow}55;transition:color 0.15s;">✈</span>
+          <span class="pb-name" style="font-size:12px;letter-spacing:1px;color:${M.cream};font-weight:700;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;"></span>
+          <span class="pb-lvl" style="font-size:11px;letter-spacing:1px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <div style="width:80px;height:4px;background:rgba(212,200,138,0.14);border-radius:2px;overflow:hidden;">
+            <div class="pb-xp" style="height:100%;width:0%;background:linear-gradient(90deg,${M.yellow},${M.cream});transition:width 0.4s;"></div>
+          </div>
+          <span class="pb-cred" style="font-size:11px;letter-spacing:1px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
+          <span style="font-size:9px;color:${M.dimCream};">✦</span>
+        </div>
+      </div>
+      <span class="pb-arrow" style="font-size:10px;color:${M.dimCream};align-self:center;transition:color 0.15s;">▾</span>
+    ` : `
       <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
         <div style="display:flex;align-items:baseline;gap:10px;">
           <span class="pb-plane-icon" style="font-size:13px;color:${M.yellow}55;transition:color 0.15s;">✈</span>
@@ -3325,7 +3354,7 @@ export class Menu {
     bar.querySelector('.pb-name').textContent  = name;
     bar.querySelector('.pb-lvl').textContent   = `${t('lvlReqPrefix')} ${level}`;
     bar.querySelector('.pb-xp').style.width    = `${xpPct}%`;
-    bar.querySelector('.pb-xpnum').textContent = xpStr.replace(/ | /g, ' ');
+    const _xpEl=bar.querySelector('.pb-xpnum'); if(_xpEl) _xpEl.textContent = xpStr.replace(/ | /g, ' ');
     bar.querySelector('.pb-cred').textContent  = `✦ ${credFmt}`;
     // Point rouge sur le sélecteur d'avion si nouvelles options débloquées
     const badge = bar.querySelector('.pb-badge');
@@ -3395,7 +3424,7 @@ export class Menu {
         }
         return el.offsetParent !== null;
       };
-      const all = Array.from(this._root.querySelectorAll('button, input'))
+      const all = Array.from(this._root.querySelectorAll('button, input, [data-gpnav]'))
         .filter(el => !el.disabled && !el.dataset.disabled && isVisible(el));
       const focused = document.activeElement;
 
@@ -3475,20 +3504,27 @@ export class Menu {
 
       const prev = this._gpNavPrev;
 
-      // A → confirmer (clic)
+      // A → confirmer (clic sur bouton ou élément gpnav focusé)
       const btnA = gp.buttons[0]?.pressed ?? false;
       if (btnA && !prev.a) {
         const f = document.activeElement;
-        if (f && f.tagName === 'BUTTON' && !f.disabled) f.click();
+        if (f && !f.disabled) {
+          if (f.tagName === 'BUTTON') f.click();
+          else if (f.dataset.gpnav !== undefined) f.click();
+        }
       }
       prev.a = btnA;
 
-      // B → retour
+      // B → fermer barre de détail si ouverte, sinon retour
       const btnB = gp.buttons[1]?.pressed ?? false;
       if (btnB && !prev.b) {
-        const backBtn = Array.from(this._root.querySelectorAll('button'))
-          .find(b => b.textContent.includes('←') || b.textContent.includes('RETOUR') || b.textContent.includes('BACK'));
-        if (backBtn) backBtn.click();
+        const closeBtn = this._root.querySelector('[data-gpclose]');
+        if (closeBtn) { closeBtn.click(); }
+        else {
+          const backBtn = Array.from(this._root.querySelectorAll('button'))
+            .find(b => b.textContent.includes('←') || b.textContent.includes('RETOUR') || b.textContent.includes('BACK'));
+          if (backBtn) backBtn.click();
+        }
       }
       prev.b = btnB;
     };
@@ -3659,6 +3695,14 @@ export class Menu {
     this._clear();
     this._showPreview('hangar');
 
+    // Style focus manette pour les éléments navigables (cells + cercles)
+    if (!document.getElementById('gp-nav-style')) {
+      const s = document.createElement('style');
+      s.id = 'gp-nav-style';
+      s.textContent = '[data-gpnav]:focus{outline:2px solid #d4c88a;outline-offset:3px;border-radius:4px;}[data-gpnav]:focus-visible{outline:2px solid #d4c88a;outline-offset:3px;}';
+      document.head.appendChild(s);
+    }
+
     const prog = this._progression;
 
     const { level } = prog;
@@ -3669,6 +3713,8 @@ export class Menu {
     };
     // Descriptions des slots — via i18n pour support FR/EN
     const slotDesc = (key) => t(`slotDesc_${key}`) || '';
+
+    const _mpIsMob = window.innerWidth < 700;
 
     const selectedSlot = prog.activePlane;
     this._syncPreviewPlane(selectedSlot);
@@ -3704,18 +3750,16 @@ export class Menu {
       fontFamily:'Rajdhani, sans-serif', color:M.cream,
     }});
 
-    // Overlay gauche
+    // Overlay gauche — pleine largeur sur mobile (preview 3D désactivée)
     wrap.appendChild(el('div', { style:{
-      position:'absolute', top:'0', left:'0', bottom:'0', width:'72%',
-      background:'rgba(4,4,3,0.75)', pointerEvents:'none',
+      position:'absolute', top:'0', left:'0', bottom:'0', width: _mpIsMob ? '100%' : '72%',
+      background: _mpIsMob ? 'rgba(4,4,3,0.95)' : 'rgba(4,4,3,0.75)', pointerEvents:'none',
     }}));
 
-    // Ancre de cadrage de l'avion — fenêtre vide en haut à droite (colonne 72→100%,
-    // sous la topbar). _aimAtAnchor() mesure son centre chaque frame pour viser l'avion
-    // dessus. Invisible ; sert uniquement de repère géométrique robuste à la résolution.
+    // Ancre de cadrage de l'avion — masquée sur mobile
     const planeAnchor = el('div', { style:{
       position:'absolute', left:'72%', right:'0', top:'50px', bottom:'67%',
-      pointerEvents:'none',
+      pointerEvents:'none', display: _mpIsMob ? 'none' : '',
     }});
     wrap.appendChild(planeAnchor);
     this._planeAnchor = planeAnchor;
@@ -3737,10 +3781,10 @@ export class Menu {
       borderLeft:`1px solid ${M.border}44`, borderRight:`1px solid ${M.border}44`, height:'100%',
     }});
     const pilotLbl = el('span');
-    Object.assign(pilotLbl.style, { fontSize:'8px', letterSpacing:'2px', color:M.dimCream, whiteSpace:'nowrap' });
+    Object.assign(pilotLbl.style, { fontSize:'10px', letterSpacing:'2px', color:M.dimCream, whiteSpace:'nowrap' });
     pilotLbl.textContent = t('pilotPlaceh') || 'PILOTE';
     const pilotInp = mkInput('', this._config.pilotName || '');
-    Object.assign(pilotInp.style, { width:'130px', fontSize:'11px', padding:'4px 8px', letterSpacing:'2px' });
+    Object.assign(pilotInp.style, { width: _mpIsMob ? 'min(110px, 22vw)' : '130px', fontSize:'11px', padding:'4px 8px', letterSpacing:'2px' });
     pilotInp.addEventListener('input', () => {
       const v = pilotInp.value.toUpperCase().slice(0, 12);
       pilotInp.value = v;
@@ -3776,41 +3820,48 @@ export class Menu {
     btnBack.addEventListener('mouseover', () => btnBack.style.background = M.accent);
     btnBack.addEventListener('mouseout',  () => btnBack.style.background = M.accentDim);
 
-    // Section droite — positionnée absolument pour s'aligner avec le rightPanel (28% de large)
-    const rightSection = el('div', { style:{
-      position:'absolute', left:'72%', right:'0', top:'0', height:'50px',
-      display:'flex', alignItems:'stretch',
-      borderLeft:`1px solid ${M.border}44`,
-    }});
-
-    // Type d'avion — flex:1, label au-dessus, nom + sous-titre sur la même ligne
-    const typeWrap = el('div', { style:{
-      flex:'1', display:'flex', flexDirection:'column', justifyContent:'center',
-      padding:'0 16px', overflow:'hidden',
-    }});
-    const typeSubLbl = el('div', { style:{ fontSize:'8px', letterSpacing:'2px', color:M.dimCream, whiteSpace:'nowrap' }});
-    typeSubLbl.textContent = t('buildTypeLabel') || 'TYPE';
-    const nameRow = el('div', { style:{ display:'flex', alignItems:'baseline', gap:'8px', overflow:'hidden' }});
-    const typeNameEl = el('div', { style:{ fontSize:'13px', fontWeight:'800', letterSpacing:'1px', whiteSpace:'nowrap', flexShrink:'0' }});
-    const typeSepEl  = el('div', { style:{ fontSize:'10px', color:M.dimCream, flexShrink:'0' }});
-    typeSepEl.textContent = '·';
-    const typeSubEl  = el('div', { style:{ fontSize:'9px', letterSpacing:'0.5px', color:M.dimCream, fontStyle:'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }});
-    nameRow.appendChild(typeNameEl);
-    nameRow.appendChild(typeSepEl);
-    nameRow.appendChild(typeSubEl);
-    typeWrap.appendChild(typeSubLbl);
-    typeWrap.appendChild(nameRow);
-    rightSection.appendChild(typeWrap);
-    rightSection.appendChild(btnBack);
-    topBar.appendChild(rightSection);
+    let typeNameEl, typeSubEl;
+    if (_mpIsMob) {
+      // Mobile : bouton retour directement dans la topBar
+      topBar.appendChild(el('div', { style:{ flex:'1' }}));
+      topBar.appendChild(btnBack);
+    } else {
+      // Desktop : section droite positionnée absolument
+      const rightSection = el('div', { style:{
+        position:'absolute', left:'72%', right:'0', top:'0', height:'50px',
+        display:'flex', alignItems:'stretch',
+        borderLeft:`1px solid ${M.border}44`,
+      }});
+      const typeWrap = el('div', { style:{
+        flex:'1', display:'flex', flexDirection:'column', justifyContent:'center',
+        padding:'0 16px', overflow:'hidden',
+      }});
+      const typeSubLbl = el('div', { style:{ fontSize:'10px', letterSpacing:'2px', color:M.dimCream, whiteSpace:'nowrap' }});
+      typeSubLbl.textContent = t('buildTypeLabel') || 'TYPE';
+      const nameRow = el('div', { style:{ display:'flex', alignItems:'baseline', gap:'8px', overflow:'hidden' }});
+      typeNameEl = el('div', { style:{ fontSize:'13px', fontWeight:'800', letterSpacing:'1px', whiteSpace:'nowrap', flexShrink:'0' }});
+      const typeSepEl  = el('div', { style:{ fontSize:'10px', color:M.dimCream, flexShrink:'0' }});
+      typeSepEl.textContent = '·';
+      typeSubEl  = el('div', { style:{ fontSize:'11px', letterSpacing:'0.5px', color:M.dimCream, fontStyle:'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }});
+      nameRow.appendChild(typeNameEl);
+      nameRow.appendChild(typeSepEl);
+      nameRow.appendChild(typeSubEl);
+      typeWrap.appendChild(typeSubLbl);
+      typeWrap.appendChild(nameRow);
+      rightSection.appendChild(typeWrap);
+      rightSection.appendChild(btnBack);
+      topBar.appendChild(rightSection);
+    }
     wrap.appendChild(topBar);
 
-    // ── BARRE DE DÉTAIL (bas gauche, 72% large) ───────────────────────────────
-    const DETAIL_H = 220;
+    // ── BARRE DE DÉTAIL ───────────────────────────────────────────────────────
+    const DETAIL_H = _mpIsMob ? Math.min(Math.round(window.innerHeight * 0.52), 280) : 220;
     const detailBar = el('div', { style:{
-      position:'absolute', bottom:'0', left:'0', width:'72%', height:`${DETAIL_H}px`,
+      position:'absolute', bottom:'0', left:'0',
+      width: _mpIsMob ? '100%' : '72%',
+      height:`${DETAIL_H}px`,
       background:'rgba(7,7,6,0.98)', borderTop:`2px solid ${M.border}`,
-      borderRight:`1px solid ${M.border}`,
+      borderRight: _mpIsMob ? 'none' : `1px solid ${M.border}`,
       display:'none', alignItems:'stretch', gap:'0', padding:'0',
       pointerEvents:'all', overflow:'hidden',
     }});
@@ -3904,13 +3955,14 @@ export class Menu {
         display:'flex', flexDirection:'column', justifyContent:'center', gap:'4px',
         background:`${catColor}10`,
       }});
-      titleCol.appendChild(el('span', { text: tEquip(catObj.label), style:{ fontSize:'9px', letterSpacing:'2px', color:M.dimCream }}));
+      titleCol.appendChild(el('span', { text: tEquip(catObj.label), style:{ fontSize:'11px', letterSpacing:'2px', color:M.dimCream }}));
       titleCol.appendChild(el('div', { text: tEquip(slot.label), style:{ fontSize:'15px', letterSpacing:'1px', color:catColor, fontWeight:'700', lineHeight:'1.1' }}));
       const closeBtn = el('button', { text:t('closeBtn'), style:{
         marginTop:'8px', background:'transparent', border:`1px solid ${M.border}66`,
         color:M.dimCream, padding:'5px 8px', cursor:'pointer', alignSelf:'flex-start',
         fontFamily:'Rajdhani, sans-serif', fontSize:'10px', letterSpacing:'1px', borderRadius:'4px',
       }});
+      closeBtn.dataset.gpclose = '1';
       closeBtn.addEventListener('click', closeDetail);
       titleCol.appendChild(closeBtn);
       detailBar.appendChild(titleCol);
@@ -3918,11 +3970,12 @@ export class Menu {
       // Options en cercles
       const optsScroll = el('div', { style:{
         flexShrink:'0', display:'flex', alignItems:'center', gap:'16px',
-        padding:'0 18px', height:'100%', overflowX:'auto', maxWidth:'46%',
-        borderRight:`1px solid ${M.border}66`,
+        padding:'0 18px', height:'100%', overflowX:'auto',
+        maxWidth: _mpIsMob ? '100%' : '46%',
+        borderRight: _mpIsMob ? 'none' : `1px solid ${M.border}66`,
       }});
 
-      const CZ = 54;
+      const CZ = _mpIsMob ? 42 : 54;
 
       // ── Dialog d'achat ───────────────────────────────────────────────────
       const showBuyDialog = (opt, cost) => {
@@ -4027,7 +4080,7 @@ export class Menu {
         const current = parseType(loadout[activeSlotKey] ?? 'none');
         let selType = current.type, selLevel = current.level;
 
-        const AD_CZ = 44;
+        const AD_CZ = _mpIsMob ? 34 : 44;
         const mkCircle = (icon, label, isEquipped, isUnlocked, isOwned, cost, onClick, onOver, onOut) => {
           let borderCol, bgCol, textCol;
           if (isEquipped)       { borderCol = catColor;       bgCol = `${catColor}33`; textCol = catColor; }
@@ -4036,6 +4089,8 @@ export class Menu {
           else                  { borderCol = M.border+'aa';  bgCol = 'rgba(22,20,15,0.95)'; textCol = M.cream; }
 
           const item = el('div', { style:{ display:'flex', flexDirection:'column', alignItems:'center', gap:'12px', cursor:'pointer', flexShrink:'0' }});
+          item.tabIndex = 0;
+          item.dataset.gpnav = '1';
           const wrap = el('div', { style:{ position:'relative', width:`${AD_CZ}px`, height:`${AD_CZ}px` }});
           const circle = el('div', { style:{
             width:`${AD_CZ}px`, height:`${AD_CZ}px`, borderRadius:'50%',
@@ -4049,12 +4104,13 @@ export class Menu {
             const b = el('div', { style:{ position:'absolute', top:'-4px', right:'-4px', width:'16px', height:'16px', borderRadius:'50%', background:catColor, color:'#000', fontWeight:'900', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'9px', border:'2px solid rgba(7,7,6,0.95)' }});
             b.textContent = '✓'; wrap.appendChild(b);
           } else if (!isOwned && isUnlocked && cost > 0) {
-            const b = el('div', { text:`${(cost/1000).toFixed(0)}k✦`, style:{ position:'absolute', bottom:'-6px', left:'50%', transform:'translateX(-50%)', background:'#1a1700', color:M.yellow, fontWeight:'800', fontSize:'7px', padding:'1px 4px', borderRadius:'4px', border:`1px solid ${M.yellow}66`, whiteSpace:'nowrap' }});
+            const b = el('div', { text:`${(cost/1000).toFixed(0)}k✦`, style:{ position:'absolute', bottom:'-6px', left:'50%', transform:'translateX(-50%)', background:'#1a1700', color:M.yellow, fontWeight:'800', fontSize:'9px', padding:'1px 4px', borderRadius:'4px', border:`1px solid ${M.yellow}66`, whiteSpace:'nowrap' }});
             wrap.appendChild(b);
           }
           item.appendChild(wrap);
-          item.appendChild(el('div', { text:label, style:{ fontSize:'9px', color: isEquipped ? catColor : isOwned ? M.cream : isUnlocked ? M.yellow : '#9a7a5a', textAlign:'center', maxWidth:'52px', lineHeight:'1.2', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}));
+          item.appendChild(el('div', { text:label, style:{ fontSize:'11px', color: isEquipped ? catColor : isOwned ? M.cream : isUnlocked ? M.yellow : '#9a7a5a', textAlign:'center', maxWidth:'52px', lineHeight:'1.2', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}));
           item.addEventListener('click', onClick);
+          item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } });
           item.addEventListener('mouseover', () => { if (!isEquipped) { circle.style.borderColor=`${catColor}cc`; circle.style.background=`${catColor}1c`; } onOver?.(); });
           item.addEventListener('mouseout',  () => { circle.style.borderColor=borderCol; circle.style.background=bgCol; onOut?.(); });
           return item;
@@ -4122,8 +4178,10 @@ export class Menu {
         optsScroll.appendChild(adCol);
         detailBar.appendChild(optsScroll);
 
-        _infoCol = el('div', { style:{ flex:'1', minWidth:'0', padding:'14px 18px', overflowY:'auto', display:'flex', flexDirection:'column', justifyContent:'center' }});
-        detailBar.appendChild(_infoCol);
+        if (!_mpIsMob) {
+          _infoCol = el('div', { style:{ flex:'1', minWidth:'0', padding:'14px 18px', overflowY:'auto', display:'flex', flexDirection:'column', justifyContent:'center' }});
+          detailBar.appendChild(_infoCol);
+        }
         renderInfo(slot.options.find(o=>o.id===(loadout[activeSlotKey]??'none'))??slot.options[0]);
         return;
       }
@@ -4146,6 +4204,8 @@ export class Menu {
           display:'flex', flexDirection:'column', alignItems:'center', gap:'12px',
           cursor:'pointer', minWidth:`${CZ}px`, flexShrink:'0',
         }});
+        item.tabIndex = 0;
+        item.dataset.gpnav = '1';
 
         const circleWrap = el('div', { style:{ position:'relative', width:`${CZ}px`, height:`${CZ}px` }});
         const circle = el('div', { style:{
@@ -4174,7 +4234,7 @@ export class Menu {
           const cb = el('div', { text:`${(optCost/1000).toFixed(0)}k✦`, style:{
             position:'absolute', bottom:'-6px', left:'50%', transform:'translateX(-50%)',
             background:'#1a1700', color:M.yellow, fontWeight:'800',
-            fontSize:'7px', letterSpacing:'0.5px', padding:'1px 4px', borderRadius:'4px',
+            fontSize:'9px', letterSpacing:'0.5px', padding:'1px 4px', borderRadius:'4px',
             border:`1px solid ${M.yellow}66`, whiteSpace:'nowrap',
           }});
           circleWrap.appendChild(cb);
@@ -4182,7 +4242,7 @@ export class Menu {
           const nb = el('div', { text:t('newBadge'), style:{
             position:'absolute', top:'-6px', left:'50%', transform:'translateX(-50%)',
             background:'#ff4466', color:'#fff', fontWeight:'800',
-            fontSize:'7px', letterSpacing:'0.5px', padding:'1px 4px', borderRadius:'4px',
+            fontSize:'9px', letterSpacing:'0.5px', padding:'1px 4px', borderRadius:'4px',
             border:'1px solid rgba(7,7,6,0.95)', whiteSpace:'nowrap',
           }});
           circleWrap.appendChild(nb);
@@ -4194,7 +4254,7 @@ export class Menu {
           fontWeight: isEquipped ? '700' : '500',
         }}));
         item.appendChild(el('div', { text: opt.levelReq > 1 ? `${t('lvlReqPrefix')} ${opt.levelReq}` : t('baseTier'), style:{
-          fontSize:'9px', fontWeight:'700', letterSpacing:'0.5px',
+          fontSize:'10px', fontWeight:'700', letterSpacing:'0.5px',
           color: opt.levelReq > 1 ? (isUnlocked ? M.yellow : '#cc6644') : M.dimCream+'88',
         }}));
 
@@ -4211,6 +4271,8 @@ export class Menu {
             renderDetailBar(); renderTable(); renderStatBars();
           }
         });
+        item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); } });
+        item.addEventListener('focus', () => { renderInfo(opt); renderStatBars(activeSlotKey, opt.id); });
         item.addEventListener('mouseover', () => {
           if (!isEquipped) {
             circle.style.borderColor = `${catColor}cc`;
@@ -4236,19 +4298,23 @@ export class Menu {
       });
       detailBar.appendChild(optsScroll);
 
-      // Colonne d'information (description + niveau + pros/cons)
-      _infoCol = el('div', { style:{
-        flex:'1', minWidth:'0', padding:'14px 18px', overflowY:'auto',
-        display:'flex', flexDirection:'column', justifyContent:'center',
-      }});
-      detailBar.appendChild(_infoCol);
+      // Colonne d'information (description + niveau + pros/cons) — masquée sur mobile
+      if (!_mpIsMob) {
+        _infoCol = el('div', { style:{
+          flex:'1', minWidth:'0', padding:'14px 18px', overflowY:'auto',
+          display:'flex', flexDirection:'column', justifyContent:'center',
+        }});
+        detailBar.appendChild(_infoCol);
+      }
       const pinned = slot.options.find(o => o.id === infoOptId) ?? slot.options[0];
       renderInfo(pinned);
     };
 
     // ── TABLEAU CENTRAL (72% gauche) ─────────────────────────────────────────
     const tableArea = el('div', { style:{
-      position:'absolute', top:'50px', left:'0', right:'28%', bottom:'0',
+      position:'absolute', top:'50px', left:'0',
+      right: _mpIsMob ? '0' : '28%',
+      bottom:'0',
       overflowY:'auto', pointerEvents:'all',
     }});
     tableArea.classList.add('menu-panel');
@@ -4321,6 +4387,9 @@ export class Menu {
             cell.style.cursor     = 'pointer';
             cell.style.background = isActive ? `${cc}12` : 'transparent';
             cell.style.transition = 'background 0.1s';
+            cell.tabIndex = 0;
+            cell.dataset.gpnav = '1';
+            cell.setAttribute('data-slot', slotKey);
 
             // Cercle mini
             const circleWrap = el('div', { style:{ position:'relative', width:CIRCLE_SIZE, height:CIRCLE_SIZE, flexShrink:'0' }});
@@ -4353,7 +4422,7 @@ export class Menu {
             // Badge NEW si le slot contient des options débloquées non consultées
             if (prog.slotHasNew(slotKey)) {
               labels.appendChild(el('div', { text:t('newSlotBadge'), style:{
-                fontSize:'8px', fontWeight:'800', letterSpacing:'0.5px',
+                fontSize:'10px', fontWeight:'800', letterSpacing:'0.5px',
                 color:'#ff4466', marginTop:'3px',
               }}));
             }
@@ -4368,6 +4437,7 @@ export class Menu {
               if (isActive) closeDetail();
               else openDetail(slotKey, catKey);
             });
+            cell.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cell.click(); } });
             cell.addEventListener('mouseover', () => { if (!isActive) cell.style.background = `${cc}0a`; });
             cell.addEventListener('mouseout',  () => { if (!isActive) cell.style.background = 'transparent'; });
           }
@@ -4381,10 +4451,10 @@ export class Menu {
 
     wrap.appendChild(tableArea);
 
-    // ── PANEL DROIT (28%) — avion 3D + identité + stats ──────────────────────
+    // ── PANEL DROIT (28%) — caché sur mobile ─────────────────────────────────
     const rightPanel = el('div', { style:{
       position:'absolute', top:'50px', right:'0', bottom:'0', width:'28%',
-      display:'flex', flexDirection:'column', pointerEvents:'none',
+      display: _mpIsMob ? 'none' : 'flex', flexDirection:'column', pointerEvents:'none',
     }});
 
     // Zone avion (transparent, ~38% hauteur — plus petite pour laisser place aux stats)
@@ -4399,9 +4469,8 @@ export class Menu {
 
     const renderSummary = () => {
       const b = classifyBuild();
-      typeNameEl.textContent = b.name;
-      typeNameEl.style.color = b.col;
-      typeSubEl.textContent  = b.sub;
+      if (typeof typeNameEl !== 'undefined') { typeNameEl.textContent = b.name; typeNameEl.style.color = b.col; }
+      if (typeof typeSubEl  !== 'undefined') typeSubEl.textContent = b.sub;
     };
 
     // Identité : pastilles couleur
@@ -4521,11 +4590,12 @@ export class Menu {
     const prog = this._progression;
     const s    = prog.stats;
 
+    const _statsIsMob = window.innerWidth < 700;
     const wrap = mkPanelLeft('680px');
     wrap.appendChild(mkSectionTitle(t('stats')));
     wrap.appendChild(mkDivider());
 
-    const cols = el('div', { style:{ display:'flex', gap:'28px', alignItems:'flex-start' }});
+    const cols = el('div', { style:{ display:'flex', flexDirection: _statsIsMob ? 'column' : 'row', gap:'28px', alignItems:'flex-start' }});
     const colL = el('div', { style:{ flex:'1', minWidth:'0' }});
     const colR = el('div', { style:{ flex:'1', minWidth:'0' }});
 
@@ -4534,7 +4604,7 @@ export class Menu {
         display:'flex', justifyContent:'space-between', alignItems:'center',
         padding:'5px 0', borderBottom:`1px solid ${M.border}`,
       }});
-      row.appendChild(el('span', { text:label, style:{ color:M.dimCream, fontSize:'9px', letterSpacing:'2px', textTransform:'uppercase' }}));
+      row.appendChild(el('span', { text:label, style:{ color:M.dimCream, fontSize:'11px', letterSpacing:'2px', textTransform:'uppercase' }}));
       row.appendChild(el('span', { text:String(value), style:{ color, fontSize:'13px', letterSpacing:'2px', fontWeight:'bold' }}));
       return row;
     };

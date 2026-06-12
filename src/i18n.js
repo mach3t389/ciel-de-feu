@@ -390,6 +390,8 @@ const LANGS = {
     slotDesc_roll          : "Vitesse de roulis : rapidité des tonneaux et changements d'assiette.",
     slotDesc_smokegen      : "Générateur de fumée : brouille le suivi des missiles ennemis.",
     slotDesc_tail_cam      : "Caméra arrière : alerte si un ennemi se place dans votre dos.",
+    slotDesc_acquisition   : "Capteur d'acquisition : vitesse de verrouillage des missiles guidés.",
+    slotDesc_tracking      : "Système de guidage : précision et portée de suivi des missiles.",
 
     sectionGlobal  : 'GLOBAL',
     sectionVersus  : 'VERSUS (FFA)',
@@ -818,6 +820,8 @@ const LANGS = {
     slotDesc_roll          : 'Roll rate: speed of barrel rolls and attitude changes.',
     slotDesc_smokegen      : 'Smoke generator: disrupts enemy missile tracking.',
     slotDesc_tail_cam      : 'Rear camera: alerts when an enemy is on your six.',
+    slotDesc_acquisition   : 'Acquisition sensor: lock-on speed for guided missiles.',
+    slotDesc_tracking      : 'Guidance system: precision and tracking range of missiles.',
 
     // ── Statistics ────────────────────────────────────────────────────────────
     sectionGlobal  : 'GLOBAL',
@@ -1089,15 +1093,19 @@ const EQUIP_LABELS_EN = {
   'COCKPIT':'COCKPIT', 'RÉPARATION':'REPAIR', 'RÉARMEMENT':'REARM',
   'RAVITAILLEMENT':'REFUEL', 'MAINTENANCE':'MAINTENANCE', 'RADAR':'RADAR',
   'ROULIS':'ROLL', 'FUMIGÈNE':'SMOKE GEN.', 'CAMÉRA ARRIÈRE':'REAR CAMERA',
+  // Catégories manquantes
+  'MISSILES':'MISSILES', 'CANONS':'CANNONS',
   // Slots manquants
   'MISSILES AA':'AA MISSILES', 'MISSILES AS':'AG MISSILES',
   'DÉFENSE ACTIVE':'ACTIVE DEFENSE', 'GUIDAGE':'GUIDANCE', 'ACQUISITION':'ACQUISITION',
-  // Noms d'options
+  // Noms d'options — guidage/acquisition
   'Standard':'Standard', 'Agrandi I':'Enlarged I', 'Agrandi II':'Enlarged II',
   'Amélioré I':'Upgraded I', 'Amélioré II':'Upgraded II',
   'Haute Vitesse I':'High Speed I', 'Haute Vitesse II':'High Speed II',
   'Haute Puissance I':'High Power I', 'Haute Puissance II':'High Power II',
   'Allégées I':'Lightweight I', 'Allégées II':'Lightweight II',
+  'Guidage I':'Guidance I', 'Guidage II':'Guidance II', 'Guidage IA':'AI Guidance',
+  'Senseur I':'Sensor I', 'Senseur II':'Sensor II',
   'Aucun':'None', 'Aucune':'None', 'Installé':'Installed', 'Installée':'Installed',
   '100 rds':'100 rds', '200 rds':'200 rds', '300 rds':'300 rds',
   'Perforantes':'Armor-Piercing', 'Supérieur':'Larger',
@@ -1123,6 +1131,11 @@ const EQUIP_LABELS_EN = {
 
 // Remplacement de phrases/mots (avantages & inconvénients) — ordre = plus long d'abord
 const EQUIP_PHRASES_EN = [
+  ['Agilité missile +', 'Missile agility +'],
+  ['Ré-engage toujours', 'Always re-engages'],
+  ['Ré-engage ×', 'Re-engage ×'],
+  ['Piste maximale', 'Max. tracking'],
+  ['Piste +', 'Tracking +'],
   ['Brouille missiles ennemis', 'Jams enemy missiles'],
   ['Alerte ennemis dans le dos', 'Alerts to threats behind'],
   ['dégâts (tourelles)', 'damage (turrets)'],
