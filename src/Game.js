@@ -1898,7 +1898,9 @@ export class Game {
           document.removeEventListener('mousedown', this._resumeHandler);
         }
         this._resumeHandler = (e) => {
-          if (e.target.closest('button, a, input')) return;
+          if (e.target.closest('button, a, input, textarea, select')) return;
+          if (this.ui?._bugReportOverlay || this.ui?._inGameStatsOverlay ||
+              this.ui?._pauseSettingsOverlay || this.ui?._pauseCtrlOverlay) return;
           document.removeEventListener('mousedown', this._resumeHandler);
           this._resumeHandler = null;
           this._pauseCooldownUntil = performance.now() + 500;
