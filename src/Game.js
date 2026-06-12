@@ -879,8 +879,7 @@ export class Game {
     };
 
     const onResume = () => this._setPause(false);
-    const onStats  = () => this._quit('stats');
-    this.ui.showPause(false, onQuit, onResume, onRespawn, this._isSurvival, onStats);
+    this.ui.showPause(false, onQuit, onResume, onRespawn, this._isSurvival);
 
     // Boutons des écrans de fin : menu = retour menu ; rejouer = même partie
     // (solo uniquement — réutiliser une connexion réseau au replay n'a pas de sens).
@@ -1802,6 +1801,7 @@ export class Game {
       });
     }
 
+    this._mobileControls?.setVisible(true);
     document.body.requestPointerLock();
   }
 
@@ -3260,6 +3260,9 @@ export class Game {
       this._pointerLockHint.parentNode.removeChild(this._pointerLockHint);
     // Overlays survie / mort (appended to body)
     this.ui?._deadOverlay?.remove();
+    this.ui?._pauseSettingsOverlay?.remove();
+    this.ui?._pauseCtrlOverlay?.remove();
+    this.ui?._inGameStatsOverlay?.remove();
     this.ui?._survivalBanner?.remove();
     this.ui?._survivalCdEl?.remove();
     this.ui?._spectatorEl?.remove();

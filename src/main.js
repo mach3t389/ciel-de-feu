@@ -4,7 +4,6 @@ import { LoadingScreen } from './LoadingScreen.js';
 import { t } from './i18n.js';
 
 let replayConfig = null;  // si défini : relance la même partie sans repasser par le menu
-let goToStats    = false;
 
 while (true) {
   let config;
@@ -13,8 +12,7 @@ while (true) {
     replayConfig = null;
   } else {
     const menu = new Menu();
-    config = await menu.show(goToStats ? 'stats' : null);
-    goToStats = false;
+    config = await menu.show();
   }
 
   // Nom affiché = label court du bouton menu (mapShort_X) ; sinon nom complet
@@ -57,5 +55,4 @@ while (true) {
 
   // « Rejouer » : on réutilise la config telle quelle (mêmes paramètres)
   if (result && result.action === 'replay') replayConfig = config;
-  if (result && result.action === 'stats')  goToStats    = true;
 }

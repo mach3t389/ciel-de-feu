@@ -282,7 +282,7 @@ export class UI {
     setTimeout(() => { if (this._tipEl) this._tipEl.style.display = 'none'; }, 450);
   }
 
-  showPause(visible, onQuit = null, onResume = null, onRespawn = null, isSurvival = null, onStats = null) {
+  showPause(visible, onQuit = null, onResume = null, onRespawn = null, isSurvival = null) {
     if (!this._pauseOverlay) {
       const wrap = document.createElement('div');
       Object.assign(wrap.style, {
@@ -292,8 +292,8 @@ export class UI {
         background    : C.menuBackdrop,
         fontFamily    : '"Courier New",monospace',
         color         : C.cream,
-        pointerEvents : 'all',
-        zIndex        : '500',
+        pointerEvents : 'auto',
+        zIndex        : '600',
       });
 
       const title = document.createElement('div');
@@ -319,7 +319,7 @@ export class UI {
           width        : '240px',
           textAlign    : 'center',
           cursor       : 'pointer',
-          pointerEvents: 'all',
+          pointerEvents: 'auto',
           transition   : 'background 0.15s, color 0.15s',
           outline      : 'none',
           marginBottom : '8px',
@@ -362,7 +362,7 @@ export class UI {
       const btnStats = mkPBtn(t('stats'), C.dimCream);
       btnStats.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (this._pauseStatsCb) this._pauseStatsCb();
+        this._showInGameStats();
       });
       this._btnPauseStats = btnStats;
 
@@ -387,10 +387,6 @@ export class UI {
     if (onQuit    !== null) this._pauseQuitCb    = onQuit;
     if (onResume  !== null) this._pauseResumeCb  = onResume;
     if (onRespawn !== null) this._pauseRespawnCb = onRespawn;
-    if (onStats   !== null) {
-      this._pauseStatsCb = onStats;
-      if (this._btnPauseStats) this._btnPauseStats.style.display = 'block';
-    }
     if (isSurvival !== null) {
       this._pauseIsSurvival = isSurvival;
       if (this._btnPauseRespawn) {
@@ -402,6 +398,8 @@ export class UI {
     }
     this._updatePauseScheme?.();
     this._pauseOverlay.style.display = visible ? 'flex' : 'none';
+    // Cacher les contrôles mobiles derrière le menu pause (évite conflits z-index / touch)
+    this._mobileControls?.setVisible(!visible);
     // Auto-focus le bouton Reprendre pour la navigation clavier/manette
     if (visible) requestAnimationFrame(() => {
       this._pauseOverlay?.querySelector('button')?.focus();
@@ -576,6 +574,91 @@ export class UI {
     return panel;
   }
 
+  _showInGameStats() {
+    if (this._inGameStatsOverlay) {
+      this._inGameStatsOverlay.remove();
+      this._inGameStatsOverlay = null;
+      return;
+    }
+    let prog;
+    try {
+      const raw = localStorage.getItem('cielDeFeu_progression');
+      prog = raw ? JSON.parse(raw) : null;
+    } catch (_) { prog = null; }
+
+    const wrap = document.createElement('div');
+    this._inGameStatsOverlay = wrap;
+    Object.assign(wrap.style, {
+      position: 'fixed', inset: '0',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'flex-start',
+      overflowY: 'auto', paddingTop: '30px', paddingBottom: '30px',
+      background: 'rgba(0,0,0,0.92)',
+      fontFamily: '"Courier New",monospace',
+      color: C.cream, zIndex: '700',
+    });
+
+    const title = document.createElement('div');
+    title.textContent = t('stats');
+    title.style.cssText = `font-size:28px;font-weight:bold;letter-spacing:8px;margin-bottom:16px;`;
+    wrap.appendChild(title);
+
+    const mkRow = (label, value, color = C.cream) => {
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'flex', justifyContent: 'space-between',
+        width: 'min(320px,88vw)', padding: '5px 0',
+        borderBottom: `1px solid ${C.border}`,
+      });
+      const lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = `font-size:10px;letter-spacing:2px;color:${C.dimCream};text-transform:uppercase;`;
+      const val = document.createElement('span');
+      val.textContent = String(value);
+      val.style.cssText = `font-size:12px;letter-spacing:2px;color:${color};font-weight:bold;`;
+      row.appendChild(lbl); row.appendChild(val);
+      return row;
+    };
+
+    if (prog) {
+      const s = prog.stats || {};
+      const kd = s.totalDeaths > 0 ? (s.totalKills / s.totalDeaths).toFixed(2) : (s.totalKills || 0);
+      const fh = Math.floor((s.flightTimeSec || 0) / 3600);
+      const fm = Math.floor(((s.flightTimeSec || 0) % 3600) / 60);
+      wrap.appendChild(mkRow(t('statLevelLabel') || 'NIV', prog.level ?? 1, '#d4b84a'));
+      wrap.appendChild(mkRow(t('statXpTotal')    || 'XP',  (prog.totalXp || 0).toLocaleString(), '#c8a840'));
+      wrap.appendChild(mkRow(t('statCredits')    || 'CREDITS', (prog.credits || 0).toLocaleString(), '#c8a840'));
+      wrap.appendChild(mkRow(t('gamesPlayed')    || 'PARTIES', s.totalGames || 0));
+      wrap.appendChild(mkRow(t('kills')          || 'KILLS', s.totalKills || 0, '#7aaa44'));
+      wrap.appendChild(mkRow(t('deaths')         || 'MORTS', s.totalDeaths || 0, '#aa4444'));
+      wrap.appendChild(mkRow(t('statKD')         || 'K/D', kd));
+      wrap.appendChild(mkRow(t('flightTime')     || 'VOL', `${fh}h ${fm}min`));
+      wrap.appendChild(mkRow(t('bestWave')       || 'MEILLEURE VAGUE', (s.survival || {}).bestWave || 0, '#d4b84a'));
+    } else {
+      const noData = document.createElement('div');
+      noData.textContent = t('noData') || '---';
+      noData.style.cssText = `font-size:11px;color:${C.dimCream};letter-spacing:2px;margin-top:20px;`;
+      wrap.appendChild(noData);
+    }
+
+    const btnBack = document.createElement('button');
+    btnBack.textContent = t('back');
+    Object.assign(btnBack.style, {
+      marginTop: '20px', background: 'transparent',
+      border: `1px solid ${C.dimCream}`, borderRadius: '4px',
+      color: C.dimCream, fontFamily: '"Courier New",monospace',
+      fontSize: '11px', letterSpacing: '3px', padding: '8px 24px',
+      cursor: 'pointer',
+    });
+    btnBack.addEventListener('click', (e) => {
+      e.stopPropagation();
+      wrap.remove();
+      this._inGameStatsOverlay = null;
+    });
+    wrap.appendChild(btnBack);
+    document.body.appendChild(wrap);
+  }
+
   _showPauseSettings() {
     // Toujours reconstruire pour refléter l'état courant (lang, gfx, ctrl)
     if (this._pauseSettingsOverlay) {
@@ -595,7 +678,7 @@ export class UI {
         paddingBottom: '20px',
         background: 'rgba(0,0,0,0.88)',
         fontFamily: '"Courier New",monospace',
-        color: C.cream, zIndex: '502',
+        color: C.cream, zIndex: '700',
       });
 
       const mkSBtn = (label, col) => {
@@ -607,7 +690,7 @@ export class UI {
           color: col, fontFamily: '"Courier New",monospace',
           fontSize: '11px', letterSpacing: '3px',
           padding: '8px 24px', cursor: 'pointer', outline: 'none',
-          pointerEvents: 'all', transition: 'background 0.15s, color 0.15s',
+          pointerEvents: 'auto', transition: 'background 0.15s, color 0.15s',
           marginBottom: '8px',
         });
         b.addEventListener('mouseover', () => { b.style.background = col; b.style.color = '#0a0a06'; });
@@ -806,7 +889,7 @@ export class UI {
       display: 'flex', flexDirection: 'column',
       background: 'rgba(6,6,5,0.97)',
       fontFamily: '"Courier New",monospace',
-      color: C.cream, zIndex: '503',
+      color: C.cream, zIndex: '700',
     });
 
     // ── Top bar ──
@@ -979,8 +1062,8 @@ export class UI {
         background    : C.menuBackdrop,
         fontFamily    : '"Courier New",monospace',
         color         : C.cream,
-        pointerEvents : 'all',
-        zIndex        : '500',
+        pointerEvents : 'auto',
+        zIndex        : '600',
       });
 
       const title = document.createElement('div');
@@ -1010,7 +1093,7 @@ export class UI {
           width        : '240px',
           textAlign    : 'center',
           cursor       : 'pointer',
-          pointerEvents: 'all',
+          pointerEvents: 'auto',
           transition   : 'background 0.15s, color 0.15s',
           outline      : 'none',
           marginBottom : '8px',
@@ -3212,6 +3295,7 @@ export class UI {
   _showDead(onRespawn, opts = {}) {
     if (this._deadOverlay) return;
     if (this._pauseOverlay) this._pauseOverlay.style.display = 'none';
+    this._mobileControls?.setVisible(false);
     const {
       noRedBg  = false,
       title    = t('crashTitle'),
@@ -3228,7 +3312,7 @@ export class UI {
       background: C.menuBackdrop,
       display:'flex', alignItems:'center', justifyContent:'center',
       fontFamily:'"Courier New",monospace',
-      color:C.cream, pointerEvents:'all',
+      color:C.cream, pointerEvents:'auto',
       zIndex: '800',
     });
 
