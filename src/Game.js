@@ -2770,7 +2770,7 @@ export class Game {
     -(this._aimY - window.innerHeight / 2),
       0
     );
-    if (!IS_MOBILE && !this.player.keys.lookBack && !this.player.freeView && !this._spectatorMode) {
+    if (!this.player.keys.lookBack && !this.player.freeView && !this._spectatorMode) {
       this.renderer.autoClear = false;
       this.renderer.clearDepth();
       this.renderer.render(this._reticleScene, this._reticleCamera);

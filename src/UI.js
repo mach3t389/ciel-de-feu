@@ -462,6 +462,18 @@ export class UI {
       b.addEventListener('refresh', refresh);
       b.addEventListener('touchstart', async (e) => {
         e.preventDefault();
+        // iOS: requestPermission doit etre le 1er await dans le handler de geste
+        if (mode === 'gyro' && typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+          let res;
+          try { res = await DeviceOrientationEvent.requestPermission(); }
+          catch (_) { res = 'denied'; }
+          if (res !== 'granted') {
+            statusMsg.textContent = t('gyroPermDenied');
+            statusMsg.style.color = '#cc4444';
+            return;
+          }
+        }
         const ok = await mc.setMode(mode);
         if (!ok) {
           statusMsg.textContent = t(mode === 'gyro' ? 'gyroPermDenied' : 'gyroNotSupported');
@@ -565,7 +577,10 @@ export class UI {
       Object.assign(wrap.style, {
         position: 'fixed', inset: '0',
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
+        alignItems: 'center', justifyContent: 'flex-start',
+        overflowY: 'auto',
+        paddingTop: IS_MOBILE ? '20px' : '40px',
+        paddingBottom: '20px',
         background: 'rgba(0,0,0,0.88)',
         fontFamily: '"Courier New",monospace',
         color: C.cream, zIndex: '502',
@@ -609,7 +624,7 @@ export class UI {
 
       const mkSlider = (label, storageKey, baseVol, busKey) => {
         const box = document.createElement('div');
-        Object.assign(box.style, { display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px', width:'300px' });
+        Object.assign(box.style, { display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px', width: IS_MOBILE ? 'min(300px,80vw)' : '300px' });
         const top = document.createElement('div');
         Object.assign(top.style, { display:'flex', justifyContent:'space-between' });
         const lbl = document.createElement('span');

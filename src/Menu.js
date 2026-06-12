@@ -801,7 +801,7 @@ export class Menu {
     this._syncPreviewPlane(homeIdx);
 
     // Panel cockpit — encadré dark style jeu
-    const _mainIsMob = window.innerWidth < 700;
+    const _mainIsMob = window.innerWidth < 700 && window.innerWidth < window.innerHeight;
     const panel = el('div', { style: {
       position      : 'absolute',
       left          : _mainIsMob ? '50%' : '5%',
@@ -2369,7 +2369,19 @@ export class Menu {
         gyroSect.style.display = mode === 'gyro' ? '' : 'none';
       });
       b.addEventListener('refresh', refresh);
-      b.addEventListener('touchstart', (e) => { e.preventDefault(); b.click(); }, { passive: false });
+      b.addEventListener('touchstart', async (e) => {
+        e.preventDefault();
+        if (mode === 'gyro' && typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+          let res;
+          try { res = await DeviceOrientationEvent.requestPermission(); }
+          catch (_) { res = 'denied'; }
+          if (res !== 'granted') return;
+        }
+        localStorage.setItem('mobileCtrlMode', mode);
+        toggleRow.querySelectorAll('button').forEach(bt => bt.dispatchEvent(new Event('refresh')));
+        gyroSect.style.display = mode === 'gyro' ? '' : 'none';
+      }, { passive: false });
       return b;
     };
 
