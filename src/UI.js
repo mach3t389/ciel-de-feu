@@ -358,11 +358,7 @@ export class UI {
         this._showPauseSettings();
       });
 
-      const btnControls = mkPBtn(t('controls') || 'COMMANDES', C.dimCream);
-      btnControls.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showPauseControls();
-      });
+
 
       const btnStats = mkPBtn(t('stats'), C.dimCream);
       btnStats.addEventListener('click', (e) => {
@@ -390,7 +386,6 @@ export class UI {
       wrap.appendChild(btnResume);
       wrap.appendChild(btnRespawn);
       wrap.appendChild(btnSettings);
-      wrap.appendChild(btnControls);
       wrap.appendChild(btnStats);
       wrap.appendChild(btnMenu);
       wrap.appendChild(btnBug);
@@ -1030,6 +1025,17 @@ export class UI {
       });
       wrap.appendChild(langRow);
 
+      // ── Commandes ─────────────────────────────────────────────────────────
+      const sep3 = document.createElement('div');
+      sep3.style.cssText = `width:300px;height:1px;background:${C.dimCream};opacity:0.15;margin-bottom:18px;`;
+      wrap.appendChild(sep3);
+      const btnControls = mkSBtn(t('controls') || 'COMMANDES', C.dimCream);
+      btnControls.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._showPauseControls();
+      });
+      wrap.appendChild(btnControls);
+
       // ── Retour ────────────────────────────────────────────────────────────
       const btnBack = mkSBtn(t('back'), C.dimCream);
       btnBack.addEventListener('click', (e) => {
@@ -1292,8 +1298,6 @@ export class UI {
       const btnSettings = mkPBtn(t('settingsBtn'), C.dimCream);
       btnSettings.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseSettings(); });
 
-      const btnCtrlsEsc = mkPBtn(t('controls') || 'COMMANDES', C.dimCream);
-      btnCtrlsEsc.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseControls(); });
 
       const btnEndGame = mkPBtn(t('endGameBtn'), '#cc6633');
       btnEndGame.style.display = 'none';
@@ -1323,7 +1327,6 @@ export class UI {
       wrap.appendChild(btnRespawn);
       wrap.appendChild(btnEndGame);
       wrap.appendChild(btnSettings);
-      wrap.appendChild(btnCtrlsEsc);
       wrap.appendChild(btnMenu);
       wrap.appendChild(btnBugEsc);
       document.body.appendChild(wrap);
