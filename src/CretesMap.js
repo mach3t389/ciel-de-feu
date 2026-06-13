@@ -5,7 +5,7 @@ import { InstancedLOD } from './LODManager.js';
 const _loader = new GLTFLoader();
 const loadGLB = (path) => new Promise((res, rej) => _loader.load(path, res, null, rej));
 
-const SEGS = 220;
+const SEGS = 280;
 const SIZE = 8000;
 
 // ── Géographie ──────────────────────────────────────────────────────────────
@@ -14,13 +14,13 @@ const SIZE = 8000;
 // Villages côtiers près des bases + 2 villages aux extrémités N/S
 
 const PEAKS = [
-  [ 1400, -1000, 880, 440],  // grande montagne NE
-  [-1500,   600, 855, 420],  // grande montagne NO
-  [  800,  1700, 800, 400],  // montagne SE
-  [ -700, -1800, 755, 385],  // montagne SO
-  [  300,   200, 460, 320],  // massif central
-  [-1000,  -300, 510, 290],  // crête NO-centre
-  [ 1100,   900, 480, 275],  // crête E-centre
+  [ 1400, -1000, 820, 520],  // grande montagne NE
+  [-1500,   600, 640, 620],  // grande montagne NO — adoucie (proche spawn ouest)
+  [  800,  1700, 740, 480],  // montagne SE
+  [ -700, -1800, 700, 460],  // montagne SO
+  [  300,   200, 420, 400],  // massif central
+  [-1000,  -300, 360, 480],  // crête NO-centre — adoucie (face au spawn)
+  [ 1100,   900, 440, 380],  // crête E-centre
 ];
 
 const LAKES = [
@@ -123,7 +123,7 @@ export class CretesMap {
       const n    = fbm(wx * 0.003, wz * 0.003);
       const ridge = 1 - Math.abs(2*n - 1);
       const micro = detail(wx * 0.012, wz * 0.012) * 8;
-      let h = (n*0.6 + ridge*0.4) * (n*0.6 + ridge*0.4) * 600 * flat + micro * flat;
+      let h = (n*0.7 + ridge*0.3) * (n*0.7 + ridge*0.3) * 520 * flat + micro * flat;
       for (const [px, pz, ph, pr] of PEAKS)
         h += gauss(wx, wz, px, pz, ph, pr) * Math.min(1, Math.max(0, (d-50)/100));
 
@@ -210,28 +210,24 @@ export class CretesMap {
 
     this.getTerrainHeight = getH;
 
-    // Palette couleur montagne
+    // Palette low-poly — couleurs vives et saturées
     const hColor = (h, steep) => {
-      if (h < -4) return [0.22, 0.18, 0.15];
-      if (h <  5) return [0.62, 0.56, 0.38];
-      if (steep > 0.78) {
-        if (h > 350) return [0.54, 0.50, 0.44];
-        return [0.44, 0.40, 0.34];
+      if (h < -4)  return [0.10, 0.62, 0.82]; // eau
+      if (h <  5)  return [0.88, 0.80, 0.52]; // sable/berge
+      if (steep > 0.60) {
+        if (h > 380) return [0.60, 0.55, 0.50]; // roche haute
+        return [0.50, 0.44, 0.36];              // roche
       }
-      if (h <  38) return [0.28, 0.54, 0.18];
-      if (h < 110) return [0.22, 0.44, 0.14];
-      if (h < 220) return [0.34, 0.52, 0.20];
-      if (h < 360) return [0.50, 0.44, 0.30];
-      if (h < 540) return [0.42, 0.38, 0.30];
-      if (h < 680) return [0.78, 0.76, 0.72];
-      return [0.93, 0.94, 0.95];
+      if (h <  45) return [0.28, 0.76, 0.22];  // plaine verte
+      if (h < 130) return [0.16, 0.58, 0.14];  // forêt
+      if (h < 270) return [0.32, 0.64, 0.24];  // prairie alpine
+      if (h < 420) return [0.58, 0.50, 0.38];  // roche claire
+      if (h < 580) return [0.70, 0.65, 0.58];  // roche haute
+      return [0.94, 0.96, 0.98];               // neige
     };
 
     const vCount = (SEGS+1) * (SEGS+1);
-    const pos = new Float32Array(vCount * 3);
-    const col = new Float32Array(vCount * 3);
     const ys  = new Float32Array(vCount);
-    const idx = [];
 
     for (let z=0; z<=SEGS; z++)
       for (let x=0; x<=SEGS; x++)
@@ -255,37 +251,48 @@ export class CretesMap {
         }
       }
       for (let i = 0; i < vCount; i++) {
-        const t = Math.max(0, Math.min(1, (ys[i] - 500) / 250));
+        const t = Math.max(0, Math.min(1, (ys[i] - 300) / 200));
         ys[i] = ys[i] * (1 - t * 0.7) + sm[i] * (t * 0.7);
       }
     }
 
-    for (let z=0; z<=SEGS; z++) {
-      for (let x=0; x<=SEGS; x++) {
-        const i  = z*(SEGS+1)+x;
-        const wx = (x/SEGS-0.5)*SIZE, wz = (z/SEGS-0.5)*SIZE;
-        const wy = ys[i];
-        pos[i*3] = wx; pos[i*3+1] = wy; pos[i*3+2] = wz;
-        const hR = x < SEGS ? ys[i+1] : wy;
-        const hU = z < SEGS ? ys[i+SEGS+1] : wy;
-        const steep = Math.sqrt(((hR-wy)/(SIZE/SEGS))**2 + ((hU-wy)/(SIZE/SEGS))**2);
-        const [r,g,b] = hColor(wy, steep);
-        col[i*3] = r; col[i*3+1] = g; col[i*3+2] = b;
-      }
-    }
+    // Géométrie non-indexée : couleur uniforme par triangle (flat shading low-poly)
+    const _g = SEGS + 1;
+    const triCount = SEGS * SEGS * 2;
+    const flatPos = new Float32Array(triCount * 9);
+    const flatCol = new Float32Array(triCount * 9);
+    let pi = 0, ci = 0;
+
+    const pushTri = (i0, i1, i2) => {
+      const verts = [i0, i1, i2].map(i => {
+        const gx = i % _g, gz = Math.floor(i / _g);
+        return [(gx / SEGS - 0.5) * SIZE, ys[i], (gz / SEGS - 0.5) * SIZE];
+      });
+      for (const [x, y, z] of verts) { flatPos[pi++] = x; flatPos[pi++] = y; flatPos[pi++] = z; }
+
+      const hc = (ys[i0] + ys[i1] + ys[i2]) / 3;
+      const [ax,ay,az] = verts[0], [bx,by,bz] = verts[1], [cx,cy,cz] = verts[2];
+      const ex=bx-ax, ey=by-ay, ez=bz-az, fx=cx-ax, fy=cy-ay, fz=cz-az;
+      const ny = ez*fx - ex*fz;
+      const nl = Math.sqrt((ey*fz-ez*fy)**2 + ny**2 + (ex*fy-ey*fx)**2) || 1;
+      const steep = 1 - Math.abs(ny / nl);
+      const [r,g,b] = hColor(hc, steep);
+      for (let k = 0; k < 3; k++) { flatCol[ci++] = r; flatCol[ci++] = g; flatCol[ci++] = b; }
+    };
+
     for (let z=0; z<SEGS; z++) {
       for (let x=0; x<SEGS; x++) {
-        const a = z*(SEGS+1)+x, b = a+1, c = (z+1)*(SEGS+1)+x, d = c+1;
-        idx.push(a,c,b, b,c,d);
+        const a = z*_g+x, b = a+1, c = (z+1)*_g+x, d = c+1;
+        pushTri(a, c, b);
+        pushTri(b, c, d);
       }
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(flatPos, 3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(flatCol, 3));
     geo.computeVertexNormals();
-    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
+    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
 
     // Lookup bilinéaire rapide — remplace le fBm 8 octaves (~200× plus rapide) (A3)
     {
@@ -307,7 +314,7 @@ export class CretesMap {
 
     const ocean = new THREE.Mesh(
       new THREE.PlaneGeometry(40000, 40000, 4, 4),
-      new THREE.MeshPhongMaterial({ color: 0x1a4a72, shininess: 60, specular: new THREE.Color(0x2266aa) })
+      new THREE.MeshLambertMaterial({ color: 0x1a9fd4, flatShading: true })
     );
     ocean.rotation.x = -Math.PI / 2;
     ocean.position.y = -1;
@@ -495,9 +502,9 @@ export class CretesMap {
       this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 150,  300,  400, fwdX, fwdZ));
       this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 400,  800, 2000, fwdX, fwdZ));
     } else {
-      this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 600, 1500, 3500, fwdX, fwdZ));
-      this._rockLODGroups?.forEach(g => g.updateLOD(x, z, 500,  800, 1400, fwdX, fwdZ));
-      this._bushLODGroups?.forEach(g => g.updateLOD(x, z, 400,  700, 1400, fwdX, fwdZ));
+      this._treeLODGroups?.forEach(g => g.updateLOD(x, z, 1200, 2800, 5500, fwdX, fwdZ));
+      this._rockLODGroups?.forEach(g => g.updateLOD(x, z,  800, 1600, 3000, fwdX, fwdZ));
+      this._bushLODGroups?.forEach(g => g.updateLOD(x, z,  600, 1200, 2500, fwdX, fwdZ));
       this._bldgLODGroups?.forEach(g => g.updateLOD(x, z, 1000, 2500, 4500, fwdX, fwdZ));
     }
   }
