@@ -15,7 +15,7 @@ const SIZE = 8000;
 
 const PEAKS = [
   [ 1400, -1000, 750, 580],  // grande montagne NE
-  [-1500,   600, 440, 950],  // grande montagne NO — très étalée (face spawn)
+  [-1500,   600, 440, 1400], // grande montagne NO — base très étalée (face spawn)
   [  800,  1700, 680, 540],  // montagne SE
   [ -700, -1800, 640, 520],  // montagne SO
   [  300,   200, 380, 460],  // massif central

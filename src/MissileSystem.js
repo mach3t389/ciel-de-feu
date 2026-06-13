@@ -77,7 +77,17 @@ export class MissileSystem {
     const load = (path, cb) => loader.load(path, g => {
       const m = g.scene;
       m.scale.setScalar(0.25);
-      m.traverse(n => { if (n.isMesh) { n.castShadow = false; n.receiveShadow = false; } });
+      m.traverse(n => {
+        if (!n.isMesh) return;
+        n.castShadow = false; n.receiveShadow = false;
+        const mats = Array.isArray(n.material) ? n.material : [n.material];
+        mats.forEach(mat => {
+          mat.polygonOffset = true;
+          mat.polygonOffsetFactor = 1;
+          mat.polygonOffsetUnits = 1;
+          mat.depthWrite = true;
+        });
+      });
       cb(m);
     }, undefined, () => {});
 
