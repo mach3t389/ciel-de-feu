@@ -229,10 +229,17 @@ export const UPGRADES = {
     refuelSpeed: 0.20,
   },
   maintenance: {
-    id:'maintenance', cat:'logistics', name:'Maintenance avancée',
-    levelReq:52, cost:8000, requires:null,
+    id:'maintenance', cat:'logistics', name:'Maintenance avancée I',
+    levelReq:48, cost:8000, requires:null,
     stats: { logistics:+20, speed:-4, maneuverability:-4, fuel:-6 },
     desc:'−10% sur tous les temps de service, mais charge importante et forte consommation.',
+    repairSpeed:0.10, rearmSpeed:0.10, refuelSpeed:0.10,
+  },
+  maintenance2: {
+    id:'maintenance2', cat:'logistics', name:'Maintenance avancée II',
+    levelReq:55, cost:14000, requires:'maintenance',
+    stats: { logistics:+15, speed:-2, maneuverability:-2, fuel:-3 },
+    desc:'−20% total sur tous les temps de service au sol. Équipement de pointe.',
     repairSpeed:0.10, rearmSpeed:0.10, refuelSpeed:0.10,
   },
 
@@ -422,7 +429,7 @@ export const CAT_ORDER = {
   aviation: ['tank1','tank2','engine1','engine2','wings1','wings2','roll'],
   armement: ['mag1','mag2','ap','firerate','missile_aa','missile_imp1','missile_imp2','dual_missile','missile_ag','tracking1','tracking2','tracking3','lock_speed1','lock_speed2'],
   defense : ['armor1','armor2','armor3','resist_aa','resist_plane'],
-  logistics:['repair1','repair2','rearm1','rearm2','refuel1','refuel2','maintenance'],
+  logistics:['repair1','repair2','rearm1','rearm2','refuel1','refuel2','maintenance','maintenance2'],
   utility : ['radar','decoy1','decoy2','decoy3'],
 };
 
@@ -558,7 +565,7 @@ export const EQUIPMENT_CATALOG = {
     engine: { label:'MOTEUR', options:[
       { id:'standard',   name:'Standard',          icon:'⚙',  levelReq:1,  pros:[],                                     cons:[],                                                         upgrades:[] },
       { id:'vitesse1',   name:'Haute Vitesse I',   icon:'▶',  levelReq:10, pros:['Vitesse +15%','Accél. +3%'],          cons:['Maniab. −3%','Carburant −10%','Logistique −5%'],           upgrades:['engine_sv1'] },
-      { id:'vitesse2',   name:'Haute Vitesse II',  icon:'▶▶', levelReq:38, pros:['Vitesse +25%','Accél. +5%'],          cons:['Maniab. −5%','Carburant −18%','Logistique −10%'],          upgrades:['engine_sv1','engine_sv2'] },
+      { id:'vitesse2',   name:'Haute Vitesse II',  icon:'≫', levelReq:38, pros:['Vitesse +25%','Accél. +5%'],          cons:['Maniab. −5%','Carburant −18%','Logistique −10%'],          upgrades:['engine_sv1','engine_sv2'] },
       { id:'puissance1', name:'Haute Puissance I', icon:'◈',  levelReq:14, pros:['Accél. +15%','Maniab. +3%','Vitesse +5%'], cons:['Carburant −8%','Logistique −5%'],                   upgrades:['engine_hp1'] },
       { id:'puissance2', name:'Haute Puissance II',icon:'◉',  levelReq:44, pros:['Accél. +25%','Maniab. +5%','Vitesse +8%'], cons:['Carburant −14%','Logistique −10%'],                  upgrades:['engine_hp1','engine_hp2'] },
     ]},
@@ -669,8 +676,9 @@ export const EQUIPMENT_CATALOG = {
       { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:46, pros:['Ravitaillement −40%','Logistique +20%'], cons:['Maniab. −4%'],         upgrades:['refuel1','refuel2'] },
     ]},
     maintenance: { label:'MAINTENANCE', options:[
-      { id:'none',   name:'Aucune',  icon:'○',  levelReq:1,  pros:[], cons:[], upgrades:[] },
-      { id:'active', name:'Avancée', icon:'✦',  levelReq:52, pros:['−10% tous les temps','Logistique +20%'], cons:['Vitesse −4%','Maniab. −4%','Carburant −6%'], upgrades:['maintenance'] },
+      { id:'none',    name:'Aucune',     icon:'○',  levelReq:1,  pros:[], cons:[], upgrades:[] },
+      { id:'active',  name:'Avancée I',  icon:'✦',  levelReq:48, pros:['−10% tous les temps','Logistique +20%'], cons:['Vitesse −4%','Maniab. −4%','Carburant −6%'], upgrades:['maintenance'] },
+      { id:'active2', name:'Avancée II', icon:'✧',  levelReq:55, pros:['−20% tous les temps','Logistique +35%'], cons:['Vitesse −6%','Maniab. −6%','Carburant −9%'], upgrades:['maintenance','maintenance2'] },
     ]},
   }},
   equipements: { label:'ÉQUIPEMENTS', icon:'◈', slots:{
@@ -755,6 +763,7 @@ export const OPTION_COSTS = {
   'refuel:rapide1'         : 2500,
   'refuel:rapide2'         : 5000,
   'maintenance:active'     : 8000,
+  'maintenance:active2'    : 14000,
   // ÉQUIPEMENTS
   'radar:ameliore'         : 2500,
   'alt_filter:installed'   : 3000,
