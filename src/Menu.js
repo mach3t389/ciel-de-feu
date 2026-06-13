@@ -1860,8 +1860,14 @@ export class Menu {
     this._clear();
     this._showPreview('settings');
     this._syncPreviewPlane();
+    const wrap = mkPanelLeft('min(820px, 88vw)');
+    wrap.style.gap = '8px';
 
-    // ── Carte sauvegarde ─────────────────────────────────────────────────────
+    const titleEl = mkSectionTitle(t('settings'));
+    titleEl.style.cursor = 'default';
+    wrap.appendChild(titleEl);
+    wrap.appendChild(mkDivider());
+
     const mkCard = (labelText) => {
       const card = el('div', { style: {
         border: `1px solid ${M.border}44`, borderRadius: '6px',
@@ -1888,32 +1894,179 @@ export class Menu {
       b.addEventListener('click', onClick);
       return b;
     };
-    const SAVE_KEYS = ['cielDeFeu_progression','cielDeFeu_tutorialDisabled','pilotName','lang','ctrlMode','lowGraphics','audio_music','audio_sfx'];
-    const allSaveKeys = () => { const keys = [...SAVE_KEYS]; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('stats_') && !keys.includes(k)) keys.push(k); } return keys; };
+
+    const isMob = window.innerWidth < 700;
+    const grid = el('div', { style: { display: 'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap: '10px' }});
+
+    // Cellule 1 — Audio
+    const cardAudio = mkCard(t('audio'));
+    cardAudio.appendChild(this._mkAudioSection(this._audio ?? null));
+    grid.appendChild(cardAudio);
+
+    // Cellule 2 — Affichage
+    const GFX_MODES = [
+      { value: 0, label: t('gfxHigh'), color: M.cream,   desc: t('gfxHighDesc') },
+      { value: 1, label: t('gfxMed'),  color: '#ccaa33', desc: t('gfxMedDesc')  },
+      { value: 2, label: t('gfxLow'),  color: '#dd6633', desc: t('gfxLowDesc')  },
+    ];
+    const curGfx  = parseInt(localStorage.getItem('lowGraphics') || '0', 10);
+    const gfxDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.5', marginTop: '6px', minHeight: '22px' }});
+    gfxDesc.textContent = GFX_MODES.find(m => m.value === curGfx)?.desc ?? '';
+    const cardGfx = mkCard(t('graphicsQuality'));
+    cardGfx.appendChild(mkChoiceGroup(GFX_MODES.map(({ value, label, color }) => ({ value, label, color })), curGfx,
+      v => { localStorage.setItem('lowGraphics', String(v)); gfxDesc.textContent = GFX_MODES.find(m => m.value === v)?.desc ?? ''; }));
+    cardGfx.appendChild(gfxDesc);
+    grid.appendChild(cardGfx);
+
+    // Cellule 3 — Contrôles
+    const CTRL_MODES = [
+      { value: 'standard',  label: t('ctrlStd'), color: M.cream,   desc: t('ctrlStdDesc') },
+      { value: 'simulator', label: t('ctrlSim'), color: '#88aacc', desc: t('ctrlSimDesc') },
+    ];
+    const curCtrl  = localStorage.getItem('ctrlMode') || 'standard';
+    const ctrlDesc = el('div', { style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.5', marginTop: '6px', minHeight: '22px' }});
+    ctrlDesc.textContent = CTRL_MODES.find(m => m.value === curCtrl)?.desc ?? '';
+    const cardCtrl = mkCard(t('ctrlMode'));
+    cardCtrl.appendChild(mkChoiceGroup(CTRL_MODES.map(({ value, label, color }) => ({ value, label, color })), curCtrl,
+      v => { localStorage.setItem('ctrlMode', v); ctrlDesc.textContent = CTRL_MODES.find(m => m.value === v)?.desc ?? ''; }));
+    cardCtrl.appendChild(ctrlDesc);
+    const ctrlBtnSep = el('div', { style: { marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${M.border}44` }});
+    ctrlBtnSep.appendChild(mkSecBtn(t('controls') || 'COMMANDES', () => this._showControls()));
+    cardCtrl.appendChild(ctrlBtnSep);
+    grid.appendChild(cardCtrl);
+
+    // Cellule 4 — Sauvegarde
+    const SAVE_KEYS = [
+      'cielDeFeu_progression', 'cielDeFeu_tutorialDisabled',
+      'pilotName', 'lang', 'ctrlMode', 'lowGraphics', 'audio_music', 'audio_sfx',
+    ];
+    const allSaveKeys = () => {
+      const keys = [...SAVE_KEYS];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('stats_') && !keys.includes(k)) keys.push(k);
+      }
+      return keys;
+    };
     const cardSave = mkCard('SAUVEGARDE');
-    cardSave.appendChild(el('div', { text: t('exportDesc'), style: { fontSize:'9px', color: M.dimCream, letterSpacing:'1px', lineHeight:'1.5', opacity:'0.7', marginBottom:'8px' }}));
-    const saveRow = el('div', { style: { display:'flex', gap:'8px', flexWrap:'wrap' }});
+    const saveHint = el('div', { text: t('exportDesc'), style: { fontSize: '9px', color: M.dimCream, letterSpacing: '1px', lineHeight: '1.5', opacity: '0.7', marginBottom: '8px' }});
+    cardSave.appendChild(saveHint);
+    const saveRow = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' }});
     saveRow.appendChild(mkSecBtn(t('exportSave') || '↓  EXPORTER', () => {
-      const data = {}; allSaveKeys().forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; });
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ciel-de-feu-save-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href);
+      const data = {};
+      allSaveKeys().forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `ciel-de-feu-save-${new Date().toISOString().slice(0,10)}.json`;
+      a.click(); URL.revokeObjectURL(a.href);
     }));
     saveRow.appendChild(mkSecBtn(t('importSave') || '↑  IMPORTER', () => {
-      const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json';
-      input.addEventListener('change', () => { const file = input.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = (ev) => { try { const data = JSON.parse(ev.target.result); if (typeof data !== 'object' || Array.isArray(data)) throw new Error(); if (!confirm(t('importConfirm'))) return; Object.entries(data).forEach(([k,v]) => { if (typeof v === 'string') localStorage.setItem(k,v); }); this._progression = new ProgressionSystem(); alert(t('importSuccess')); this._showSettings(); } catch { alert(t('importError')); } }; reader.readAsText(file); });
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = '.json,application/json';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result);
+            if (typeof data !== 'object' || Array.isArray(data)) throw new Error();
+            if (!confirm(t('importConfirm'))) return;
+            Object.entries(data).forEach(([k, v]) => { if (typeof v === 'string') localStorage.setItem(k, v); });
+            this._progression = new ProgressionSystem(); alert(t('importSuccess')); this._showSettings();
+          } catch { alert(t('importError')); }
+        };
+        reader.readAsText(file);
+      });
       input.click();
     }));
     cardSave.appendChild(saveRow);
-    const resetSep = el('div', { style: { marginTop:'10px', paddingTop:'8px', borderTop:`1px solid ${M.border}44`, display:'flex', justifyContent:'flex-end' }});
-    resetSep.appendChild(mkSecBtn(t('cheatReset'), () => { if (confirm(t('resetConfirm'))) { localStorage.removeItem('cielDeFeu_progression'); this._progression = new ProgressionSystem(); this._showSettings(); } }, true));
+    const resetSep = el('div', { style: { marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${M.border}44`, display: 'flex', justifyContent: 'flex-end' }});
+    resetSep.appendChild(mkSecBtn(t('cheatReset'), () => {
+      if (confirm(t('resetConfirm'))) {
+        localStorage.removeItem('cielDeFeu_progression');
+        this._progression = new ProgressionSystem(); this._showSettings();
+      }
+    }, true));
     cardSave.appendChild(resetSep);
+    grid.appendChild(cardSave);
 
-    showSettingsOverlay({
-      onBack        : returnFn,
-      audioRef      : this._audio ?? null,
-      onShowControls: () => this._showControls(),
-      extraCards    : [cardSave],
+    wrap.appendChild(grid);
+
+    // Panneau dev caché (5 clics sur le titre)
+    const devHint = el('div', { text: '· · · · ·', style: {
+      fontSize: '10px', letterSpacing: '6px', color: '#33291a', textAlign: 'center',
+      cursor: 'default', userSelect: 'none', marginTop: '-6px', marginBottom: '4px',
+      transition: 'color 0.2s',
+    }});
+    wrap.insertBefore(devHint, grid);
+
+    const devPanel = el('div', { style: {
+      display: 'none', padding: '14px 16px',
+      border: `1px solid #6b4a1e`, borderRadius: '6px', background: '#0d0900',
+      boxShadow: 'inset 0 0 30px #1a0f0033',
+    }});
+    const devTitle = el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }});
+    devTitle.appendChild(el('div', { text: '◈', style: { fontSize: '14px', color: '#cc8833' }}));
+    devTitle.appendChild(el('div', { text: 'DEV CONSOLE', style: { fontSize: '9px', color: '#cc8833', letterSpacing: '4px', fontFamily: 'Rajdhani, sans-serif', fontWeight: '700' }}));
+    devPanel.appendChild(devTitle);
+    const devGrid = el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }});
+    const mkDevBtn = (label, sub, fn) => {
+      const b = el('div', { style: { padding: '10px 12px', background: '#150f05', border: `1px solid #5a3d1a`, borderRadius: '5px', cursor: 'pointer', transition: 'all 0.15s' }});
+      b.appendChild(el('div', { text: label, style: { fontSize: '10px', color: '#cc8833', letterSpacing: '2px', fontFamily: 'Rajdhani, sans-serif', fontWeight: '700' }}));
+      b.appendChild(el('div', { text: sub, style: { fontSize: '8px', color: '#664422', letterSpacing: '1px', marginTop: '2px' }}));
+      b.addEventListener('mouseover', () => { b.style.borderColor = '#cc8833'; b.style.background = '#1f1508'; });
+      b.addEventListener('mouseout',  () => { b.style.borderColor = '#5a3d1a'; b.style.background = '#150f05'; });
+      b.addEventListener('click', fn);
+      return b;
+    };
+    devGrid.appendChild(mkDevBtn(t('cheatLevels'), '+10 NIV', () => {
+      const p = this._progression;
+      for (let i = 0; i < 10; i++) { const xp = xpToNextLevel(p.level) - p.levelInfo.xpInLevel; p.addRewards(xp + 1, 0); }
+      this._showSettings();
+    }));
+    devGrid.appendChild(mkDevBtn(t('cheatCredits'), '+50 000 ✦', () => {
+      this._progression.addRewards(0, 50000); this._showSettings();
+    }));
+    devPanel.appendChild(devGrid);
+    wrap.appendChild(devPanel);
+
+    let devClicks = 0, devTimer = 0;
+    const onDevClick = () => {
+      devClicks++;
+      clearTimeout(devTimer);
+      devHint.style.color = devClicks >= 3 ? '#6b4a1e' : '#33291a';
+      devTimer = setTimeout(() => { devClicks = 0; devHint.style.color = '#33291a'; }, 3000);
+      if (devClicks >= 5) {
+        const open = devPanel.style.display === 'none';
+        devPanel.style.display = open ? 'block' : 'none';
+        devHint.style.color = open ? '#6b4a1e' : '#33291a';
+        devClicks = 0;
+      }
+    };
+    titleEl.addEventListener('click', onDevClick);
+    devHint.addEventListener('click', onDevClick);
+
+    wrap.appendChild(mkDivider());
+    const btnBack = mkBtn(t('back'), M.dimCream);
+    btnBack.addEventListener('click', () => returnFn());
+    wrap.appendChild(btnBack);
+
+    const btnBug = document.createElement('button');
+    btnBug.textContent = t('reportBug');
+    Object.assign(btnBug.style, {
+      background: 'transparent', border: 'none', color: '#5a4030',
+      fontFamily: 'Rajdhani, sans-serif', fontSize: '11px', letterSpacing: '2px',
+      padding: '10px 0', cursor: 'pointer', textTransform: 'uppercase',
+      width: '100%', textAlign: 'left', transition: 'color 0.12s', marginTop: '4px',
     });
+    btnBug.addEventListener('mouseover', () => { btnBug.style.color = '#8a6040'; });
+    btnBug.addEventListener('mouseout',  () => { btnBug.style.color = '#5a4030'; });
+    btnBug.addEventListener('touchstart', () => { btnBug.style.color = '#8a6040'; }, { passive: true });
+    btnBug.addEventListener('touchend',   () => { btnBug.style.color = '#5a4030'; }, { passive: true });
+    btnBug.addEventListener('click', () => showBugReport());
+    wrap.appendChild(btnBug);
+
+    this._root.appendChild(wrap);
   }
 
   // ── Page commandes (clavier + manette) ───────────────────────────────────
