@@ -14,13 +14,13 @@ const SIZE = 8000;
 // Villages côtiers près des bases + 2 villages aux extrémités N/S
 
 const PEAKS = [
-  [ 1400, -1000, 820, 520],  // grande montagne NE
-  [-1500,   600, 640, 620],  // grande montagne NO — adoucie (proche spawn ouest)
-  [  800,  1700, 740, 480],  // montagne SE
-  [ -700, -1800, 700, 460],  // montagne SO
-  [  300,   200, 420, 400],  // massif central
-  [-1000,  -300, 360, 480],  // crête NO-centre — adoucie (face au spawn)
-  [ 1100,   900, 440, 380],  // crête E-centre
+  [ 1400, -1000, 750, 580],  // grande montagne NE
+  [-1500,   600, 440, 950],  // grande montagne NO — très étalée (face spawn)
+  [  800,  1700, 680, 540],  // montagne SE
+  [ -700, -1800, 640, 520],  // montagne SO
+  [  300,   200, 380, 460],  // massif central
+  [-1000,  -300, 280, 620],  // crête NO-centre — aplatie (dans l'axe du spawn)
+  [ 1100,   900, 400, 440],  // crête E-centre
 ];
 
 const LAKES = [
@@ -123,7 +123,7 @@ export class CretesMap {
       const n    = fbm(wx * 0.003, wz * 0.003);
       const ridge = 1 - Math.abs(2*n - 1);
       const micro = detail(wx * 0.012, wz * 0.012) * 8;
-      let h = (n*0.7 + ridge*0.3) * (n*0.7 + ridge*0.3) * 520 * flat + micro * flat;
+      let h = (n*0.85 + ridge*0.15) * 340 * flat + micro * flat;
       for (const [px, pz, ph, pr] of PEAKS)
         h += gauss(wx, wz, px, pz, ph, pr) * Math.min(1, Math.max(0, (d-50)/100));
 
