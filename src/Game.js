@@ -490,6 +490,7 @@ export class Game {
       this._playerCollisionMult = mods.collisionDmgMult ?? 1;
       // Caméra arrière (touche R) : disponible uniquement si l'équipement est installé
       this.player._tailCamEnabled = upgradeIds.includes('tail_cam');
+      if (this._ui) this._ui._radarRangeMult = upgradeIds.includes('radar') ? 1.25 : 1;
 
       // Dégâts missiles → ennemis IA
       if (this._missileSystem) {

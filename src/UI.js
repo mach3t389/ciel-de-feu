@@ -1483,7 +1483,7 @@ export class UI {
     const W = c.width, H = c.height;
     const cx = W/2, cy = H/2;
     const R = 50;
-    const SCALE = R / 1800;
+    const SCALE = R / (1800 * (this._radarRangeMult ?? 1));
     const hRad0 = player.heading * Math.PI / 180;
     const toRadar = (wx, wz) => {
       const dx = wx - player.position.x, dz = wz - player.position.z;
