@@ -41,6 +41,17 @@ export class AudioManager {
     this._bus.enemy   = mkBus(AudioManager.BASE_ENEMY  * sv);
     this._bus.ambient = mkBus(AudioManager.BASE_MUSIC   * AudioManager.getMusicVolume());
 
+    // Suspendre l'audio quand l'onglet est en arrière-plan
+    this._visibilityHandler = () => {
+      if (!this._ctx) return;
+      if (document.hidden) {
+        this._ctx.suspend().catch(() => {});
+      } else {
+        this._ctx.resume().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', this._visibilityHandler);
+
     // Pré-charger les samples critiques en arrière-plan
     this._preload('/sfx/Moteur_avion.wav',        'engine');
     this._preload('/sfx/Musique_Menu.wav',         'menuMusic');
@@ -619,6 +630,10 @@ export class AudioManager {
 
   // ── Nettoyage ─────────────────────────────────────────────────────────────
   dispose() {
+    if (this._visibilityHandler) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
     this.stopMenuMusic();
     if (this._engine) {
       try { this._engine.src.stop(); } catch(e) {}

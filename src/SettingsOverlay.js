@@ -177,7 +177,7 @@ export function showSettingsOverlay({ onBack, audioRef = null, onShowControls = 
     background    : 'rgba(0,0,0,0.88)',
     fontFamily    : 'Rajdhani, sans-serif',
     color         : M.cream,
-    zIndex        : '800',
+    zIndex        : '20000',
     display       : 'flex',
     justifyContent: 'center',
   }});
