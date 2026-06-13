@@ -14,13 +14,13 @@ const SIZE = 8000;
 // Villages côtiers près des bases + 2 villages aux extrémités N/S
 
 const PEAKS = [
-  [ 1400, -1000, 750, 580],  // grande montagne NE
+  [ 1400, -1000, 880, 580],  // grande montagne NE
   [-1500,   600, 440, 1400], // grande montagne NO — base très étalée (face spawn)
-  [  800,  1700, 680, 540],  // montagne SE
-  [ -700, -1800, 640, 520],  // montagne SO
-  [  300,   200, 380, 460],  // massif central
-  [-1000,  -300, 280, 620],  // crête NO-centre — aplatie (dans l'axe du spawn)
-  [ 1100,   900, 400, 440],  // crête E-centre
+  [  800,  1700, 800, 540],  // montagne SE
+  [ -700, -1800, 755, 520],  // montagne SO
+  [  300,   200, 460, 460],  // massif central
+  [-1000,  -300, 510, 620],  // crête NO-centre
+  [ 1100,   900, 480, 440],  // crête E-centre
 ];
 
 const LAKES = [
