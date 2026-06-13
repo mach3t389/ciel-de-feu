@@ -441,13 +441,15 @@ export class Player {
       if (e.sourceCapabilities?.firesTouchEvents) return;
       if (e.target.closest('button, a, input, [role="button"]')) return;
       if (this.isDead || this._blockPointerLock) return;
+      if (!document.pointerLockElement) {
+        // Premier clic : acquérir le pointer lock uniquement, pas de tir
+        this._pointerLockPending = true;
+        document.body.requestPointerLock?.()?.catch?.(() => { this._pointerLockPending = false; });
+        return;
+      }
       this._mouseFireDown  = true;
       this._mouseFireLatch = true;   // tir garanti même si mouseup arrive avant la frame
       this.keys.space      = true;
-      if (!document.pointerLockElement) {
-        this._pointerLockPending = true;
-        document.body.requestPointerLock?.()?.catch?.(() => { this._pointerLockPending = false; });
-      }
     };
     const onMouseUp = (e) => {
       if (e.button !== 0) return;
