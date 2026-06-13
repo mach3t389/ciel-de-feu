@@ -170,18 +170,19 @@ export const UPGRADES = {
   },
 
   cell_renforcee: {
-    id:'cell_renforcee', cat:'defense', name:'Cellule renforcée',
+    id:'cell_renforcee', cat:'defense', name:'Structure renforcée I',
     levelReq:8, cost:2000, requires:null,
     stats: { health:+10, defense:+5, speed:-1, logistics:-5 },
     desc:'Structure renforcée : résistance mécanique +10 HP, dégâts de collision −50%.',
     collisionDmgMult: 0.50,
   },
-  siege_blinde: {
-    id:'siege_blinde', cat:'defense', name:'Cockpit blindé',
-    levelReq:21, cost:6000, requires:null,
-    stats: { defense:+10, health:+8, speed:-2, maneuverability:-3, fuel:-3 },
-    desc:'Cockpit blindé : absorbe 10% de tous les dégâts reçus.',
-    reduceDmgPct: 0.10,
+  structure2: {
+    id:'structure2', cat:'defense', name:'Structure renforcée II',
+    levelReq:28, cost:5000, requires:'cell_renforcee',
+    stats: { health:+15, defense:+8, speed:-2, logistics:-7 },
+    desc:'Cellule blindée : +15 HP supplémentaires, collision −70%, résistance aux explosions.',
+    collisionDmgMult: 0.70,
+    explosionDmgMult: 0.20,
   },
 
   // ═══════════════════════ LOGISTIQUE ══════════════════════════
@@ -332,20 +333,6 @@ export const UPGRADES = {
     levelReq:42, cost:6500, requires:'lock_speed1',
     stats: { weaponry:+2, logistics:-3 },
     desc:'Capteur haute sensibilité : acquisition 0.7s plus rapide au total.',
-  },
-  cell_renforcee: {
-    id:'cell_renforcee', cat:'defense', name:'Cellule renforcée',
-    levelReq:8, cost:2000, requires:null,
-    stats: { health:+10, defense:+5, speed:-1, logistics:-5 },
-    desc:'Structure renforcée : −50% dégâts de collision avec le terrain.',
-    reducesCollisionDmg: 0.5,
-  },
-  siege_blinde: {
-    id:'siege_blinde', cat:'defense', name:'Siège blindé',
-    levelReq:21, cost:6000, requires:null,
-    stats: { defense:+10, health:+8, speed:-2, maneuverability:-3, fuel:-3 },
-    desc:'Cockpit blindé : −10% tous les dégâts reçus.',
-    reduceDmgPct: 0.10,
   },
   tail_cam: {
     id:'tail_cam', cat:'utility', name:'Caméra de queue',
@@ -584,10 +571,6 @@ export const EQUIPMENT_CATALOG = {
       { id:'none',       name:'Aucun',           icon:'○',  levelReq:1,  pros:[],                                cons:[],                                                  upgrades:[] },
       { id:'installed',  name:'Installé',        icon:'✺',  levelReq:36, pros:['Vitesse +18%','Accél. +15%'], cons:['Maniab. −3%','Carburant −10%','Logistique −5%'],    upgrades:['turbo'] },
     ]},
-    alt_filter: { label:'FILTRE ALTITUDE', options:[
-      { id:'none',       name:'Aucun',           icon:'○',  levelReq:1,  pros:[],                                      cons:[],                                    upgrades:[] },
-      { id:'installed',  name:'Installé',        icon:'▲',  levelReq:14, pros:['Vitesse +5% (>500m)','Maniab. +5%'], cons:['Carburant −3%','Logistique −3%'],    upgrades:['alt_filter'] },
-    ]},
   }},
   canons: { label:'CANONS', icon:'⌖', slots:{
     ammo:     { label:'MUNITIONS', options:[
@@ -655,21 +638,18 @@ export const EQUIPMENT_CATALOG = {
     armor:  { label:'BLINDAGE', options:[
       { id:'none',  name:'Aucun',  icon:'○',  levelReq:1,  pros:[],          cons:[],                                                                 upgrades:[] },
       { id:'leger', name:'Léger',  icon:'◔',  levelReq:5,  pros:['+15 HP'],  cons:['Vitesse −2%','Carburant −4%','Logistique −3%'],                   upgrades:['armor1'] },
-      { id:'moyen', name:'Moyen',  icon:'◑',  levelReq:20, pros:['+35 HP'],  cons:['Vitesse −7%','Maniab. −3%','Carburant −11%','Logistique −8%'],    upgrades:['armor1','armor2'] },
-      { id:'lourd', name:'Lourd',  icon:'●',  levelReq:38, pros:['+65 HP'],  cons:['Vitesse −15%','Maniab. −12%','Carburant −23%','Logistique −18%'], upgrades:['armor1','armor2','armor3'] },
+      { id:'moyen', name:'Moyen',  icon:'◑',  levelReq:20, pros:['+35 HP','Dégâts −5%'],  cons:['Vitesse −7%','Maniab. −3%','Carburant −11%','Logistique −8%'],    upgrades:['armor1','armor2'] },
+      { id:'lourd', name:'Lourd',  icon:'●',  levelReq:38, pros:['+65 HP','Dégâts −10%'], cons:['Vitesse −15%','Maniab. −12%','Carburant −23%','Logistique −18%'], upgrades:['armor1','armor2','armor3'] },
     ]},
     resist: { label:'RÉSISTANCE', options:[
       { id:'none',    name:'Aucune',         icon:'○',  levelReq:1,  pros:[],                          cons:[],                                               upgrades:[] },
       { id:'turrets', name:'Anti-Tourelles', icon:'⬡',  levelReq:23, pros:['−15% dégâts (tourelles)'], cons:['Carburant −3%','Logistique −4%'],               upgrades:['resist_aa'] },
       { id:'planes',  name:'Anti-Avions',    icon:'✈',  levelReq:38, pros:['−15% dégâts (avions)'],    cons:['Vitesse −2%','Carburant −4%','Logistique −5%'], upgrades:['resist_plane'] },
     ]},
-    cell_renforcee: { label:'CELLULE', options:[
-      { id:'none',        name:'Standard',   icon:'○',  levelReq:1, pros:[],                                        cons:[],                               upgrades:[] },
-      { id:'renforcee',   name:'Renforcée',  icon:'⬡',  levelReq:8, pros:['+10 HP','Déf. +5%','Collision −50%'], cons:['Vitesse −1%','Logistique −5%'], upgrades:['cell_renforcee'] },
-    ]},
-    siege_blinde: { label:'COCKPIT', options:[
-      { id:'none',     name:'Standard',      icon:'○',  levelReq:1,  pros:[],                                     cons:[],                                            upgrades:[] },
-      { id:'blinde',   name:'Blindé',        icon:'◈',  levelReq:21, pros:['Déf. +10%','+8 HP','Dégâts −10%'], cons:['Vitesse −2%','Maniab. −3%','Carburant −3%'], upgrades:['siege_blinde'] },
+    structure: { label:'STRUCTURE', options:[
+      { id:'none',     name:'Standard',    icon:'○',  levelReq:1,  pros:[],                                              cons:[],                               upgrades:[] },
+      { id:'tier1',    name:'Renforcée I', icon:'⬡',  levelReq:8,  pros:['+10 HP','Collision −50%'],                    cons:['Vitesse −1%','Logistique −5%'], upgrades:['cell_renforcee'] },
+      { id:'tier2',    name:'Renforcée II',icon:'◈',  levelReq:28, pros:['+25 HP total','Collision −70%','Explosion −20%'], cons:['Vitesse −3%','Logistique −12%'], upgrades:['cell_renforcee','structure2'] },
     ]},
   }},
   logistics: { label:'LOGISTIQUE', icon:'⚙', slots:{
@@ -697,6 +677,10 @@ export const EQUIPMENT_CATALOG = {
     radar:    { label:'RADAR', options:[
       { id:'standard',  name:'Standard',  icon:'○',  levelReq:1,  pros:[],              cons:[],                                     upgrades:[] },
       { id:'ameliore',  name:'Amélioré',  icon:'◉',  levelReq:10, pros:['Portée +25%'], cons:['Carburant −2%','Logistique −3%'],    upgrades:['radar'] },
+    ]},
+    alt_filter: { label:'FILTRE ALTITUDE', options:[
+      { id:'none',       name:'Aucun',    icon:'○',  levelReq:1,  pros:[],                                       cons:[],                                    upgrades:[] },
+      { id:'installed',  name:'Installé', icon:'▲',  levelReq:14, pros:['Vitesse +5% (>500m)','Maniab. +5%'],  cons:['Carburant −3%','Logistique −3%'],    upgrades:['alt_filter'] },
     ]},
     roll:     { label:'ROULIS', options:[
       { id:'standard',  name:'Standard',  icon:'○',  levelReq:1,  pros:[],              cons:[],                 upgrades:[] },
@@ -761,8 +745,8 @@ export const OPTION_COSTS = {
   'armor:lourd'            : 7000,
   'resist:turrets'         : 6000,
   'resist:planes'          : 7000,
-  'cell_renforcee:renforcee': 2000,
-  'siege_blinde:blinde'    : 6000,
+  'structure:tier1'         : 2000,
+  'structure:tier2'         : 5000,
   // LOGISTIQUE
   'repair:rapide1'         : 1500,
   'repair:rapide2'         : 3500,
@@ -773,18 +757,19 @@ export const OPTION_COSTS = {
   'maintenance:active'     : 8000,
   // ÉQUIPEMENTS
   'radar:ameliore'         : 2500,
+  'alt_filter:installed'   : 3000,
   'roll:ameliore'          : 3500,
   'tail_cam:installed'     : 4000,
 };
 
 // Loadout par défaut
 export const DEFAULT_LOADOUT = {
-  tank:'standard', engine:'standard', wings:'standard', turbo:'none', alt_filter:'none',
+  tank:'standard', engine:'standard', wings:'standard', turbo:'none',
   ammo:'100', ap:'standard', calibre:'standard', firerate:'standard',
   missiles_aa:'none', missiles_ag:'none', tracking:'none', acquisition:'none', active_defense:'none',
-  armor:'none', resist:'none', cell_renforcee:'none', siege_blinde:'none',
+  armor:'none', resist:'none', structure:'none',
   repair:'standard', rearm:'standard', refuel:'standard', maintenance:'none',
-  radar:'standard', roll:'standard', tail_cam:'none',
+  radar:'standard', alt_filter:'none', roll:'standard', tail_cam:'none',
 };
 
 // Convertit un loadout en liste d'IDs d'upgrades legacy (pour computeStats, missileParams, etc.)
