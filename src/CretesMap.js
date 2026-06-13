@@ -14,13 +14,13 @@ const SIZE = 8000;
 // Villages côtiers près des bases + 2 villages aux extrémités N/S
 
 const PEAKS = [
-  [ 1400, -1000, 880, 580],  // grande montagne NE
-  [-1500,   600, 440, 1400], // grande montagne NO — base très étalée (face spawn)
-  [  800,  1700, 800, 540],  // montagne SE
-  [ -700, -1800, 755, 520],  // montagne SO
-  [  300,   200, 460, 460],  // massif central
-  [-1000,  -300, 510, 620],  // crête NO-centre
-  [ 1100,   900, 480, 440],  // crête E-centre
+  [ 1400, -1000, 500, 580],  // grande montagne NE
+  [-1500,   600, 340, 1400], // grande montagne NO — base très étalée (face spawn)
+  [  800,  1700, 460, 540],  // montagne SE
+  [ -700, -1800, 420, 520],  // montagne SO
+  [  300,   200, 300, 460],  // massif central
+  [-1000,  -300, 360, 620],  // crête NO-centre
+  [ 1100,   900, 320, 440],  // crête E-centre
 ];
 
 const LAKES = [
@@ -113,13 +113,25 @@ export class CretesMap {
       for (let i=0; i<4; i++) { v += vnoise(x*f+73.1, z*f+19.7)*a; s += a; a *= 0.5; f *= 3.1; }
       return (v/s - 0.5) * 2;
     };
-    const gauss = (wx, wz, px, pz, h, r) =>
-      h * Math.exp(-((wx-px)**2 + (wz-pz)**2) / (2*r*r));
+    const PEAK_MAXDEG = 32;
+    const _peakTan = Math.tan(PEAK_MAXDEG * Math.PI / 180);
+    const _sqE     = Math.sqrt(Math.E);
+    const smoother = (u) => u*u*u*(u*(u*6 - 15) + 10);
+    const gauss = (wx, wz, px, pz, h, r) => {
+      const coreR = Math.max(r, h / (_peakTan * _sqE));
+      const dd = (wx - px) * (wx - px) + (wz - pz) * (wz - pz);
+      const d  = Math.sqrt(dd);
+      const g  = h * Math.exp(-dd / (2 * coreR * coreR));
+      const Rin = coreR * 2.2, R = coreR * 3.4;
+      if (d <= Rin) return g;
+      if (d >= R)   return 0;
+      return g * (1 - smoother((d - Rin) / (R - Rin)));
+    };
 
     const getBase = (wx, wz) => {
       const d    = Math.sqrt(wx*wx + wz*wz);
       // Zone plate autour de l'origine pour le spawn central
-      const flat = Math.min(1, Math.max(0, (d - 80) / 120));
+      const flat = smoother(Math.min(1, Math.max(0, (d - 80) / 120)));
       const n    = fbm(wx * 0.003, wz * 0.003);
       const ridge = 1 - Math.abs(2*n - 1);
       const micro = detail(wx * 0.012, wz * 0.012) * 8;
@@ -253,6 +265,60 @@ export class CretesMap {
       for (let i = 0; i < vCount; i++) {
         const t = Math.max(0, Math.min(1, (ys[i] - 300) / 200));
         ys[i] = ys[i] * (1 - t * 0.7) + sm[i] * (t * 0.7);
+      }
+    }
+
+    // Plafond global — altitude max joueur = 1000 m
+    for (let i = 0; i < vCount; i++) ys[i] = Math.min(ys[i], 940);
+
+    // Cône de pente max (raise-only, borné) — filet de sécurité anti-murs résiduels
+    {
+      const _gg      = SEGS + 1;
+      const cellSize = SIZE / SEGS;
+      const maxStep  = cellSize * Math.tan(38 * Math.PI / 180); // ~22.3 u/cellule
+      const RAISE_MAX = 60;
+      const orig = ys.slice();
+
+      const locked = new Uint8Array(vCount);
+      for (let z = 0; z <= SEGS; z++) {
+        for (let x = 0; x <= SEGS; x++) {
+          const i  = z * _gg + x;
+          const wx = (x / SEGS - 0.5) * SIZE;
+          const wz = (z / SEGS - 0.5) * SIZE;
+          let lock = false;
+          if (Math.hypot(wx, wz) < 140) lock = true;
+          if (!lock) for (const ap of AIRPORTS) {
+            const cos = Math.cos(-ap.ang), sin = Math.sin(-ap.ang);
+            const lx  = (wx - ap.x) * cos - (wz - ap.z) * sin;
+            const lz  = (wx - ap.x) * sin + (wz - ap.z) * cos;
+            const flatHW = ap.wid / 2 + 22, flatHL = ap.len / 2 + 80;
+            if (Math.abs(lx) < flatHW + 10 && Math.abs(lz) < flatHL + 10) { lock = true; break; }
+          }
+          if (!lock) for (const v of VILLAGES)
+            if (Math.hypot(wx - v.x, wz - v.z) < v.outerR + 10) { lock = true; break; }
+          if (!lock) {
+            const nearAp = AIRPORTS.some(ap => Math.hypot(wx - ap.x, wz - ap.z) < 700);
+            if (!nearAp) for (const [lx, lz, lr] of LAKES)
+              if (Math.hypot(wx - lx, wz - lz) < lr) { lock = true; break; }
+          }
+          if (Math.max(Math.abs(wx), Math.abs(wz)) > 2900) lock = true;
+          locked[i] = lock ? 1 : 0;
+        }
+      }
+
+      const apply = (i, lim) => {
+        if (locked[i]) return;
+        if (lim > ys[i]) ys[i] = Math.min(lim, orig[i] + RAISE_MAX);
+      };
+      for (let it = 0; it < 6; it++) {
+        for (let z = 0; z <= SEGS; z++) for (let x = 1; x <= SEGS; x++)
+          apply(z*_gg+x, ys[z*_gg+x-1] - maxStep);
+        for (let z = 0; z <= SEGS; z++) for (let x = SEGS-1; x >= 0; x--)
+          apply(z*_gg+x, ys[z*_gg+x+1] - maxStep);
+        for (let x = 0; x <= SEGS; x++) for (let z = 1; z <= SEGS; z++)
+          apply(z*_gg+x, ys[(z-1)*_gg+x] - maxStep);
+        for (let x = 0; x <= SEGS; x++) for (let z = SEGS-1; z >= 0; z--)
+          apply(z*_gg+x, ys[(z+1)*_gg+x] - maxStep);
       }
     }
 
