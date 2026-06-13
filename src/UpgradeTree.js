@@ -598,32 +598,23 @@ export const EQUIPMENT_CATALOG = {
       { id:'ameliore',  name:'Améliorée',        icon:'≫',  levelReq:42, pros:['Cadence +20%'], cons:['Maniab. −3%','Carburant −5%','Logistique −6%'],      upgrades:['firerate'] },
     ]},
   }},
-  missiles_cat: { label:'MISSILES', icon:'⊕', slots:{
-    missiles_aa: { label:'MISSILES AA', options:[
-      { id:'none',  name:'Aucun',   icon:'○',  levelReq:1,  pros:[],                cons:[],                                                                        upgrades:[] },
-      { id:'2aa',   name:'×2 AA',   icon:'◎',  levelReq:20, pros:['Armement +20%'], cons:['Vitesse −4%','Maniab. −6%','Carburant −10%','Logistique −6%'],           upgrades:['missile_aa'] },
-      { id:'4aa',   name:'×4 AA',   icon:'◎',  levelReq:35, pros:['Armement +25%'], cons:['Vitesse −6%','Maniab. −9%','Carburant −13%','Logistique −9%'],           upgrades:['missile_aa','missile_imp1'] },
-      { id:'6aa',   name:'×6 AA',   icon:'◎',  levelReq:46, pros:['Armement +30%'], cons:['Vitesse −8%','Maniab. −12%','Carburant −16%','Logistique −12%'],         upgrades:['missile_aa','missile_imp1','missile_imp2'] },
-    ]},
-    missiles_ag: { label:'MISSILES AS', options:[
-      { id:'none',  name:'Aucun',   icon:'○',  levelReq:1,  pros:[],                cons:[],                                                                        upgrades:[] },
-      { id:'2ag',   name:'×2 AS',   icon:'▽',  levelReq:28, pros:['Armement +15%'], cons:['Vitesse −8%','Maniab. −8%','Carburant −18%','Logistique −12%'],          upgrades:['missile_ag'] },
-      { id:'4ag',   name:'×4 AS',   icon:'▽',  levelReq:44, pros:['Armement +20%'], cons:['Vitesse −12%','Maniab. −12%','Carburant −23%','Logistique −17%'],        upgrades:['missile_ag','missile_ag2'] },
-      { id:'6ag',   name:'×6 AS',   icon:'▽',  levelReq:54, pros:['Armement +25%'], cons:['Vitesse −16%','Maniab. −16%','Carburant −28%','Logistique −22%'],        upgrades:['missile_ag','missile_ag2','missile_ag3'] },
-    ]},
-    tracking: { label:'GUIDAGE', options:[
-      { id:'none',   name:'Standard',    icon:'—', levelReq:1,  pros:[],                                                   cons:[],                              upgrades:[] },
-      { id:'actif1', name:'Guidage I',   icon:'◎', levelReq:33, pros:['Agilité missile +','Piste +1.5s'],                 cons:['Logistique −3%'],              upgrades:['tracking1'] },
-      { id:'actif2', name:'Guidage II',  icon:'◉', levelReq:46, pros:['Ré-engage ×1','Piste +2.5s'],                     cons:['Logistique −5%'],              upgrades:['tracking1','tracking2'] },
-      { id:'ia',     name:'Guidage IA',  icon:'⦿', levelReq:55, pros:['Ré-engage toujours','Piste maximale'],             cons:['Logistique −8%'],              upgrades:['tracking1','tracking2','tracking3'] },
-    ]},
-    acquisition: { label:'ACQUISITION', options:[
-      { id:'none',    name:'Standard',  icon:'○',  levelReq:1,  pros:[],               cons:[],                   upgrades:[] },
-      { id:'rapide1', name:'Senseur I', icon:'◎',  levelReq:25, pros:['Lock −0.4s'],   cons:['Logistique −2%'],   upgrades:['lock_speed1'] },
-      { id:'rapide2', name:'Senseur II',icon:'◉',  levelReq:42, pros:['Lock −0.7s'],   cons:['Logistique −3%'],   upgrades:['lock_speed1','lock_speed2'] },
-    ]},
-  }},
   defense: { label:'DÉFENSE', icon:'⬡', slots:{
+    armor:  { label:'BLINDAGE', options:[
+      { id:'none',  name:'Aucun',  icon:'○',  levelReq:1,  pros:[],          cons:[],                                                                 upgrades:[] },
+      { id:'leger', name:'Léger',  icon:'◔',  levelReq:5,  pros:['+15 HP'],  cons:['Vitesse −2%','Carburant −4%','Logistique −3%'],                   upgrades:['armor1'] },
+      { id:'moyen', name:'Moyen',  icon:'◑',  levelReq:20, pros:['+35 HP','Dégâts −5%'],  cons:['Vitesse −7%','Maniab. −3%','Carburant −11%','Logistique −8%'],    upgrades:['armor1','armor2'] },
+      { id:'lourd', name:'Lourd',  icon:'●',  levelReq:38, pros:['+65 HP','Dégâts −10%'], cons:['Vitesse −15%','Maniab. −12%','Carburant −23%','Logistique −18%'], upgrades:['armor1','armor2','armor3'] },
+    ]},
+    structure: { label:'STRUCTURE', options:[
+      { id:'none',     name:'Standard',    icon:'○',  levelReq:1,  pros:[],                                              cons:[],                               upgrades:[] },
+      { id:'tier1',    name:'Renforcée I', icon:'⬡',  levelReq:8,  pros:['+10 HP','Collision −50%'],                    cons:['Vitesse −1%','Logistique −5%'], upgrades:['cell_renforcee'] },
+      { id:'tier2',    name:'Renforcée II',icon:'◈',  levelReq:28, pros:['+25 HP total','Collision −70%','Explosion −20%'], cons:['Vitesse −3%','Logistique −12%'], upgrades:['cell_renforcee','structure2'] },
+    ]},
+    resist: { label:'RÉSISTANCE', options:[
+      { id:'none',    name:'Aucune',         icon:'○',  levelReq:1,  pros:[],                          cons:[],                                               upgrades:[] },
+      { id:'turrets', name:'Anti-Tourelles', icon:'⬡',  levelReq:23, pros:['−15% dégâts (tourelles)'], cons:['Carburant −3%','Logistique −4%'],               upgrades:['resist_aa'] },
+      { id:'planes',  name:'Anti-Avions',    icon:'✈',  levelReq:38, pros:['−15% dégâts (avions)'],    cons:['Vitesse −2%','Carburant −4%','Logistique −5%'], upgrades:['resist_plane'] },
+    ]},
     active_defense: { label:'DÉFENSE ACTIVE', options:[
       { id:'none',          name:'Aucune',         icon:'○',  levelReq:1,  pros:[],                                        cons:[],                                                       upgrades:[] },
       { id:'leurres_1',     name:'Leurres I',       icon:'◉',  levelReq:23, pros:['2 leurres anti-missile'],               cons:['Maniab. −2%'],                                         upgrades:['decoy1'] },
@@ -642,21 +633,30 @@ export const EQUIPMENT_CATALOG = {
       { id:'shield_full_2', name:'Boucl. 360° II',  icon:'⊙',  levelReq:48, pros:['−30% tous dégâts','5s / cd 25s'],      cons:['Vitesse −15%','Maniab. −18%','Carburant −8%'],         upgrades:['shield_full1','shield_full2'] },
       { id:'shield_full_3', name:'Boucl. 360° III', icon:'⊙',  levelReq:55, pros:['−40% tous dégâts','7s / cd 18s'],      cons:['Vitesse −18%','Maniab. −21%','Carburant −12%'],        upgrades:['shield_full1','shield_full2','shield_full3'] },
     ]},
-    armor:  { label:'BLINDAGE', options:[
-      { id:'none',  name:'Aucun',  icon:'○',  levelReq:1,  pros:[],          cons:[],                                                                 upgrades:[] },
-      { id:'leger', name:'Léger',  icon:'◔',  levelReq:5,  pros:['+15 HP'],  cons:['Vitesse −2%','Carburant −4%','Logistique −3%'],                   upgrades:['armor1'] },
-      { id:'moyen', name:'Moyen',  icon:'◑',  levelReq:20, pros:['+35 HP','Dégâts −5%'],  cons:['Vitesse −7%','Maniab. −3%','Carburant −11%','Logistique −8%'],    upgrades:['armor1','armor2'] },
-      { id:'lourd', name:'Lourd',  icon:'●',  levelReq:38, pros:['+65 HP','Dégâts −10%'], cons:['Vitesse −15%','Maniab. −12%','Carburant −23%','Logistique −18%'], upgrades:['armor1','armor2','armor3'] },
+  }},
+  missiles_cat: { label:'MISSILES', icon:'⊕', slots:{
+    missiles_aa: { label:'MISSILES AA', options:[
+      { id:'none',  name:'Aucun',   icon:'○',  levelReq:1,  pros:[],                cons:[],                                                                        upgrades:[] },
+      { id:'2aa',   name:'×2 AA',   icon:'◎',  levelReq:20, pros:['Armement +20%'], cons:['Vitesse −4%','Maniab. −6%','Carburant −10%','Logistique −6%'],           upgrades:['missile_aa'] },
+      { id:'4aa',   name:'×4 AA',   icon:'◎',  levelReq:35, pros:['Armement +25%'], cons:['Vitesse −6%','Maniab. −9%','Carburant −13%','Logistique −9%'],           upgrades:['missile_aa','missile_imp1'] },
+      { id:'6aa',   name:'×6 AA',   icon:'◎',  levelReq:46, pros:['Armement +30%'], cons:['Vitesse −8%','Maniab. −12%','Carburant −16%','Logistique −12%'],         upgrades:['missile_aa','missile_imp1','missile_imp2'] },
     ]},
-    resist: { label:'RÉSISTANCE', options:[
-      { id:'none',    name:'Aucune',         icon:'○',  levelReq:1,  pros:[],                          cons:[],                                               upgrades:[] },
-      { id:'turrets', name:'Anti-Tourelles', icon:'⬡',  levelReq:23, pros:['−15% dégâts (tourelles)'], cons:['Carburant −3%','Logistique −4%'],               upgrades:['resist_aa'] },
-      { id:'planes',  name:'Anti-Avions',    icon:'✈',  levelReq:38, pros:['−15% dégâts (avions)'],    cons:['Vitesse −2%','Carburant −4%','Logistique −5%'], upgrades:['resist_plane'] },
+    acquisition: { label:'ACQUISITION', options:[
+      { id:'none',    name:'Standard',  icon:'○',  levelReq:1,  pros:[],               cons:[],                   upgrades:[] },
+      { id:'rapide1', name:'Senseur I', icon:'◎',  levelReq:25, pros:['Lock −0.4s'],   cons:['Logistique −2%'],   upgrades:['lock_speed1'] },
+      { id:'rapide2', name:'Senseur II',icon:'◉',  levelReq:42, pros:['Lock −0.7s'],   cons:['Logistique −3%'],   upgrades:['lock_speed1','lock_speed2'] },
     ]},
-    structure: { label:'STRUCTURE', options:[
-      { id:'none',     name:'Standard',    icon:'○',  levelReq:1,  pros:[],                                              cons:[],                               upgrades:[] },
-      { id:'tier1',    name:'Renforcée I', icon:'⬡',  levelReq:8,  pros:['+10 HP','Collision −50%'],                    cons:['Vitesse −1%','Logistique −5%'], upgrades:['cell_renforcee'] },
-      { id:'tier2',    name:'Renforcée II',icon:'◈',  levelReq:28, pros:['+25 HP total','Collision −70%','Explosion −20%'], cons:['Vitesse −3%','Logistique −12%'], upgrades:['cell_renforcee','structure2'] },
+    missiles_ag: { label:'MISSILES AS', options:[
+      { id:'none',  name:'Aucun',   icon:'○',  levelReq:1,  pros:[],                cons:[],                                                                        upgrades:[] },
+      { id:'2ag',   name:'×2 AS',   icon:'▽',  levelReq:28, pros:['Armement +15%'], cons:['Vitesse −8%','Maniab. −8%','Carburant −18%','Logistique −12%'],          upgrades:['missile_ag'] },
+      { id:'4ag',   name:'×4 AS',   icon:'▽',  levelReq:44, pros:['Armement +20%'], cons:['Vitesse −12%','Maniab. −12%','Carburant −23%','Logistique −17%'],        upgrades:['missile_ag','missile_ag2'] },
+      { id:'6ag',   name:'×6 AS',   icon:'▽',  levelReq:54, pros:['Armement +25%'], cons:['Vitesse −16%','Maniab. −16%','Carburant −28%','Logistique −22%'],        upgrades:['missile_ag','missile_ag2','missile_ag3'] },
+    ]},
+    tracking: { label:'GUIDAGE', options:[
+      { id:'none',   name:'Standard',    icon:'—', levelReq:1,  pros:[],                                                   cons:[],                              upgrades:[] },
+      { id:'actif1', name:'Guidage I',   icon:'◎', levelReq:33, pros:['Agilité missile +','Piste +1.5s'],                 cons:['Logistique −3%'],              upgrades:['tracking1'] },
+      { id:'actif2', name:'Guidage II',  icon:'◉', levelReq:46, pros:['Ré-engage ×1','Piste +2.5s'],                     cons:['Logistique −5%'],              upgrades:['tracking1','tracking2'] },
+      { id:'ia',     name:'Guidage IA',  icon:'⦿', levelReq:55, pros:['Ré-engage toujours','Piste maximale'],             cons:['Logistique −8%'],              upgrades:['tracking1','tracking2','tracking3'] },
     ]},
   }},
   logistics: { label:'LOGISTIQUE', icon:'⚙', slots:{
