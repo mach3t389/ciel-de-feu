@@ -1096,12 +1096,12 @@ export class Game {
 
   // Première vague : spawn en altitude autour de la base ennemie (ou dispersés en FFA)
   _spawnInitialWave(count, diff, playerBase, enemyBase, pickSkill, scattered = false) {
-    const attackCount  = Math.round(count * 0.45);
+    const attackCount  = Math.round(count * 0.65);
     const attackerOpts = {
       role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 650 }, leash: 1600,
     };
     const defenderOpts = {
-      role: 'defender', homeZone: { x: enemyBase.x, z: enemyBase.z, radius: 700 }, leash: 600, detect: 2200,
+      role: 'defender', homeZone: { x: enemyBase.x, z: enemyBase.z, radius: 700 }, leash: 800, detect: 2400,
     };
     // Niveaux d'altitude pour les défenseurs — répartition basse/moyenne/haute
     const _defAlt = () => {
@@ -1188,8 +1188,6 @@ export class Game {
     const playerBase = this._villageMap?.airports?.[0]?.center ?? new THREE.Vector3(0, 45, 0);
     const diff       = this._scaledDiff();
     const pickSkill  = () => { const r=Math.random(); return r<0.65?'regular':'ace'; };
-    // Tous attaquants sauf le dernier (un défenseur de base)
-    const attackCount = Math.max(count - 1, 0);
 
     for (let i = 0; i < count; i++) {
       const ang      = Math.random() * Math.PI * 2;
@@ -1199,18 +1197,8 @@ export class Game {
         enemyBase.y + 4 + i * 3,
         enemyBase.z + Math.sin(ang) * spread,
       );
-      const isAttacker = i < attackCount;
-      const baseOpts = isAttacker
-        ? { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 650 }, leash: 1600 }
-        : { role: 'defender', homeZone: { x: enemyBase.x,  z: enemyBase.z,  radius: 700 }, leash: 600, detect: 2200 };
-      const waveAltOpts = !isAttacker ? (() => {
-        const r = Math.random();
-        if (r < 0.35) return { minAlt: 90,  clearance: 50  };
-        if (r < 0.75) return {};
-        return          { minAlt: 380, clearance: 100 };
-      })() : {};
-      const opts = { ...baseOpts, ...waveAltOpts };
-
+      // Renforts = toujours attaquants (ils viennent se battre, pas garder la base)
+      const opts = { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 650 }, leash: 1600 };
       const enemy = new Enemy(this.scene, spawnPos, { hp: diff.hp, ...opts, skill: pickSkill(), preloadedScene: this._enemyModelScene });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(enemy);
@@ -1243,6 +1231,8 @@ export class Game {
     const enemyBase  = this._villageMap?.airports?.[1]?.center ?? new THREE.Vector3(800, 45, 800);
     const playerBase = this._villageMap?.airports?.[0]?.center ?? new THREE.Vector3(0, 45, 0);
 
+    // 65% attaquants fondent sur le joueur, 35% défenseurs patrouillent leur base
+    const defenderCount = Math.round(count * 0.35);
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
       const r   = 120 + Math.random() * 280;
@@ -1254,9 +1244,12 @@ export class Game {
       // Progression douce : rookies au départ, aces progressivement
       const aceChance = Math.min(0.65, 0.10 + this._survivalWave * 0.05);
       const skill = Math.random() < aceChance ? 'ace' : (Math.random() < 0.5 ? 'regular' : 'rookie');
+      const isDefender = i < defenderCount;
+      const opts = isDefender
+        ? { role: 'defender', homeZone: { x: enemyBase.x, z: enemyBase.z, radius: 700 }, leash: 900, detect: 2400 }
+        : { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 6000 }, leash: 7000 };
       const enemy = new Enemy(this.scene, sp, {
-        hp, skill, role: 'attacker',
-        homeZone: { x: playerBase.x, z: playerBase.z, radius: 6000 }, leash: 7000,
+        hp, skill, ...opts,
         preloadedScene: this._enemyModelScene,
       });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
