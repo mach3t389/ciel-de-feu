@@ -695,23 +695,23 @@ export const EQUIPMENT_CATALOG = {
   }},
   logistics: { label:'LOGISTIQUE', icon:'⚙', slots:{
     repair:      { label:'RÉPARATION', options:[
-      { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                       cons:[], upgrades:[] },
-      { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:8,  pros:['Réparation −20%','Logistique +10%'],   cons:[], upgrades:['repair1'] },
-      { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:20, pros:['Réparation −40%','Logistique +20%'],   cons:[], upgrades:['repair1','repair2'] },
+      { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                       cons:[],                      upgrades:[] },
+      { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:8,  pros:['Réparation −20%','Logistique +10%'],   cons:['Vitesse −2%'],         upgrades:['repair1'] },
+      { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:20, pros:['Réparation −40%','Logistique +20%'],   cons:['Vitesse −4%'],         upgrades:['repair1','repair2'] },
     ]},
     rearm:       { label:'RÉARMEMENT', options:[
-      { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                        cons:[], upgrades:[] },
-      { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:10, pros:['Réarmement −20%','Logistique +10%'],   cons:[], upgrades:['rearm1'] },
-      { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:22, pros:['Réarmement −40%','Logistique +20%'],   cons:[], upgrades:['rearm1','rearm2'] },
+      { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                        cons:[],                      upgrades:[] },
+      { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:10, pros:['Réarmement −20%','Logistique +10%'],   cons:['Maniab. −2%'],         upgrades:['rearm1'] },
+      { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:22, pros:['Réarmement −40%','Logistique +20%'],   cons:['Maniab. −4%'],         upgrades:['rearm1','rearm2'] },
     ]},
     refuel:      { label:'RAVITAILLEMENT', options:[
-      { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                          cons:[], upgrades:[] },
-      { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:12, pros:['Ravitaillement −20%','Logistique +10%'], cons:[], upgrades:['refuel1'] },
-      { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:25, pros:['Ravitaillement −40%','Logistique +20%'], cons:[], upgrades:['refuel1','refuel2'] },
+      { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                          cons:[],                      upgrades:[] },
+      { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:12, pros:['Ravitaillement −20%','Logistique +10%'], cons:['Maniab. −2%'],         upgrades:['refuel1'] },
+      { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:25, pros:['Ravitaillement −40%','Logistique +20%'], cons:['Maniab. −4%'],         upgrades:['refuel1','refuel2'] },
     ]},
     maintenance: { label:'MAINTENANCE', options:[
       { id:'none',   name:'Aucune',  icon:'○',  levelReq:1,  pros:[], cons:[], upgrades:[] },
-      { id:'active', name:'Avancée', icon:'✦',  levelReq:35, pros:['−10% tous les temps','Logistique +20%'], cons:[], upgrades:['maintenance'] },
+      { id:'active', name:'Avancée', icon:'✦',  levelReq:35, pros:['−10% tous les temps','Logistique +20%'], cons:['Vitesse −4%','Maniab. −4%','Carburant −6%'], upgrades:['maintenance'] },
     ]},
   }},
   equipements: { label:'ÉQUIPEMENTS', icon:'◈', slots:{
