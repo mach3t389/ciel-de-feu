@@ -10,6 +10,7 @@ import { TEAM_COLORS } from './Menu.js';
 import { ProgressionSystem, calcRewards, xpToNextLevel } from './ProgressionSystem.js';
 import { UPGRADES, computeStats, loadModifiers, missileParams, serviceTimeMult, activeDefenseParams, missileLoadPenalties } from './UpgradeTree.js';
 import { MissileSystem } from './MissileSystem.js';
+import { EnemyMissileManager } from './EnemyMissileManager.js';
 import { BocageMap } from './BocageMap.js';
 import { NormandyMap } from './NormandyMap.js';
 import { CretesMap } from './CretesMap.js';
@@ -100,7 +101,8 @@ export class Game {
     }
     this.cameraController = new CameraController(this.camera, this.player);
     this.bulletManager      = new BulletManager(this.scene);
-    this._enemyBulletManager = new EnemyBulletManager(this.scene);
+    this._enemyBulletManager  = new EnemyBulletManager(this.scene);
+    this._enemyMissileManager = new EnemyMissileManager(this.scene);
     this._alliedBulletManager = new BulletManager(this.scene); // tirs sol alliés → ennemis
     this._remoteBulletManager = new BulletManager(this.scene); // tirs des joueurs distants (visuel)
     this.ui            = new UI();
@@ -353,6 +355,11 @@ export class Game {
       this._shieldMesh       = null;
       this._initAACount = (['missile_aa','missile_imp1','missile_imp2'].filter(id => upgradeIds.includes(id)).length) * 2;
       this._initAGCount = (['missile_ag','missile_ag2','missile_ag3'].filter(id => upgradeIds.includes(id)).length) * 2;
+      // Prestige P1 : Arsenal unifié — missiles AS comptent comme AA
+      if ((this._progression?.prestigeSkills ?? []).includes('arsenal')) {
+        this._initAACount += this._initAGCount;
+        this._initAGCount = 0;
+      }
       const loadMod     = loadModifiers(stats.load);
 
       // Calculer les modificateurs de gameplay
@@ -371,6 +378,11 @@ export class Game {
         repairMult      : 1.0, rearmMult: 1.0, refuelMult: 1.0,
       };
 
+      // Prestige bonuses permanents
+      const _pSkills = this._progression?.prestigeSkills ?? [];
+      if (_pSkills.includes('cellule')) mods.healthBonus = (mods.healthBonus ?? 0) + 5;
+      if (_pSkills.includes('moteur'))  mods.speedMult   = (mods.speedMult   ?? 1) * 1.10;
+
       this.player.applyUpgradeModifiers(mods, stats.missiles, stats.decoys);
 
       // Pénalités dynamiques liées au chargement en missiles
@@ -383,9 +395,34 @@ export class Game {
       // Système de missiles
       this._missileSystem = new MissileSystem(this.scene, null);
       this._missileSystem.friendlyFire = !!this._config?.friendlyFire;
-      if (this.getTerrainHeight) this._missileSystem.setTerrainHeightFn(this.getTerrainHeight);
+      if (this.getTerrainHeight) {
+        this._missileSystem.setTerrainHeightFn(this.getTerrainHeight);
+        this._enemyMissileManager.setTerrainHeightFn(this.getTerrainHeight);
+      }
+
+      // Dégâts missile ennemi → joueur
+      this._enemyMissileManager.onPlayerHit = (dmg) => {
+        if (this.player.isDead) return;
+        const shieldMult = this._getShieldDmgMult?.(new THREE.Vector3(0, 0, -1)) ?? 1.0;
+        const reduced    = Math.round(dmg * shieldMult * (1 - (this._playerReduceDmg ?? 0)));
+        this.player.health = Math.max(0, this.player.health - reduced);
+        this.ui.showPlayerHit?.();
+        this._audio?.playPlayerHit?.();
+        this._audio?.playExplosion?.(0.6);
+      };
+      this._enemyMissileManager.onMissileFired = () => {
+        this.ui.showMissileIncoming?.();
+        this._audio?.playMissileIncoming?.();
+      };
+      this._enemyMissileManager.onAllGone = () => {
+        this.ui.hideMissileWarning?.();
+      };
       this._groundTargetCache = new Map();
       const msParams = missileParams(upgradeIds);
+      // Prestige P1 : Arsenal unifié — tous les missiles peuvent verrouiller des cibles aériennes
+      if (msParams && (this._progression?.prestigeSkills ?? []).includes('arsenal')) {
+        msParams.hasAA = true;
+      }
       if (msParams) {
         this._missileSystem.setParams(msParams);
         this.player.onFireMissile = () => {
@@ -413,6 +450,7 @@ export class Game {
           this.ui.setActiveDefenseStatus('leurres', this.player.decoyCount, this.player._maxDecoys);
           this._missileSystem.deployDecoy(this.player.pivot);
           this._missileSystem.removeDecoyPod?.();
+          this._enemyMissileManager.deployDecoy(this.player.position);
           this._audio?.playDecoy();
         };
       } else if (adParams?.type === 'ecm') {
@@ -454,7 +492,7 @@ export class Game {
         const tryAttach = (attempt = 0) => {
           const modelsReady = (stats.missiles <= 0 || this._missileSystem._modelAA);
           if (this.player.model && modelsReady) {
-            if (stats.missiles > 0) this._missileSystem.attachWingMissiles(this.player.model, upgradeIds, stats.missiles);
+            if (stats.missiles > 0) { this._missileSystem.attachWingMissiles(this.player.model, upgradeIds, stats.missiles); this._applyArsenalToWingSlots(); }
             if (stats.decoys   > 0) this._missileSystem.attachDecoyPods(this.player.model, stats.decoys);
           } else if (attempt < 20) {
             setTimeout(() => tryAttach(attempt + 1), 200);
@@ -636,6 +674,7 @@ export class Game {
     this._survivalKills         = 0;
     this._survivalCountdown     = 0;
     this._survivalBetweenWaves  = false;
+    this._souffleUsed           = false;  // Prestige P4 — reset each game
     if (isSurvival) {
       this.ui.setSurvivalMode(true);
       this._survivalBetweenWaves = true;
@@ -960,6 +999,26 @@ export class Game {
     enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat);
   }
 
+  // Câble les missiles ennemis sur un lourd ou un boss
+  _wireEnemyMissile(enemy, { cooldown, lockTime, trackQuality, range } = {}) {
+    enemy._missileCdMax   = cooldown     ?? 22;
+    enemy._missileCd      = (cooldown ?? 22) * (0.4 + Math.random() * 0.4);
+    enemy._missileLockReq = lockTime     ?? 2.5;
+    enemy._missileTrackQ  = trackQuality ?? 1;
+    enemy._missileRange   = range        ?? 1800;
+    const TRACK_TIMES  = [0, 3.5, 5.5];
+    const TURN_SPEEDS  = [0, 3.0, 4.5];
+    const q = Math.min(2, trackQuality ?? 1);
+    enemy.onFireMissile = (pos, dir, tq) => {
+      const qi = Math.min(2, tq ?? 1);
+      this._enemyMissileManager.fire(pos, dir, {
+        damage    : 35,
+        trackTime : TRACK_TIMES[qi],
+        turnSpeed : TURN_SPEEDS[qi],
+      });
+    };
+  }
+
   // IA d'équipe (TDM) : spawn `count` avions d'une faction près de sa base.
   // Allié → tirs dans _alliedBulletManager (touchent les ennemis), avion bleu.
   // Ennemi → tirs dans _enemyBulletManager (touchent le joueur + les IA alliées).
@@ -1118,19 +1177,17 @@ export class Game {
     const defenderOpts = {
       role: 'defender', homeZone: { x: enemyBase.x, z: enemyBase.z, radius: 700 }, leash: 800, detect: 2400,
     };
-    // Niveaux d'altitude pour les défenseurs — répartition basse/moyenne/haute
     const _defAlt = () => {
       const r = Math.random();
-      if (r < 0.35) return { minAlt: 90,  clearance: 50  }; // bas — couvert par les tourelles
-      if (r < 0.75) return {};                                // moyen — défaut
-      return          { minAlt: 380, clearance: 100 };       // haut — couverture aérienne
+      if (r < 0.35) return { minAlt: 90,  clearance: 50  };
+      if (r < 0.75) return {};
+      return          { minAlt: 380, clearance: 100 };
     };
     const roamOpts = {
       role: 'attacker', homeZone: { x: 0, z: 0, radius: 3000 }, leash: 4000,
     };
     const mkSpawn = () => {
       if (scattered) {
-        // Dispersés aléatoirement sur la carte
         const ang = Math.random() * Math.PI * 2;
         const r   = 400 + Math.random() * 1800;
         return new THREE.Vector3(Math.cos(ang)*r, 200 + Math.random()*200, Math.sin(ang)*r);
@@ -1139,33 +1196,64 @@ export class Game {
       const r   = 180 + Math.random() * 280;
       return new THREE.Vector3(enemyBase.x + Math.cos(ang)*r, 200 + Math.random()*120, enemyBase.z + Math.sin(ang)*r);
     };
+
+    // Proportion d'ennemis lourds (bleu) selon la difficulté — 0% facile → 50% expert
+    const heavyChance = scattered ? 0
+      : ({ easy: 0, standard: 0.20, hard: 0.35, expert: 0.50 }[this._config?.difficulty] ?? 0.20);
+    const _mkEnemyType = () => {
+      const isHeavy = Math.random() < heavyChance;
+      return {
+        isHeavy,
+        hp     : Math.round(diff.hp * (isHeavy ? 1.5 : 1.0)),
+        scale  : isHeavy ? 1.15 : 1.0,
+        speed  : isHeavy ? 0.88 : 1.0,
+        dmg    : isHeavy ? 11   : 7,
+        model  : isHeavy ? (this._survModelBleu ?? this._enemyModelScene) : (this._survModelRouge ?? this._enemyModelScene),
+      };
+    };
+
     let created = 0;
     while (created < count) {
-      const remaining  = count - created;
-      const groupSize  = remaining > 2 ? (Math.random() < 0.4 ? 3 : 2) : 1;
+      const remaining = count - created;
+      const groupSize = remaining > 2 ? (Math.random() < 0.4 ? 3 : 2) : 1;
       const baseOpts  = scattered ? roamOpts : (created < attackCount ? attackerOpts : defenderOpts);
       const altOpts   = (!scattered && created >= attackCount) ? _defAlt() : {};
       const opts      = { ...baseOpts, ...altOpts };
       const skill     = pickSkill();
       const spawn     = mkSpawn();
+      const type      = _mkEnemyType(); // même type pour leader + ailiers du groupe
 
-      const leader = new Enemy(this.scene, spawn.clone(), { hp: diff.hp, ...opts, skill, preloadedScene: this._enemyModelScene });
+      const leader = new Enemy(this.scene, spawn.clone(), {
+        hp: type.hp, ...opts, skill,
+        scale: type.scale, speedMult: type.speed,
+        naturalColor: true, preloadedScene: type.model,
+      });
       leader.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(leader);
+      if (type.dmg !== 7) leader.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
+      if (type.isHeavy && this._config?.difficulty !== 'easy') {
+        this._wireEnemyMissile(leader, { cooldown: 20, lockTime: 3.0, trackQuality: 1, range: 1800 });
+      }
       this.enemies.push(leader);
       created++;
 
       const wingCount = Math.min(groupSize - 1, remaining - 1);
       for (let w = 0; w < wingCount && created < count; w++) {
-        const side   = w % 2 === 0 ? -1 : 1;
-        const offset = new THREE.Vector3(side*(32+w*14), 5+w*3, -24-w*10);
-        const wPos   = spawn.clone().add(new THREE.Vector3(side*52, 0, -42));
+        const side    = w % 2 === 0 ? -1 : 1;
+        const offset  = new THREE.Vector3(side*(32+w*14), 5+w*3, -24-w*10);
+        const wPos    = spawn.clone().add(new THREE.Vector3(side*52, 0, -42));
         const wingman = new Enemy(this.scene, wPos, {
-          hp: diff.hp, role: 'wingman', leader, wingOffset: offset,
-          homeZone: opts.homeZone, leash: opts.leash, skill, preloadedScene: this._enemyModelScene,
+          hp: type.hp, role: 'wingman', leader, wingOffset: offset,
+          homeZone: opts.homeZone, leash: opts.leash, skill,
+          scale: type.scale, speedMult: type.speed,
+          naturalColor: true, preloadedScene: type.model,
         });
         wingman.getTerrainHeight = this.getTerrainHeight ?? null;
         this._wireEnemyFire(wingman);
+        if (type.dmg !== 7) wingman.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
+        if (type.isHeavy && this._config?.difficulty !== 'easy') {
+          this._wireEnemyMissile(wingman, { cooldown: 30, lockTime: 3.2, trackQuality: 1, range: 1600 });
+        }
         this.enemies.push(wingman);
         created++;
       }
@@ -1203,6 +1291,7 @@ export class Game {
     const playerBase = this._villageMap?.airports?.[0]?.center ?? new THREE.Vector3(0, 45, 0);
     const diff       = this._scaledDiff();
     const pickSkill  = () => { const r=Math.random(); return r<0.65?'regular':'ace'; };
+    const heavyChance = { easy: 0, standard: 0.20, hard: 0.35, expert: 0.50 }[this._config?.difficulty] ?? 0.20;
 
     for (let i = 0; i < count; i++) {
       const ang      = Math.random() * Math.PI * 2;
@@ -1212,14 +1301,31 @@ export class Game {
         enemyBase.y + 4 + i * 3,
         enemyBase.z + Math.sin(ang) * spread,
       );
-      // Renforts = toujours attaquants (ils viennent se battre, pas garder la base)
-      const opts = { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 650 }, leash: 1600 };
-      const enemy = new Enemy(this.scene, spawnPos, { hp: diff.hp, ...opts, skill: pickSkill(), preloadedScene: this._enemyModelScene });
+      const opts    = { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 650 }, leash: 1600 };
+      const isHeavy = Math.random() < heavyChance;
+      const tHp    = Math.round(diff.hp * (isHeavy ? 1.5 : 1.0));
+      const tModel = isHeavy ? (this._survModelBleu ?? this._enemyModelScene) : (this._survModelRouge ?? this._enemyModelScene);
+      const tDmg   = isHeavy ? 11 : 7;
+      const enemy  = new Enemy(this.scene, spawnPos, {
+        hp: tHp, ...opts, skill: pickSkill(),
+        scale: isHeavy ? 1.15 : 1.0, speedMult: isHeavy ? 0.88 : 1.0,
+        naturalColor: true, preloadedScene: tModel,
+      });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(enemy);
+      if (tDmg !== 7) enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, tDmg);
+      if (isHeavy && this._config?.difficulty !== 'easy') {
+        this._wireEnemyMissile(enemy, { cooldown: 20, lockTime: 3.0, trackQuality: 1, range: 1800 });
+      }
       this.enemies.push(enemy);
     }
     this._missionSpawned += count;
+  }
+
+  // Prestige P1 — Arsenal unifié : convertit tous les slots AG en AA visuellement et logiquement
+  _applyArsenalToWingSlots() {
+    if (!(this._progression?.prestigeSkills ?? []).includes('arsenal')) return;
+    (this._missileSystem?._wingSlots ?? []).forEach(s => { if (s) s.type = 'aa'; });
   }
 
   // ── Vague survie ─────────────────────────────────────────────────────────
@@ -1258,11 +1364,47 @@ export class Game {
     // Clients multi : attendent survival_wave_config du réseau (listener dans _startGame)
   }
 
+  // Ravitaillement instantané gratuit (toutes les 10 vagues en survie)
+  _doFreeResupply() {
+    const p    = this.player;
+    const upgIds = this._progression?.getUpgrades(this._progression?.activePlane ?? 0) ?? [];
+    p.fuel   = p._maxFuelOverride  ?? 100;
+    p.ammo   = p._maxAmmoOverride  ?? 200;
+    p.health = 100 + (p._upgMods?.healthBonus ?? 0);
+
+    if (p._maxMissiles > 0) {
+      p.missileCount = p._maxMissiles;
+      this._updateMissileLoadMods();
+      if (this._missileSystem && p.model) {
+        this._missileSystem.attachWingMissiles(p.model, upgIds, p.missileCount);
+        this._applyArsenalToWingSlots();
+      }
+      this.ui.setMissileCount(
+        this._missileSystem?.missilesRemainingAA ?? 0, this._initAACount ?? 0,
+        this._missileSystem?.missilesRemainingAG ?? 0, this._initAGCount ?? 0,
+      );
+    }
+    if (p._maxDecoys > 0) {
+      p.decoyCount = p._maxDecoys;
+      this.ui.setActiveDefenseStatus('leurres', p.decoyCount, p._maxDecoys);
+      if (this._missileSystem && p.model) this._missileSystem.attachDecoyPods(p.model, p.decoyCount);
+    }
+    this._missileAccum = 0;
+    this._decoyAccum   = 0;
+    this.ui.showTip?.(t('freeResupply'), 5, { dismissible: false });
+    this._audio?.playRefuelTick?.();
+  }
+
   // Génère la config complète d'une vague (tous les tirages aléatoires centralisés ici)
   _buildSurvivalWaveConfig(count, hp, survMult) {
     const w           = this._survivalWave;
+    const sm          = survMult ?? 1;
+    const hpNormal    = Math.min(60,  Math.round(35 * sm));
+    const hpHeavy     = Math.min(300, Math.round((55 + w * 4) * sm));
     const isBossWave  = w % 5 === 0;
-    const heavyChance = Math.min(0.55, w * 0.025);
+    const _dhTable    = { easy: { m:0, c:0 }, standard: { m:0.028, c:0.50 }, hard: { m:0.040, c:0.72 }, expert: { m:0.055, c:0.88 } };
+    const _dh         = _dhTable[this._config?.difficulty] ?? _dhTable.standard;
+    const heavyChance = Math.min(_dh.c, w * _dh.m);
     const aceChance   = Math.min(0.65, 0.10 + w * 0.05);
     const defCount    = Math.round(count * 0.35);
 
@@ -1278,8 +1420,10 @@ export class Game {
     return {
       wave      : w,
       hp,
+      hpNormal,
+      hpHeavy,
       isBossWave,
-      bossHp    : isBossWave ? Math.min(1500, Math.round((150 + w * 50) * (survMult ?? 1))) : 0,
+      bossHp    : isBossWave ? Math.min(1500, Math.round((150 + w * 50) * sm)) : 0,
       bossAng   : isBossWave ? Math.random() * Math.PI * 2 : 0,
       bossAlt   : isBossWave ? Math.random() * 80 : 0,
       enemies,
@@ -1308,7 +1452,7 @@ export class Game {
         : (this._survModelRouge ?? this._enemyModelScene);
 
       const enemy = new Enemy(this.scene, sp, {
-        hp: Math.min(350, Math.round(cfg.hp * (e.isHeavy ? 1.5 : 1.0))),
+        hp: e.isHeavy ? (cfg.hpHeavy ?? Math.round(cfg.hp * 1.5)) : (cfg.hpNormal ?? cfg.hp),
         skill: e.skill, ...opts,
         scale: tScale, speedMult: tSpeed,
         naturalColor: true,
@@ -1317,6 +1461,16 @@ export class Game {
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(enemy);
       if (tDmg !== 7) enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, tDmg);
+      // Missiles ennemis : lourds uniquement, pas en facile
+      if (e.isHeavy && this._config?.difficulty !== 'easy') {
+        const w = cfg.wave ?? 1;
+        this._wireEnemyMissile(enemy, {
+          cooldown    : Math.max(12, 28 - w * 0.4),
+          lockTime    : 2.8,
+          trackQuality: w >= 15 ? 2 : 1,
+          range       : 1800,
+        });
+      }
       this.enemies.push(enemy);
     }
 
@@ -1337,6 +1491,9 @@ export class Game {
       boss.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(boss);
       boss.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, 15);
+      if (this._config?.difficulty !== 'easy') {
+        this._wireEnemyMissile(boss, { cooldown: 10, lockTime: 2.0, trackQuality: 2, range: 2200 });
+      }
       this.enemies.push(boss);
       this.ui.showTip(t('bossWarning'), 5, { dismissible: false });
     }
@@ -1844,6 +2001,7 @@ export class Game {
       const dc = this._initDecoyCount   ?? 0;
       if (mc > 0) {
         this._missileSystem.attachWingMissiles(this.player.model, this._upgradeIds ?? [], mc);
+        this._applyArsenalToWingSlots();
         this._missileSystem._fireWingIdx = 0;
         p.missileCount = mc;
         this.ui.setMissileCount(
@@ -2049,6 +2207,22 @@ export class Game {
     // ── Défense active (ECM / boucliers) ─────────────────────────────────────
     if (this._adParams) this._tickActiveDefense(delta);
 
+    // ── Recharge passive des leurres (1 toutes les 45s, hors aéroport) ───────
+    if (this._adParams?.type === 'leurres' && !this.player.isDead) {
+      const p = this.player;
+      if ((p.decoyCount ?? 0) < (p._maxDecoys ?? 0)) {
+        this._decoyRechargeT = (this._decoyRechargeT ?? 0) + delta;
+        if (this._decoyRechargeT >= 45) {
+          this._decoyRechargeT = 0;
+          p.decoyCount = Math.min(p._maxDecoys, (p.decoyCount ?? 0) + 1);
+          this.ui.setActiveDefenseStatus('leurres', p.decoyCount, p._maxDecoys);
+          if (p.model) this._missileSystem.attachDecoyPods?.(p.model, p.decoyCount);
+        }
+      } else {
+        this._decoyRechargeT = 0;
+      }
+    }
+
     // ── Esquive joueur → imprécision ennemis ──────────────────────────────────
     // Plus le joueur manie l'appareil rapidement, plus les ennemis ratent.
     {
@@ -2183,6 +2357,14 @@ export class Game {
 
     // Mort du joueur
     if (this._playerWasAlive && this.player.isDead) {
+      // Prestige P4 — Dernier souffle : survivre une fois à 1 HP
+      if (!this._souffleUsed && this._progression?.hasPrestigeSkill?.('souffle')) {
+        this._souffleUsed   = true;
+        this.player.health  = 1;
+        this.player.isDead  = false;
+        this.ui.showTip?.(t('prestigeSouffleActivated'), 4, { dismissible: false });
+        this._playerWasAlive = true;
+      } else {
       this.stats.deaths++;
       this._bumpLifetime('stats_deaths');
       document.exitPointerLock();
@@ -2212,10 +2394,20 @@ export class Game {
           });
         }
       }
+      } // fin else (pas de dernier souffle)
     }
     this._playerWasAlive = !this.player.isDead;
     this.bulletManager.update(delta);
     this._enemyBulletManager.update(delta);
+    this._enemyMissileManager.update(delta, this.player.isDead ? null : this.player.position);
+
+    // Alarme HUD lock missile ennemi
+    const anyLocking = !this.player.isDead &&
+      (this.enemies ?? []).some(e => !e.isDead && e.missileLocking);
+    if (anyLocking) {
+      this.ui.showMissileLock?.();
+      this._audio?.playMissileLock?.();
+    }
     this._alliedBulletManager.update(delta);
     this._remoteBulletManager.update(delta);
 
@@ -2514,6 +2706,10 @@ export class Game {
         if (aliveCount === 0) {
           this._survivalBetweenWaves = true;
           this._survivalCountdown    = 10;
+          // Ravitaillement gratuit toutes les 10 vagues
+          if (this._survivalWave > 0 && this._survivalWave % 10 === 0 && !this.player.isDead) {
+            this._doFreeResupply();
+          }
         }
       }
     }
@@ -2661,6 +2857,7 @@ export class Game {
                   this._updateMissileLoadMods();
                   if (this._missileSystem && p.model) {
                     this._missileSystem.attachWingMissiles(p.model, upgIds, p.missileCount);
+                    this._applyArsenalToWingSlots();
                   }
                   this.ui.setMissileCount(
                     this._missileSystem?.missilesRemainingAA ?? 0, this._initAACount ?? 0,

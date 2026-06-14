@@ -1855,6 +1855,138 @@ export class Menu {
     return frag;
   }
 
+  // ── Modal Prestige ───────────────────────────────────────────────────────
+  _showPrestigeModal() {
+    if (!this._progression?.canPrestige?.()) return;
+    const prog = this._progression;
+
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', zIndex: '9000',
+      background: 'rgba(0,0,0,0.85)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center',
+      backdropFilter: 'blur(4px)',
+    });
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      background: 'rgba(10,10,8,0.98)', border: `1px solid ${M.yellow}`,
+      borderRadius: '8px', padding: '36px 40px', maxWidth: '520px', width: '90vw',
+      fontFamily: 'Rajdhani, sans-serif', color: M.cream,
+      boxShadow: `0 0 40px ${M.yellow}33`,
+    });
+
+    const title = document.createElement('div');
+    title.textContent = t('prestigeTitle');
+    Object.assign(title.style, { fontSize:'18px', letterSpacing:'3px', color: M.yellow, fontWeight:'700', marginBottom:'8px' });
+
+    const sub = document.createElement('div');
+    sub.textContent = t('prestigeSub');
+    Object.assign(sub.style, { fontSize:'12px', letterSpacing:'1px', color: M.dimCream, marginBottom:'6px' });
+
+    const warn = document.createElement('div');
+    warn.textContent = t('prestigeWarning');
+    Object.assign(warn.style, { fontSize:'11px', letterSpacing:'1px', color:'#ff9944', marginBottom:'24px' });
+
+    const SKILLS = [
+      { id:'arsenal', name: t('prestigeSkillArsenal'), desc: t('prestigeSkillArsenalD') },
+      { id:'cellule', name: t('prestigeSkillCellule'), desc: t('prestigeSkillCelluleD') },
+      { id:'moteur',  name: t('prestigeSkillMoteur'),  desc: t('prestigeSkillMoteurD')  },
+      { id:'souffle', name: t('prestigeSkillSouffle'), desc: t('prestigeSkillSouffleD') },
+    ];
+
+    let selected = null;
+    const cards  = [];
+    const grid   = document.createElement('div');
+    Object.assign(grid.style, { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'24px' });
+
+    for (const skill of SKILLS) {
+      const owned = prog.hasPrestigeSkill(skill.id);
+      const card  = document.createElement('div');
+      Object.assign(card.style, {
+        padding: '14px', borderRadius: '6px',
+        border: owned ? `1px solid ${M.yellow}66` : `1px solid ${M.border}`,
+        background: owned ? `${M.yellow}0a` : 'rgba(20,20,15,0.6)',
+        cursor: owned ? 'default' : 'pointer',
+        opacity: owned ? '0.6' : '1',
+        transition: 'all 0.15s', position: 'relative',
+      });
+      const cName = document.createElement('div');
+      cName.textContent = skill.name;
+      Object.assign(cName.style, { fontSize:'13px', letterSpacing:'2px', fontWeight:'700', color: owned ? M.yellow : M.cream, marginBottom:'6px' });
+      const cDesc = document.createElement('div');
+      cDesc.textContent = skill.desc;
+      Object.assign(cDesc.style, { fontSize:'11px', letterSpacing:'0.5px', color: M.dimCream, lineHeight:'1.5' });
+      if (owned) {
+        const badge = document.createElement('div');
+        badge.textContent = t('prestigeAlready');
+        Object.assign(badge.style, { position:'absolute', top:'8px', right:'10px', fontSize:'10px', color: M.yellow, letterSpacing:'1px' });
+        card.appendChild(badge);
+      }
+      card.appendChild(cName);
+      card.appendChild(cDesc);
+      if (!owned) {
+        card.addEventListener('mouseover', () => { if (selected !== skill.id) { card.style.borderColor = `${M.yellow}88`; card.style.background = `${M.yellow}12`; } });
+        card.addEventListener('mouseout',  () => { if (selected !== skill.id) { card.style.borderColor = M.border; card.style.background = 'rgba(20,20,15,0.6)'; } });
+        card.addEventListener('click', () => {
+          selected = skill.id;
+          cards.forEach((c, i) => {
+            if (!prog.hasPrestigeSkill(SKILLS[i].id)) {
+              c.style.borderColor = SKILLS[i].id === selected ? M.yellow : M.border;
+              c.style.background  = SKILLS[i].id === selected ? `${M.yellow}1a` : 'rgba(20,20,15,0.6)';
+            }
+          });
+          confirmBtn.disabled = false;
+          confirmBtn.style.opacity = '1';
+          confirmBtn.style.cursor  = 'pointer';
+        });
+      }
+      cards.push(card);
+      grid.appendChild(card);
+    }
+
+    const btnRow = document.createElement('div');
+    Object.assign(btnRow.style, { display:'flex', gap:'12px', justifyContent:'flex-end' });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = t('prestigeCancel');
+    Object.assign(cancelBtn.style, {
+      background:'transparent', border:`1px solid ${M.border}`, color: M.dimCream,
+      fontFamily:'Rajdhani, sans-serif', fontSize:'13px', letterSpacing:'2px',
+      padding:'10px 24px', cursor:'pointer', borderRadius:'4px', transition:'all 0.15s',
+    });
+    cancelBtn.addEventListener('mouseover', () => { cancelBtn.style.borderColor = M.cream; cancelBtn.style.color = M.cream; });
+    cancelBtn.addEventListener('mouseout',  () => { cancelBtn.style.borderColor = M.border; cancelBtn.style.color = M.dimCream; });
+    cancelBtn.addEventListener('click', () => overlay.remove());
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = t('prestigeConfirm');
+    confirmBtn.disabled = true;
+    Object.assign(confirmBtn.style, {
+      background: `${M.yellow}22`, border:`1px solid ${M.yellow}`,
+      color: M.yellow, fontFamily:'Rajdhani, sans-serif', fontSize:'13px',
+      letterSpacing:'2px', fontWeight:'700', padding:'10px 24px',
+      cursor:'not-allowed', borderRadius:'4px', transition:'all 0.15s', opacity:'0.4',
+    });
+    confirmBtn.addEventListener('mouseover', () => { if (!confirmBtn.disabled) { confirmBtn.style.background = `${M.yellow}33`; } });
+    confirmBtn.addEventListener('mouseout',  () => { if (!confirmBtn.disabled) { confirmBtn.style.background = `${M.yellow}22`; } });
+    confirmBtn.addEventListener('click', () => {
+      if (!selected || !prog.prestige?.(selected)) return;
+      overlay.remove();
+      this._refreshProfileBar();
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(confirmBtn);
+    box.appendChild(title);
+    box.appendChild(sub);
+    box.appendChild(warn);
+    box.appendChild(grid);
+    box.appendChild(btnRow);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+
   // ── Paramètres ─────────────────────────────────────────────────────────────
   _showSettings() {
     const returnFn = this._settingsReturn || (() => this._showMain());
@@ -3326,6 +3458,31 @@ export class Menu {
     gearBtn.style.fontSize = '16px';
     gearBtn.style.padding = '4px 12px';
 
+    // Bouton Prestige — visible uniquement au niveau 50, disparaît après 4 prestiges
+    const prestigeBtn = document.createElement('button');
+    prestigeBtn.textContent = t('prestigeBtn');
+    Object.assign(prestigeBtn.style, {
+      pointerEvents: 'auto',
+      background   : `linear-gradient(135deg, ${M.yellow}22, rgba(255,180,0,0.08))`,
+      border       : `1px solid ${M.yellow}`,
+      color        : M.yellow,
+      fontFamily   : 'Rajdhani, sans-serif',
+      fontSize     : '12px',
+      letterSpacing: '2px',
+      fontWeight   : '700',
+      padding      : '7px 14px',
+      cursor       : 'pointer',
+      borderRadius : '4px',
+      display      : 'none',
+      transition   : 'all 0.15s',
+      textShadow   : `0 0 8px ${M.yellow}66`,
+    });
+    prestigeBtn.addEventListener('mouseover', () => { prestigeBtn.style.background = `${M.yellow}22`; prestigeBtn.style.boxShadow = `0 0 12px ${M.yellow}44`; });
+    prestigeBtn.addEventListener('mouseout',  () => { prestigeBtn.style.background = `linear-gradient(135deg, ${M.yellow}22, rgba(255,180,0,0.08))`; prestigeBtn.style.boxShadow = 'none'; });
+    prestigeBtn.addEventListener('click', () => this._showPrestigeModal());
+    this._prestigeBtn = prestigeBtn;
+
+    right.appendChild(prestigeBtn);
     right.appendChild(langBtn);
     right.appendChild(gearBtn);
 
@@ -3381,6 +3538,7 @@ export class Menu {
     const n = prog.newOptionCount?.() ?? 0;
     if (badge) badge.style.display = n > 0 ? 'block' : 'none';
     if (this._profileLangBtn) this._profileLangBtn.textContent = getLang() === 'fr' ? 'EN' : 'FR';
+    if (this._prestigeBtn) this._prestigeBtn.style.display = prog.canPrestige?.() ? 'block' : 'none';
     if (this._planeSelectorBtn && this._progression) {
       const idx  = this._progression.activePlane;
       const pname = (this._progression.getPlane(idx)?.name || `AVION ${idx + 1}`).toUpperCase();

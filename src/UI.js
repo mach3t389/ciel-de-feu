@@ -152,6 +152,32 @@ export class UI {
 
   showHitMarker()   { this._hitMarkerTimer  = 0.22; }
   showPlayerHit()   { this._playerHitTimer  = 0.45; }
+
+  // ── Alarmes missiles ennemis ──────────────────────────────────────────────
+  showMissileLock() {
+    if (!this._alertMissileLockEl) return;
+    this._alertMissileLockEl.style.display = 'block';
+    this._alertMissileLockEl.style.opacity = '1';
+    clearTimeout(this._missileLockHideT);
+    this._missileLockHideT = setTimeout(() => {
+      if (this._alertMissileLockEl) this._alertMissileLockEl.style.display = 'none';
+    }, 400);
+  }
+
+  showMissileIncoming() {
+    if (!this._alertMissileIncomingEl) return;
+    this._alertMissileIncomingEl.style.display = 'block';
+    this._alertMissileIncomingEl.style.opacity = '1';
+    clearTimeout(this._missileIncomingHideT);
+    this._missileIncomingHideT = setTimeout(() => {
+      if (this._alertMissileIncomingEl) this._alertMissileIncomingEl.style.display = 'none';
+    }, 4000);
+  }
+
+  hideMissileWarning() {
+    if (this._alertMissileIncomingEl) this._alertMissileIncomingEl.style.display = 'none';
+    if (this._alertMissileLockEl)     this._alertMissileLockEl.style.display = 'none';
+  }
   showMuzzleFlash() { this._muzzleFlashTimer = 0.07; }
 
   showRefuelComplete() {
@@ -1234,10 +1260,14 @@ export class UI {
     this._topCenter.appendChild(this._missionPanel);
 
     // Alertes ressources basses — intégrées dans le flux flex pour éviter tout overlap
-    this._alertFuelEl   = this._mkAlertEl('alertFuel',   '#ff9900');
-    this._alertHealthEl = this._mkAlertEl('alertHealth', '#ff3333');
+    this._alertFuelEl     = this._mkAlertEl('alertFuel',     '#ff9900');
+    this._alertHealthEl   = this._mkAlertEl('alertHealth',   '#ff3333');
+    this._alertMissileLockEl     = this._mkAlertEl('alertMissileLock',     '#ff2222');
+    this._alertMissileIncomingEl = this._mkAlertEl('alertMissileIncoming', '#ff0000');
     this._topCenter.appendChild(this._alertFuelEl);
     this._topCenter.appendChild(this._alertHealthEl);
+    this._topCenter.appendChild(this._alertMissileLockEl);
+    this._topCenter.appendChild(this._alertMissileIncomingEl);
 
     // Indicateur moteur coupé / posé (sous le panneau mission)
     this._engineStatus = document.createElement('div');

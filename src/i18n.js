@@ -134,8 +134,10 @@ const LANGS = {
     gyroActive      : 'Gyroscope actif',
 
     // ── Alertes HUD ──────────────────────────────────────────────────────────
-    alertFuel   : '⚠ CARBURANT FAIBLE',
-    alertHealth : '⚠ ÉTAT CRITIQUE',
+    alertFuel            : '⚠ CARBURANT FAIBLE',
+    alertHealth          : '⚠ ÉTAT CRITIQUE',
+    alertMissileLock     : '⚠ VERROUILLAGE MISSILE',
+    alertMissileIncoming : '⚠ MISSILE ENTRANT',
 
     // ── Statistiques détaillées ───────────────────────────────────────────────
     gamesPlayed    : 'PARTIES JOUÉES',
@@ -441,6 +443,31 @@ const LANGS = {
     tutControls    : 'SHIFT accélérer  ·  W/S monter/descendre  ·  A/D virer  ·  ESPACE tirer',
     tutShoot       : 'ESPACE pour tirer\nVisez les avions ennemis (rouge)',
     tutLand        : 'Posez-vous sur la piste\npour ravitailler et réparer',
+
+    // ── Survie ───────────────────────────────────────────────────────────────
+    freeResupply   : '✦ RAVITAILLEMENT OFFERT',
+
+    // ── Slot description missile_power ────────────────────────────────────────
+    slotDesc_missile_power : 'Puissance des ogives missiles : dégâts directs par impact. Plus lourdes à niveau élevé.',
+
+    // ── Prestige ─────────────────────────────────────────────────────────────
+    prestigeBtn            : '★ PRESTIGE',
+    prestigeTitle          : 'PRESTIGE — NIVEAU 50 ATTEINT',
+    prestigeSub            : 'Réinitialisez votre niveau et débloquez un avantage permanent pour toujours.',
+    prestigeWarning        : '⚠ Votre niveau sera remis à 1. Crédits et améliorations conservés.',
+    prestigeConfirm        : 'CONFIRMER',
+    prestigeCancel         : 'ANNULER',
+    prestigeAlready        : '✓ Obtenu',
+    prestigeLevel          : 'PRESTIGE',
+    prestigeSkillArsenal   : 'ARSENAL UNIFIÉ',
+    prestigeSkillArsenalD  : 'Tous vos missiles AS deviennent AA — jusqu\'à 12 missiles AA.',
+    prestigeSkillCellule   : 'CELLULE RENFORCÉE',
+    prestigeSkillCelluleD  : '+5 HP permanents. Résistance accrue de la cellule.',
+    prestigeSkillMoteur    : 'MOTEUR DE LÉGENDE',
+    prestigeSkillMoteurD   : 'Vitesse maximale +10% en permanence.',
+    prestigeSkillSouffle   : 'DERNIER SOUFFLE',
+    prestigeSkillSouffleD  : '1× par partie : survivez à un coup fatal avec 1 HP.',
+    prestigeSouffleActivated: '⚡ DERNIER SOUFFLE — SURVIE CRITIQUE',
   },
 
   en: {
@@ -577,8 +604,10 @@ const LANGS = {
     gyroActive      : 'Gyroscope active',
 
     // ── HUD alerts ───────────────────────────────────────────────────────────
-    alertFuel   : '⚠ LOW FUEL',
-    alertHealth : '⚠ CRITICAL DAMAGE',
+    alertFuel            : '⚠ LOW FUEL',
+    alertHealth          : '⚠ CRITICAL DAMAGE',
+    alertMissileLock     : '⚠ MISSILE LOCK',
+    alertMissileIncoming : '⚠ MISSILE INCOMING',
 
     // ── Detailed statistics ───────────────────────────────────────────────────
     gamesPlayed    : 'GAMES PLAYED',
@@ -885,6 +914,31 @@ const LANGS = {
     tutControls    : 'SHIFT throttle  ·  W/S pitch  ·  A/D turn  ·  SPACE fire',
     tutShoot       : 'SPACE to fire\nAim at enemy aircraft (red)',
     tutLand        : 'Land on the runway\nto refuel and repair',
+
+    // ── Survival ─────────────────────────────────────────────────────────────
+    freeResupply   : '✦ FREE RESUPPLY',
+
+    // ── Slot description missile_power ────────────────────────────────────────
+    slotDesc_missile_power : 'Warhead power: direct damage per impact. Heavier at higher tiers.',
+
+    // ── Prestige ─────────────────────────────────────────────────────────────
+    prestigeBtn            : '★ PRESTIGE',
+    prestigeTitle          : 'PRESTIGE — LEVEL 50 REACHED',
+    prestigeSub            : 'Reset your level and unlock a permanent advantage forever.',
+    prestigeWarning        : '⚠ Your level resets to 1. Credits and upgrades are kept.',
+    prestigeConfirm        : 'CONFIRM',
+    prestigeCancel         : 'CANCEL',
+    prestigeAlready        : '✓ Obtained',
+    prestigeLevel          : 'PRESTIGE',
+    prestigeSkillArsenal   : 'UNIFIED ARSENAL',
+    prestigeSkillArsenalD  : 'All AG missiles become AA — up to 12 AA missiles.',
+    prestigeSkillCellule   : 'REINFORCED AIRFRAME',
+    prestigeSkillCelluleD  : '+5 permanent HP. Increased structural resistance.',
+    prestigeSkillMoteur    : 'LEGENDARY ENGINE',
+    prestigeSkillMoteurD   : 'Maximum speed permanently +10%.',
+    prestigeSkillSouffle   : 'LAST BREATH',
+    prestigeSkillSouffleD  : '1× per game: survive a fatal hit with 1 HP.',
+    prestigeSouffleActivated: '⚡ LAST BREATH — CRITICAL SURVIVAL',
   },
 };
 

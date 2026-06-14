@@ -44,6 +44,7 @@ const DEFAULT_STATE = () => ({
   totalXp  : 0,
   credits  : 0,
   activePlane: 0,
+  prestigeSkills: [], // ['arsenal', 'cellule', 'moteur', 'souffle'] — permanents
   seenOptions  : [], // clés "slotKey:optId" des options déjà consultées par le joueur
   ownedOptions : [], // clés "slotKey:optId" des options achetées (global, tous avions)
   planes: [DEFAULT_PLANE(0), DEFAULT_PLANE(1), DEFAULT_PLANE(2)],
@@ -80,6 +81,7 @@ export class ProgressionSystem {
         if (!Array.isArray(parsed.planes)) parsed.planes = [];
         while (parsed.planes.length < 3) parsed.planes.push(DEFAULT_PLANE(parsed.planes.length));
         parsed.activePlane = Math.max(0, Math.min(parsed.planes.length - 1, parsed.activePlane));
+        if (!Array.isArray(parsed.prestigeSkills)) parsed.prestigeSkills = [];
         if (!Array.isArray(parsed.seenOptions)) parsed.seenOptions = [];
         // Migration : si ownedOptions absent, grandfather les options déjà équipées
         if (!Array.isArray(parsed.ownedOptions)) {
@@ -237,6 +239,27 @@ export class ProgressionSystem {
     if (!Array.isArray(this._state.ownedOptions)) this._state.ownedOptions = [];
     const key = `${slotKey}:${optId}`;
     if (!this._state.ownedOptions.includes(key)) this._state.ownedOptions.push(key);
+    this._save();
+    return true;
+  }
+
+  // ── Prestige ─────────────────────────────────────────────────────────────
+  get prestigeSkills() { return [...(this._state.prestigeSkills ?? [])]; }
+  get prestigeLevel()  { return (this._state.prestigeSkills ?? []).length; }
+  hasPrestigeSkill(id) { return (this._state.prestigeSkills ?? []).includes(id); }
+
+  canPrestige() {
+    return this.level >= 50 && (this._state.prestigeSkills?.length ?? 0) < 4;
+  }
+
+  prestige(skillId) {
+    const VALID = ['arsenal', 'cellule', 'moteur', 'souffle'];
+    if (!this.canPrestige()) return false;
+    if (!VALID.includes(skillId)) return false;
+    if (this.hasPrestigeSkill(skillId)) return false;
+    if (!Array.isArray(this._state.prestigeSkills)) this._state.prestigeSkills = [];
+    this._state.prestigeSkills.push(skillId);
+    this._state.totalXp = 0;
     this._save();
     return true;
   }

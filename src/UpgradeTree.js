@@ -307,6 +307,26 @@ export const UPGRADES = {
     missileType: 'ag', grantsMissiles: 2,
   },
 
+  // ── Puissance ogive ──────────────────────────────────────────────────────────
+  missile_dmg1: {
+    id:'missile_dmg1', cat:'armement', name:'Ogive Renforcée I',
+    levelReq:15, cost:3000, requires:null,
+    stats: { weaponry:+5, logistics:-3 },
+    desc:'Charge explosive améliorée : dégâts directs 60 → 70 HP.',
+  },
+  missile_dmg2: {
+    id:'missile_dmg2', cat:'armement', name:'Ogive Renforcée II',
+    levelReq:32, cost:7000, requires:'missile_dmg1',
+    stats: { weaponry:+5, logistics:-3 },
+    desc:'Charge hautement explosive : dégâts directs 70 → 125 HP. 1 tir suffit contre les cibles difficiles.',
+  },
+  missile_dmg3: {
+    id:'missile_dmg3', cat:'armement', name:'Ogive Thermobarine',
+    levelReq:47, cost:15000, requires:'missile_dmg2',
+    stats: { weaponry:+10, logistics:-4 },
+    desc:'Ogive à effet de souffle maximal : dégâts directs 125 → 210 HP. Détruit toute cible en un tir.',
+  },
+
   // ── Guidage avancé ──────────────────────────────────────────────────────────
   tracking1: {
     id:'tracking1', cat:'armement', name:'Guidage actif I',
@@ -524,6 +544,11 @@ export function missileParams(upgradeIds) {
   if (upgradeIds.includes('tracking2')) trackingLevel = 2;
   if (upgradeIds.includes('tracking3')) trackingLevel = 3;
 
+  let damage = 70;
+  if (upgradeIds.includes('missile_dmg3')) damage = 210;
+  else if (upgradeIds.includes('missile_dmg2')) damage = 125;
+  else if (upgradeIds.includes('missile_dmg1')) damage = 70;
+
   return {
     lockTime,
     trackTime,
@@ -531,6 +556,7 @@ export function missileParams(upgradeIds) {
     hasAA: upgradeIds.includes('missile_aa'),
     hasAG: upgradeIds.includes('missile_ag'),
     trackingLevel,
+    damage,
   };
 }
 
@@ -658,6 +684,12 @@ export const EQUIPMENT_CATALOG = {
       { id:'actif2', name:'Guidage II',  icon:'◉', levelReq:46, pros:['Ré-engage ×1','Piste +2.5s'],                     cons:['Logistique −5%'],              upgrades:['tracking1','tracking2'] },
       { id:'ia',     name:'Guidage IA',  icon:'⦿', levelReq:55, pros:['Ré-engage toujours','Piste maximale'],             cons:['Logistique −8%'],              upgrades:['tracking1','tracking2','tracking3'] },
     ]},
+    missile_power: { label:'PUISSANCE', options:[
+      { id:'standard', name:'Standard',     icon:'○',  levelReq:1,  pros:[],                       cons:[],                    upgrades:[] },
+      { id:'niv1',     name:'Ogive I',      icon:'◎',  levelReq:15, pros:['Dégâts 70 HP'],         cons:['Logistique −3%'],    upgrades:['missile_dmg1'] },
+      { id:'niv2',     name:'Ogive II',     icon:'◉',  levelReq:32, pros:['Dégâts 125 HP'],        cons:['Logistique −6%'],    upgrades:['missile_dmg1','missile_dmg2'] },
+      { id:'niv3',     name:'Thermobarine', icon:'⦿',  levelReq:47, pros:['Dégâts 210 HP'],        cons:['Logistique −10%'],   upgrades:['missile_dmg1','missile_dmg2','missile_dmg3'] },
+    ]},
   }},
   logistics: { label:'LOGISTIQUE', icon:'⚙', slots:{
     repair:      { label:'RÉPARATION', options:[
@@ -727,6 +759,9 @@ export const OPTION_COSTS = {
   'missiles_ag:2ag'        : 10000,
   'missiles_ag:4ag'        : 10000,
   'missiles_ag:6ag'        : 12000,
+  'missile_power:niv1'     : 3000,
+  'missile_power:niv2'     : 7000,
+  'missile_power:niv3'     : 15000,
   'tracking:actif1'        : 7000,
   'tracking:actif2'        : 8000,
   'tracking:ia'            : 14000,
@@ -775,7 +810,7 @@ export const OPTION_COSTS = {
 export const DEFAULT_LOADOUT = {
   tank:'standard', engine:'standard', wings:'standard', turbo:'none',
   ammo:'100', ap:'standard', calibre:'standard', firerate:'standard',
-  missiles_aa:'none', missiles_ag:'none', tracking:'none', acquisition:'none', active_defense:'none',
+  missiles_aa:'none', missiles_ag:'none', tracking:'none', acquisition:'none', missile_power:'standard', active_defense:'none',
   armor:'none', resist:'none', structure:'none',
   repair:'standard', rearm:'standard', refuel:'standard', maintenance:'none',
   radar:'standard', alt_filter:'none', roll:'standard', tail_cam:'none',

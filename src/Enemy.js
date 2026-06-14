@@ -116,8 +116,18 @@ export class Enemy {
     this._orbitR     = Math.min(this._leash * 0.6, 150 + Math.random() * 100);
 
     // Combat
-    this.onFire      = null;
-    this._shootCd    = 0.3 + Math.random() * 0.4;
+    this.onFire         = null;
+    this._shootCd       = 0.3 + Math.random() * 0.4;
+
+    // Missiles ennemis (lourds / boss uniquement)
+    this.onFireMissile    = null;   // (pos, dir, trackQuality) → câblé par Game.js
+    this._missileCdMax    = options.missileCooldown ?? 0;
+    this._missileCd       = this._missileCdMax * (0.4 + Math.random() * 0.4);
+    this._missileLockReq  = options.missileLockTime   ?? 2.5;
+    this._missileLockT    = 0;
+    this._missileTrackQ   = options.missileTrackQuality ?? 1;
+    this._missileRange    = options.missileRange ?? 1800;
+    this.missileLocking   = false;  // lu par Game.js pour l'alarme HUD
 
     // Altitude de patrouille personnalisée (override du plancher global)
     this._minAlt    = options.minAlt    ?? MIN_ALT;
@@ -583,9 +593,49 @@ export class Enemy {
     if (this.pivot.position.y > 950) this.pivot.position.y = 950;
   }
 
+  // ── Lock-on missile ennemi ───────────────────────────────────────────────────
+  _updateMissileLock(delta, playerPos) {
+    if (!this.onFireMissile || this._missileCdMax <= 0) return;
+
+    this._missileCd -= delta;
+
+    if (this._missileCd > 0) {
+      this.missileLocking = false;
+      this._missileLockT  = 0;
+      return;
+    }
+
+    const toP  = new THREE.Vector3().subVectors(playerPos, this.pivot.position);
+    const dist = toP.length();
+    const fwd  = this._forward();
+    const inRange = dist > 20 && dist < this._missileRange;
+    const inArc   = inRange && fwd.dot(toP.clone().normalize()) > 0.45;
+
+    if (!inArc) {
+      if (this.missileLocking) {
+        this.missileLocking = false;
+        this._missileLockT  = 0;
+      }
+      return;
+    }
+
+    this.missileLocking   = true;
+    this._missileLockT   += delta;
+
+    if (this._missileLockT >= this._missileLockReq) {
+      const fwdDir = fwd.clone();
+      const pos    = this.pivot.position.clone().addScaledVector(fwdDir, 5);
+      this.onFireMissile(pos, fwdDir, this._missileTrackQ);
+      this.missileLocking  = false;
+      this._missileLockT   = 0;
+      this._missileCd      = this._missileCdMax * (0.85 + Math.random() * 0.3);
+    }
+  }
+
   // ── Tir ─────────────────────────────────────────────────────────────────────
   _combat(delta, playerPos) {
     this._shootCd -= delta;
+    this._updateMissileLock(delta, playerPos);
     if (!this.onFire || this._shootCd > 0 || this._passive) return;
     const canFire = (this.role === 'wingman') ? true : (this._state === ATTACK);
 

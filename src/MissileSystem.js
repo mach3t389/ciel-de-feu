@@ -6,7 +6,7 @@ import { interleaveSlots } from './UpgradeTree.js';
 const MISSILE_SPEED   = 340;
 const LOCK_CONE_COS   = 0.65;     // cosinus du demi-angle du cône (~49°)
 const LOCK_RANGE      = 2500;
-const DAMAGE_DIRECT   = 60;       // dégâts à l'impact direct
+const DAMAGE_DIRECT   = 70;       // dégâts à l'impact direct
 const SPLASH_RADIUS   = 22;       // rayon de dégâts de zone
 const SPLASH_DMG_PCTG = 0.30;     // fraction des dégâts directs à distance splash
 const DECOY_EFFECT    = 0.75;
@@ -349,8 +349,9 @@ export class MissileSystem {
         if (ms.mesh.position.distanceTo(e.pivot.position) < HIT_RADIUS) { hitIdx = j; break; }
       }
       if (hitIdx >= 0) {
-        if (DEBUG_MISSILES) console.log(`[MISSILE] COLLISION dist<${HIT_RADIUS} → ${DAMAGE_DIRECT} dmg`);
-        this.onHit?.(enemies[hitIdx], DAMAGE_DIRECT);
+        const dmgDirect = this._lockParams?.damage ?? DAMAGE_DIRECT;
+        if (DEBUG_MISSILES) console.log(`[MISSILE] COLLISION dist<${HIT_RADIUS} → ${dmgDirect} dmg`);
+        this.onHit?.(enemies[hitIdx], dmgDirect);
         if (DEBUG_MISSILES) console.log(enemies[hitIdx].isDead ? '[MISSILE] TARGET DESTROYED' : '[MISSILE] target still alive');
         // Dégâts de souffle sur cibles proches
         for (let j = 0; j < enemies.length; j++) {
@@ -359,7 +360,7 @@ export class MissileSystem {
           if (!e || e.isDead || !e.pivot) continue;
           const d = ms.mesh.position.distanceTo(e.pivot.position);
           if (d < SPLASH_RADIUS) {
-            const splashDmg = Math.round(DAMAGE_DIRECT * SPLASH_DMG_PCTG * (SPLASH_RADIUS - d) / (SPLASH_RADIUS - HIT_RADIUS));
+            const splashDmg = Math.round(dmgDirect * SPLASH_DMG_PCTG * (SPLASH_RADIUS - d) / (SPLASH_RADIUS - HIT_RADIUS));
             if (splashDmg > 0) this.onHit?.(e, splashDmg);
           }
         }
