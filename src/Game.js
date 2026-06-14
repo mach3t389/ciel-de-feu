@@ -1226,13 +1226,16 @@ export class Game {
       const leader = new Enemy(this.scene, spawn.clone(), {
         hp: type.hp, ...opts, skill,
         scale: type.scale, speedMult: type.speed,
+        isHeavy: type.isHeavy,
         naturalColor: true, preloadedScene: type.model,
       });
       leader.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(leader);
       if (type.dmg !== 7) leader.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
       if (type.isHeavy && this._config?.difficulty !== 'easy') {
-        this._wireEnemyMissile(leader, { cooldown: 20, lockTime: 3.0, trackQuality: 1, range: 1800 });
+        const _mcd = { standard: 18, hard: 14, expert: 10 }[this._config?.difficulty] ?? 18;
+        const _mlt = { standard: 2.5, hard: 2.2, expert: 1.8 }[this._config?.difficulty] ?? 2.5;
+        this._wireEnemyMissile(leader, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000 });
       }
       this.enemies.push(leader);
       created++;
@@ -1246,13 +1249,16 @@ export class Game {
           hp: type.hp, role: 'wingman', leader, wingOffset: offset,
           homeZone: opts.homeZone, leash: opts.leash, skill,
           scale: type.scale, speedMult: type.speed,
+          isHeavy: type.isHeavy,
           naturalColor: true, preloadedScene: type.model,
         });
         wingman.getTerrainHeight = this.getTerrainHeight ?? null;
         this._wireEnemyFire(wingman);
         if (type.dmg !== 7) wingman.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
         if (type.isHeavy && this._config?.difficulty !== 'easy') {
-          this._wireEnemyMissile(wingman, { cooldown: 30, lockTime: 3.2, trackQuality: 1, range: 1600 });
+          const _mcd = { standard: 22, hard: 18, expert: 14 }[this._config?.difficulty] ?? 22;
+          const _mlt = { standard: 2.5, hard: 2.2, expert: 1.8 }[this._config?.difficulty] ?? 2.5;
+          this._wireEnemyMissile(wingman, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 1800 });
         }
         this.enemies.push(wingman);
         created++;
@@ -1309,13 +1315,16 @@ export class Game {
       const enemy  = new Enemy(this.scene, spawnPos, {
         hp: tHp, ...opts, skill: pickSkill(),
         scale: isHeavy ? 1.15 : 1.0, speedMult: isHeavy ? 0.88 : 1.0,
+        isHeavy,
         naturalColor: true, preloadedScene: tModel,
       });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(enemy);
       if (tDmg !== 7) enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, tDmg);
       if (isHeavy && this._config?.difficulty !== 'easy') {
-        this._wireEnemyMissile(enemy, { cooldown: 20, lockTime: 3.0, trackQuality: 1, range: 1800 });
+        const _mcd = { standard: 18, hard: 14, expert: 10 }[this._config?.difficulty] ?? 18;
+        const _mlt = { standard: 2.5, hard: 2.2, expert: 1.8 }[this._config?.difficulty] ?? 2.5;
+        this._wireEnemyMissile(enemy, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000 });
       }
       this.enemies.push(enemy);
     }
@@ -1450,6 +1459,7 @@ export class Game {
         hp: e.isHeavy ? (cfg.hpHeavy ?? Math.round(cfg.hp * 1.5)) : (cfg.hpNormal ?? cfg.hp),
         skill: e.skill, ...opts,
         scale: tScale, speedMult: tSpeed,
+        isHeavy: e.isHeavy,
         naturalColor: true,
         preloadedScene: tModel,
       });

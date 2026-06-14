@@ -220,7 +220,7 @@ export class UI {
       });
       (this._root ?? document.body).appendChild(this._landingEl);
     }
-    if (!visible) { this._landingEl.style.display = 'none'; return; }
+    if (!visible || this._refuelCompleteTimer > 0) { this._landingEl.style.display = 'none'; return; }
     const safe  = speed <= 12;
     const warn  = speed <= 25;
     const color = safe ? '#44ff88' : (warn ? '#ff8800' : '#ff4444');
@@ -1952,7 +1952,7 @@ export class UI {
       if (onScreen) {
         if (inGunRange || isLockTgt || isClosest) {
           if (!inGunRange && !isLockTgt) ctx.globalAlpha = 0.45; // lointain → discret
-          const dh = 7;
+          const dh = e.isHeavy ? 10 : 7;
           const diamond = () => {
             ctx.beginPath();
             ctx.moveTo(sx,      sy - dh*2);
@@ -2611,6 +2611,10 @@ export class UI {
   // ── Aide touches (haut-gauche) ────────────────────────────────────────────
   _updateEngineStatus(player) {
     if (!this._engineStatus) return;
+    if (player.isLanded && (this._refuelEl?.style.display === 'block')) {
+      this._engineStatus.style.display = 'none';
+      return;
+    }
     if (player.isLanded) {
       this._engineStatus.style.display = 'block';
       this._engineStatus.textContent = t('engineLanded');

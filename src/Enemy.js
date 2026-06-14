@@ -73,6 +73,7 @@ export class Enemy {
 
     this._passive     = options.passive     ?? false;
     this._alwaysChase = options.alwaysChase ?? false;
+    this.isHeavy      = options.isHeavy     ?? false;
     this._modelScale  = options.scale       ?? 1;
     this._speedMult   = options.speedMult   ?? 1;
     this._leader     = options.leader ?? null;
@@ -609,7 +610,7 @@ export class Enemy {
     const dist = toP.length();
     const fwd  = this._forward();
     const inRange = dist > 20 && dist < this._missileRange;
-    const inArc   = inRange && fwd.dot(toP.clone().normalize()) > 0.45;
+    const inArc   = inRange && fwd.dot(toP.clone().normalize()) > 0.30;
 
     if (!inArc) {
       if (this.missileLocking) {
