@@ -506,15 +506,6 @@ export class CretesMap {
     const placed = [];
 
     for (const v of VILLAGES) {
-      const square = new THREE.Mesh(
-        new THREE.CircleGeometry(22, 16),
-        new THREE.MeshLambertMaterial({ color: 0x7a6e52, depthWrite: false, transparent: true, opacity: 0.55 })
-      );
-      square.rotation.x = -Math.PI / 2;
-      square.position.set(v.x, v.h + 0.35, v.z);
-      square.renderOrder = 1;
-      this.scene.add(square);
-
       for (const [dx, dz, type, targetH, rotY] of this._makeVillageLayout()) {
         const g = groups[type];
         if (!g || counts[type] >= MAX_PER_TYPE || g.naturalHeight <= 0) continue;
@@ -589,7 +580,7 @@ export class CretesMap {
       { r: 166, count: 18, offset: Math.PI / 18  },
       { r: 225, count: 24, offset: Math.PI / 24  },
     ];
-    const p = [];
+    const p = [[0, 0, 'maison1', 18, 0]];
     let hIdx = 0;
     for (const { r, count, offset } of rings) {
       for (let i = 0; i < count; i++) {

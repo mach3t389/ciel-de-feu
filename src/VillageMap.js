@@ -553,7 +553,7 @@ export class VillageMap {
       { r: 132, count: 18, offset: Math.PI / 18   },  // corde ≈ 46.0
       { r: 178, count: 24, offset: Math.PI / 24   },  // corde ≈ 46.7
     ];
-    const p = [];
+    const p = [[0, 0, 'maison1', 18, 0]];
     let hIdx = 0;
     for (const { r, count, offset } of rings) {
       for (let i = 0; i < count; i++) {
