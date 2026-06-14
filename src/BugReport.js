@@ -22,7 +22,7 @@ export function showBugReport(contextFn = null) {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     background: 'rgba(0,0,0,0.88)',
     fontFamily: 'Rajdhani, sans-serif',
-    color: CREAM, zIndex: '900',
+    color: CREAM, zIndex: '99999',
     pointerEvents: 'auto',
   });
 
