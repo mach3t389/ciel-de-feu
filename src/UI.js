@@ -232,7 +232,8 @@ export class UI {
       border    : `1px solid ${color}66`,
       display   : 'block',
     });
-    this._landingEl.textContent = `${t('landingSpeed')} — ${Math.round(speed)} / 12 KM/H`;
+    const status = safe ? t('landingSafe') : (warn ? t('landingWarn') : t('landingDanger'));
+    this._landingEl.textContent = `${Math.round(speed)} KM/H — ${status}`;
   }
 
   // ── Conseil contextuel (tutoriel) ─────────────────────────────────────────
@@ -3313,7 +3314,7 @@ export class UI {
       waveTitle.style.cssText = 'font-size:28px;letter-spacing:8px;color:#d4c88a;text-shadow:0 0 20px rgba(212,200,138,0.8);';
       this._survivalBannerTitle = waveTitle;
       const waveCount = document.createElement('div');
-      waveCount.style.cssText = 'font-size:13px;letter-spacing:4px;color:#a09050;margin-top:4px;';
+      waveCount.style.cssText = 'font-size:17px;letter-spacing:5px;color:#d4c88a;margin-top:6px;text-shadow:0 0 12px rgba(212,200,138,0.6);';
       this._survivalBannerCount = waveCount;
       this._survivalBanner.appendChild(waveTitle);
       this._survivalBanner.appendChild(waveCount);
@@ -3322,17 +3323,18 @@ export class UI {
     clearTimeout(this._survivalBannerTimer);
     this._survivalBannerTitle.textContent = `${t('waveLabel')} ${wave}`;
     this._survivalBannerCount.textContent = `${count} ${t('enemies')}`;
+    this._survivalBanner.style.display = 'block';
     this._survivalBanner.style.opacity = '1';
     this._survivalBannerTimer = setTimeout(() => {
-      if (this._survivalBanner) this._survivalBanner.style.opacity = '0';
-    }, 4000);
+      if (this._survivalBanner) {
+        this._survivalBanner.style.opacity = '0';
+        setTimeout(() => { if (this._survivalBanner) this._survivalBanner.style.display = 'none'; }, 450);
+      }
+    }, 3000);
   }
 
   updateSurvivalAlive(count) {
     this._survivalAliveCount = count;
-    if (this._survivalBannerCount) {
-      this._survivalBannerCount.textContent = `${count} ${count <= 1 ? t('enemy') : t('enemies')}`;
-    }
     if (this._waveTopEl && this._survivalMode) {
       const wave      = this._currentSurvivalWave ?? 0;
       const enemyText = count <= 1 ? t('enemy') : t('enemies');
@@ -3348,6 +3350,7 @@ export class UI {
     if (secs > 0 && this._survivalBanner) {
       clearTimeout(this._survivalBannerTimer);
       this._survivalBanner.style.opacity = '0';
+      this._survivalBanner.style.display = 'none';
     }
     if (!this._survivalCdEl) {
       this._survivalCdEl = document.createElement('div');

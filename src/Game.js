@@ -1406,15 +1406,12 @@ export class Game {
     const _dh         = _dhTable[this._config?.difficulty] ?? _dhTable.standard;
     const heavyChance = Math.min(_dh.c, w * _dh.m);
     const aceChance   = Math.min(0.65, 0.10 + w * 0.05);
-    const defCount    = Math.round(count * 0.35);
-
-    const enemies = Array.from({ length: count }, (_, i) => ({
+    const enemies = Array.from({ length: count }, () => ({
       ang        : Math.random() * Math.PI * 2,
       r          : 120 + Math.random() * 280,
       altOffset  : Math.random() * 160,
       skill      : Math.random() < aceChance ? 'ace' : (Math.random() < 0.5 ? 'regular' : 'rookie'),
       isHeavy    : Math.random() < heavyChance,
-      isDefender : i < defCount,
     }));
 
     return {
@@ -1441,9 +1438,7 @@ export class Game {
         120 + e.altOffset,
         enemyBase.z + Math.sin(e.ang) * e.r,
       );
-      const opts = e.isDefender
-        ? { role: 'defender', homeZone: { x: enemyBase.x,  z: enemyBase.z,  radius: 700  }, leash: 900,  detect: 2400 }
-        : { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 1500 }, leash: 2500, alwaysChase: true };
+      const opts = { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 1500 }, leash: 3000, alwaysChase: true, detect: 6000 };
       const tScale = e.isHeavy ? 1.15 : 1.0;
       const tSpeed = e.isHeavy ? 0.88 : 1.0;
       const tDmg   = e.isHeavy ? 11   : 7;
@@ -2894,6 +2889,15 @@ export class Game {
               if (p.fuel >= maxFuel && p.ammo >= maxAmmo && p.health >= maxHealth
                 && (p.missileCount ?? 0) >= (p._maxMissiles ?? 0)
                 && ((p._maxDecoys ?? 0) === 0 || (p.decoyCount ?? 0) >= (p._maxDecoys ?? 0))) {
+                // Sync final des missiles avant d'afficher le message "complet"
+                if (p._maxMissiles > 0 && this._missileSystem && p.model) {
+                  this._missileSystem.attachWingMissiles(p.model, upgIds, p.missileCount);
+                  this._applyArsenalToWingSlots();
+                  this.ui.setMissileCount(
+                    this._missileSystem?.missilesRemainingAA ?? 0, this._initAACount ?? 0,
+                    this._missileSystem?.missilesRemainingAG ?? 0, this._initAGCount ?? 0,
+                  );
+                }
                 this.ui.showRefuelComplete();
               }
             } else {
