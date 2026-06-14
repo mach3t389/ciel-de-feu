@@ -159,8 +159,9 @@ export class Game {
     clearInterval(ticker);
     onProgress(mapTarget);
 
-    // Chargement en parallèle : joueur + ennemi aérien + véhicules sol
-    const [, enemyGltf, groundModels] = await Promise.all([
+    // Chargement en parallèle : joueur + ennemi aérien + variantes colorées survie + véhicules sol
+    const loadGlb = path => new Promise(res => new GLTFLoader().load(path, res, null, () => res(null)));
+    const [, enemyGltf, survRouge, survBleu, survJaune, groundModels] = await Promise.all([
       this.player.load(),
       new Promise(res => new GLTFLoader().load(
         '/SK_Veh_Plane_Stunt_01.glb',
@@ -168,9 +169,15 @@ export class Game {
         (xhr) => { if (xhr.lengthComputable) onProgress(mapTarget + (xhr.loaded / xhr.total) * (90 - mapTarget)); },
         () => res(null)
       )),
+      loadGlb(PLANE_PATHS.rouge),
+      loadGlb(PLANE_PATHS.bleu),
+      loadGlb(PLANE_PATHS.jaune),
       GroundDefense.preloadModels(),
     ]);
-    this._enemyModelScene   = enemyGltf?.scene ?? null;
+    this._enemyModelScene = enemyGltf?.scene ?? null;
+    this._survModelRouge  = survRouge?.scene ?? null;
+    this._survModelBleu   = survBleu?.scene ?? null;
+    this._survModelJaune  = survJaune?.scene ?? null;
     this._groundModelCache  = groundModels;
     onProgress(95);
     this.player.getTerrainHeight = this.getTerrainHeight;
@@ -728,6 +735,13 @@ export class Game {
     this._oppTeamScore = 0;
     if (isTDM) {
       this.ui.setTDMMode(true, this._config.playerTeam ?? 'team1');
+      // Config de vague survie reçue de l'hôte → spawner les mêmes ennemis (clients coop)
+      if (this._isSurvival && !isHost) {
+        this._multiplayerManager.on('survival_wave_config', (cfg) => {
+          this._spawnSurvivalFromConfig(cfg);
+        });
+      }
+
       // Quand un joueur distant meurt → crédit à l'équipe adverse ou à la nôtre
       if (this._multiplayerManager) {
         this._multiplayerManager.on('remote_player_died', ({ isEnemy }) => {
@@ -1221,61 +1235,104 @@ export class Game {
 
   _startSurvivalWave() {
     this._survivalWave++;
-    // Réapparition des ennemis au sol toutes les 5 vagues (ne compte pas pour la fin de vague)
+    // Réapparition des ennemis au sol toutes les 5 vagues
     if (this._groundDefense && this._survivalWave > 1 && this._survivalWave % 5 === 1) {
       this._groundDefense.respawnEnemies();
       this.ui.showTip(t('groundReinforcements'), 5, { dismissible: false });
     }
-    // Plus de joueurs → vagues plus grosses + avions un peu plus coriaces
-    const count = Math.floor((3 + this._survivalWave * 1.5) * (this._countScale ?? 1));
-    const hp    = Math.round((30 + this._survivalWave * 10) * (this._enemyHpMult ?? 1));
-    // Spawn autour de la base ennemie — pas près du joueur
+
+    const count    = Math.floor((3 + this._survivalWave * 1.5) * (this._countScale ?? 1));
+    const _survDiff = { easy: 0.7, standard: 1.0, hard: 1.35, expert: 1.8 };
+    const _survMult = (_survDiff[this._config?.difficulty] ?? 1.0) * (this._enemyHpMult ?? 1);
+    const hp       = Math.min(350, Math.round((35 + this._survivalWave * 2.5) * _survMult));
+
+    const isMulti = !!this._multiplayerManager;
+    const isHost  = this._config.isHost === true;
+
+    if (!isMulti || isHost) {
+      // Solo ou hôte : génère la config aléatoire et spawne
+      const cfg = this._buildSurvivalWaveConfig(count, hp, _survMult);
+      if (isMulti) this._multiplayerManager.sendSurvivalWaveConfig(cfg);
+      this._spawnSurvivalFromConfig(cfg);
+    }
+    // Clients multi : attendent survival_wave_config du réseau (listener dans _startGame)
+  }
+
+  // Génère la config complète d'une vague (tous les tirages aléatoires centralisés ici)
+  _buildSurvivalWaveConfig(count, hp, survMult) {
+    const w           = this._survivalWave;
+    const isBossWave  = w % 5 === 0;
+    const heavyChance = Math.min(0.55, w * 0.025);
+    const aceChance   = Math.min(0.65, 0.10 + w * 0.05);
+    const defCount    = Math.round(count * 0.35);
+
+    const enemies = Array.from({ length: count }, (_, i) => ({
+      ang        : Math.random() * Math.PI * 2,
+      r          : 120 + Math.random() * 280,
+      altOffset  : Math.random() * 160,
+      skill      : Math.random() < aceChance ? 'ace' : (Math.random() < 0.5 ? 'regular' : 'rookie'),
+      isHeavy    : Math.random() < heavyChance,
+      isDefender : i < defCount,
+    }));
+
+    return {
+      wave      : w,
+      hp,
+      isBossWave,
+      bossHp    : isBossWave ? Math.min(1500, Math.round((150 + w * 50) * (survMult ?? 1))) : 0,
+      bossAng   : isBossWave ? Math.random() * Math.PI * 2 : 0,
+      bossAlt   : isBossWave ? Math.random() * 80 : 0,
+      enemies,
+    };
+  }
+
+  // Spawne les ennemis depuis une config pré-calculée (identique sur tous les clients)
+  _spawnSurvivalFromConfig(cfg) {
     const enemyBase  = this._villageMap?.airports?.[1]?.center ?? new THREE.Vector3(800, 45, 800);
     const playerBase = this._villageMap?.airports?.[0]?.center ?? new THREE.Vector3(0, 45, 0);
 
-    // 65% attaquants fondent sur le joueur, 35% défenseurs patrouillent leur base
-    const defenderCount = Math.round(count * 0.35);
-    for (let i = 0; i < count; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const r   = 120 + Math.random() * 280;
-      const sp  = new THREE.Vector3(
-        enemyBase.x + Math.cos(ang) * r,
-        120 + Math.random() * 160,
-        enemyBase.z + Math.sin(ang) * r,
+    for (const e of cfg.enemies) {
+      const sp   = new THREE.Vector3(
+        enemyBase.x + Math.cos(e.ang) * e.r,
+        120 + e.altOffset,
+        enemyBase.z + Math.sin(e.ang) * e.r,
       );
-      // Progression douce : rookies au départ, aces progressivement
-      const aceChance = Math.min(0.65, 0.10 + this._survivalWave * 0.05);
-      const skill = Math.random() < aceChance ? 'ace' : (Math.random() < 0.5 ? 'regular' : 'rookie');
-      const isDefender = i < defenderCount;
-      const opts = isDefender
+      const opts = e.isDefender
         ? { role: 'defender', homeZone: { x: enemyBase.x,  z: enemyBase.z,  radius: 700  }, leash: 900,  detect: 2400 }
         : { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 1500 }, leash: 2500, alwaysChase: true };
+      const tScale = e.isHeavy ? 1.15 : 1.0;
+      const tSpeed = e.isHeavy ? 0.88 : 1.0;
+      const tDmg   = e.isHeavy ? 11   : 7;
+      const tModel = e.isHeavy
+        ? (this._survModelBleu  ?? this._enemyModelScene)
+        : (this._survModelRouge ?? this._enemyModelScene);
+
       const enemy = new Enemy(this.scene, sp, {
-        hp, skill, ...opts,
-        preloadedScene: this._enemyModelScene,
+        hp: Math.min(350, Math.round(cfg.hp * (e.isHeavy ? 1.5 : 1.0))),
+        skill: e.skill, ...opts,
+        scale: tScale, speedMult: tSpeed,
+        naturalColor: true,
+        preloadedScene: tModel,
       });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(enemy);
+      if (tDmg !== 7) enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, tDmg);
       this.enemies.push(enemy);
     }
-    // Boss toutes les 5 vagues : plus gros, plus fort, plus rapide, orange vif
-    if (this._survivalWave % 5 === 0) {
-      const bossHp  = Math.round((150 + this._survivalWave * 50) * (this._enemyHpMult ?? 1));
-      const bossAng = Math.random() * Math.PI * 2;
-      const bossSp  = new THREE.Vector3(
-        enemyBase.x + Math.cos(bossAng) * 200,
-        160 + Math.random() * 80,
-        enemyBase.z + Math.sin(bossAng) * 200,
+
+    if (cfg.isBossWave) {
+      const bossSp = new THREE.Vector3(
+        enemyBase.x + Math.cos(cfg.bossAng) * 200,
+        160 + cfg.bossAlt,
+        enemyBase.z + Math.sin(cfg.bossAng) * 200,
       );
       const boss = new Enemy(this.scene, bossSp, {
-        hp: bossHp, skill: 'ace',
+        hp: cfg.bossHp, skill: 'ace',
         role: 'attacker',
         homeZone: { x: playerBase.x, z: playerBase.z, radius: 1500 },
         leash: 2500, alwaysChase: true,
-        baseColor: 0xff4400,
-        scale: 1.6,
-        speedMult: 1.25,
-        preloadedScene: this._enemyModelScene,
+        naturalColor: true, scale: 1.6, speedMult: 0.82,
+        preloadedScene: this._survModelJaune ?? this._enemyModelScene,
       });
       boss.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(boss);
@@ -1284,7 +1341,8 @@ export class Game {
       this.ui.showTip(t('bossWarning'), 5, { dismissible: false });
     }
 
-    this.ui.showSurvivalWave(this._survivalWave, count + (this._survivalWave % 5 === 0 ? 1 : 0));
+    const total = cfg.enemies.length + (cfg.isBossWave ? 1 : 0);
+    this.ui.showSurvivalWave(cfg.wave, total);
     this.ui.showSurvivalCountdown(0);
   }
 

@@ -137,10 +137,11 @@ export class Enemy {
     if (this.faction === 'ally') this.isEnemy = false;   // → marqueur allié (vert) côté UI
 
     // Rendu / mort
-    this._deathTimer = 0;
-    this._hitFlash   = 0;
-    this._baseColor  = options.baseColor
-      ?? ((this.role === 'attacker') ? 0xaa1515 : 0x8b1a1a);
+    this._deathTimer   = 0;
+    this._hitFlash     = 0;
+    this._naturalColor = options.naturalColor ?? false;
+    this._baseColor    = this._naturalColor ? null
+      : (options.baseColor ?? ((this.role === 'attacker') ? 0xaa1515 : 0x8b1a1a));
     this._loaded     = false;
     this._propBone   = null;
     this._meshNodes  = [];
@@ -180,7 +181,11 @@ export class Enemy {
     this.mesh.traverse(n => {
       if (n.isMesh || n.isSkinnedMesh) {
         const m = n.material.clone();
-        m.color.setHex(this._baseColor);
+        if (!this._naturalColor) {
+          m.color.setHex(this._baseColor);
+        } else if (this._baseColor == null) {
+          this._baseColor = m.color.getHex(); // capture pour hit flash
+        }
         m.transparent = false; m.opacity = 1; m.alphaTest = 0;
         m.side = THREE.FrontSide; m.needsUpdate = true;
         n.material = m; n.frustumCulled = false; n.visible = true;

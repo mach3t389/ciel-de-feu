@@ -494,6 +494,10 @@ export class MultiplayerManager {
       }
     });
 
+    on('survival_wave_config', (cfg) => {
+      this._emit('survival_wave_config', cfg);
+    });
+
     on('score_update', ({ id, kills, deaths, name }) => {
       const p = this._players.get(id);
       if (p) {
@@ -569,6 +573,12 @@ export class MultiplayerManager {
   sendBotStates(states) {
     if (!this._network) return;
     this._network.send('bot_state', { bots: states });
+  }
+
+  // Diffuse la config de vague survie (hôte uniquement, une fois par vague)
+  sendSurvivalWaveConfig(cfg) {
+    if (!this._network) return;
+    this._network.send('survival_wave_config', cfg);
   }
 
   // Active la réception des bot_state (clients FFA uniquement)
