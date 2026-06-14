@@ -249,10 +249,7 @@ export class VillageMap {
 
     // ── Build mesh ─────────────────────────────────────────────────────────
     const vCount = (SEGS+1) * (SEGS+1);
-    const pos = new Float32Array(vCount * 3);
-    const col = new Float32Array(vCount * 3);
     const ys  = new Float32Array(vCount);
-    const idx = [];
 
     for (let z=0; z<=SEGS; z++) {
       for (let x=0; x<=SEGS; x++) {
@@ -285,58 +282,59 @@ export class VillageMap {
       }
     }
 
-    // Variation de couleur : patches 100-unit + micro-jitter pour perception vitesse/altitude
-    const hColor = (h, steep, wx, wz) => {
-      const px  = hash(Math.floor(wx / 100) * 17.3, Math.floor(wz / 100) * 31.7);
-      const j   = (hash(wx * 0.09, wz * 0.09) - 0.5) * 0.055;
-
-      if (h < -5) return [0.28, 0.24, 0.20];
-      if (h < 5)  return [0.58 + j, 0.52 + j*0.5, 0.34];
-      if (steep > 1.05) return h > 450 ? [0.50, 0.47, 0.42] : [0.43 + j*0.3, 0.40, 0.33];
-      if (h < 80) {
-        if (px > 0.82) return [0.44 + j, 0.58 + j, 0.20 + j];    // champ lumineux
-        if (px < 0.16) return [0.18 + j*0.5, 0.40 + j*0.5, 0.10]; // sous-bois foncé
-        return [0.26 + j, 0.54 + j * 0.7, 0.17 + j];
+    const hColor = (h, steep) => {
+      if (h < -4)  return [0.10, 0.62, 0.82];
+      if (h <  6)  return [0.88, 0.80, 0.52];
+      if (steep > 0.60) {
+        if (h > 400) return [0.60, 0.55, 0.50];
+        return [0.50, 0.44, 0.36];
       }
-      if (h < 220) {
-        if (px > 0.78) return [0.28 + j, 0.50 + j, 0.15];
-        return [0.20 + j*0.6, 0.45 + j*0.5, 0.13 + j*0.3];
-      }
-      if (h < 400) return [0.30 + j, 0.52 + j * 0.4, 0.18 + j * 0.3];
-      if (h < 580) return [0.38, 0.48, 0.25];
-      if (h < 750) return [0.46, 0.42, 0.33];
-      if (h < 900) return [0.78, 0.76, 0.72];
-      return [0.93, 0.94, 0.95];
+      if (h <  55) return [0.28, 0.76, 0.22];
+      if (h < 160) return [0.16, 0.58, 0.14];
+      if (h < 320) return [0.32, 0.64, 0.24];
+      if (h < 500) return [0.58, 0.50, 0.38];
+      if (h < 680) return [0.70, 0.65, 0.58];
+      return [0.94, 0.96, 0.98];
     };
 
-    for (let z=0; z<=SEGS; z++) {
-      for (let x=0; x<=SEGS; x++) {
-        const i  = z*(SEGS+1)+x;
-        const wx = (x/SEGS - 0.5) * SIZE;
-        const wz = (z/SEGS - 0.5) * SIZE;
-        const wy = ys[i];
-        pos[i*3] = wx; pos[i*3+1] = wy; pos[i*3+2] = wz;
-        const hR = x < SEGS ? ys[i+1] : wy;
-        const hU = z < SEGS ? ys[i+(SEGS+1)] : wy;
-        const steep = Math.sqrt(((hR-wy)/(SIZE/SEGS))**2 + ((hU-wy)/(SIZE/SEGS))**2);
-        const [r,g,b] = hColor(wy, steep, wx, wz);
-        col[i*3] = r; col[i*3+1] = g; col[i*3+2] = b;
-      }
-    }
+    const _g = SEGS + 1;
+    const triCount = SEGS * SEGS * 2;
+    const flatPos = new Float32Array(triCount * 9);
+    const flatCol = new Float32Array(triCount * 9);
+    let pi = 0, ci = 0;
+
+    const pushTri = (i0, i1, i2) => {
+      const verts = [i0, i1, i2].map(i => {
+        const gx = i % _g, gz = Math.floor(i / _g);
+        return [(gx / SEGS - 0.5) * SIZE, ys[i], (gz / SEGS - 0.5) * SIZE];
+      });
+      for (const [x, y, z] of verts) { flatPos[pi++] = x; flatPos[pi++] = y; flatPos[pi++] = z; }
+      const hc = (ys[i0] + ys[i1] + ys[i2]) / 3;
+      const [ax,ay,az] = verts[0], [bx,by,bz] = verts[1], [cx,cy,cz] = verts[2];
+      const ex=bx-ax, ey=by-ay, ez=bz-az, fx=cx-ax, fy=cy-ay, fz=cz-az;
+      const ny = ez*fx - ex*fz;
+      const nl = Math.sqrt((ey*fz-ez*fy)**2 + ny**2 + (ex*fy-ey*fx)**2) || 1;
+      const steep = 1 - Math.abs(ny / nl);
+      const [r,g,b] = hColor(hc, steep);
+      for (let k = 0; k < 3; k++) { flatCol[ci++] = r; flatCol[ci++] = g; flatCol[ci++] = b; }
+    };
+
     for (let z=0; z<SEGS; z++) {
       for (let x=0; x<SEGS; x++) {
-        const a = z*(SEGS+1)+x, b = a+1;
-        const c = (z+1)*(SEGS+1)+x, d = c+1;
-        idx.push(a,c,b, b,c,d);
+        const a = z*_g+x, b = a+1, c = (z+1)*_g+x, d = c+1;
+        pushTri(a, c, b);
+        pushTri(b, c, d);
       }
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(flatPos, 3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(flatCol, 3));
     geo.computeVertexNormals();
-    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
+    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+      vertexColors: true, flatShading: true,
+      polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2,
+    })));
 
     // Lookup bilinéaire rapide — remplace le fBm 8 octaves (~200× plus rapide par appel) (A3)
     {

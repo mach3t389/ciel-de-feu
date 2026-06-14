@@ -37,10 +37,10 @@ const LAKES = [
 // 4 villages sur la Normandie — tous ennemis
 // 2 villages côtiers (plage nord) + 2 villages intérieurs
 const VILLAGES = [
-  { name: 'Sainte-Mère-Église', x: -520, z:  200, h: 12, outerR: 470, innerR: 158 },
-  { name: 'Arromanches',        x:  920, z:  200, h: 12, outerR: 460, innerR: 155 },
-  { name: 'Bayeux',             x: -150, z:  950, h: 30, outerR: 500, innerR: 168 },
-  { name: 'Falaise',            x:  450, z: 1750, h: 22, outerR: 460, innerR: 155 },
+  { id: 'sainte-mere-eglise', x: -520, z:  200, h: 12, outerR: 470, innerR: 158 },
+  { id: 'arromanches',        x:  920, z:  200, h: 12, outerR: 460, innerR: 155 },
+  { id: 'bayeux',             x: -150, z:  950, h: 30, outerR: 500, innerR: 168 },
+  { id: 'falaise',            x:  450, z: 1750, h: 22, outerR: 460, innerR: 155 },
 ];
 
 // Aéroport 0 = Angleterre (joueur), Aéroport 1 = Normandie Ouest (ennemi)
@@ -271,10 +271,7 @@ export class NormandyMap {
 
     // ── Mesh terrain ────────────────────────────────────────────────────────
     const vCount = (SEGS+1) * (SEGS+1);
-    const pos = new Float32Array(vCount * 3);
-    const col = new Float32Array(vCount * 3);
     const ys  = new Float32Array(vCount);
-    const idx = [];
 
     for (let z=0; z<=SEGS; z++) {
       for (let x=0; x<=SEGS; x++) {
@@ -284,55 +281,54 @@ export class NormandyMap {
       }
     }
 
-    // Palette Normandie : bocage vert, plages de sable, falaises ocre
-    const hColor = (h, steep, wx, wz) => {
-      const px  = hash(Math.floor(wx / 100) * 17.3, Math.floor(wz / 100) * 31.7);
-      const j   = (hash(wx * 0.09, wz * 0.09) - 0.5) * 0.05;
-
-      if (h < -3) return [0.18, 0.15, 0.12];                   // fond océan
-      if (h < 5)  return [0.64+j, 0.55+j*0.5, 0.34];          // plage sablonneuse
-      if (steep > 1.05) return [0.44+j*0.3, 0.39, 0.30];       // falaise/roche
-      if (h < 30) {
-        if (px > 0.82) return [0.46+j, 0.62+j, 0.20+j];        // champ ouvert clair
-        if (px < 0.18) return [0.20+j*0.5, 0.42+j*0.5, 0.11];  // bocage dense sombre
-        return [0.28+j, 0.55+j*0.7, 0.18+j];                   // prairie normande
-      }
-      if (h < 80) {
-        if (px > 0.76) return [0.34+j, 0.53+j, 0.17];
-        return [0.22+j*0.5, 0.46+j*0.5, 0.14+j*0.3];
-      }
-      if (h < 130) return [0.28+j, 0.49+j*0.4, 0.17+j*0.3];
-      return [0.36+j, 0.48+j*0.3, 0.22];                       // hauts plateaux
+    const hColor = (h, steep) => {
+      if (h < -3)  return [0.10, 0.28, 0.52]; // fond océan
+      if (h <  5)  return [0.82, 0.72, 0.48]; // plage sablonneuse
+      if (steep > 0.55) return [0.50, 0.42, 0.32]; // falaise
+      if (h < 30)  return [0.30, 0.72, 0.20]; // prairie normande
+      if (h < 80)  return [0.18, 0.58, 0.14]; // bocage
+      if (h < 130) return [0.26, 0.62, 0.18]; // hauts plateaux
+      return [0.38, 0.52, 0.24];
     };
 
-    for (let z=0; z<=SEGS; z++) {
-      for (let x=0; x<=SEGS; x++) {
-        const i  = z*(SEGS+1)+x;
-        const wx = (x/SEGS - 0.5) * SIZE;
-        const wz = (z/SEGS - 0.5) * SIZE;
-        const wy = ys[i];
-        pos[i*3] = wx; pos[i*3+1] = wy; pos[i*3+2] = wz;
-        const hR = x < SEGS ? ys[i+1] : wy;
-        const hU = z < SEGS ? ys[i+(SEGS+1)] : wy;
-        const steep = Math.sqrt(((hR-wy)/(SIZE/SEGS))**2 + ((hU-wy)/(SIZE/SEGS))**2);
-        const [r,g,b] = hColor(wy, steep, wx, wz);
-        col[i*3] = r; col[i*3+1] = g; col[i*3+2] = b;
-      }
-    }
+    const _g = SEGS + 1;
+    const triCount = SEGS * SEGS * 2;
+    const flatPos = new Float32Array(triCount * 9);
+    const flatCol = new Float32Array(triCount * 9);
+    let pi = 0, ci = 0;
+
+    const pushTri = (i0, i1, i2) => {
+      const verts = [i0, i1, i2].map(i => {
+        const gx = i % _g, gz = Math.floor(i / _g);
+        return [(gx / SEGS - 0.5) * SIZE, ys[i], (gz / SEGS - 0.5) * SIZE];
+      });
+      for (const [x, y, z] of verts) { flatPos[pi++] = x; flatPos[pi++] = y; flatPos[pi++] = z; }
+      const hc = (ys[i0] + ys[i1] + ys[i2]) / 3;
+      const [ax,ay,az] = verts[0], [bx,by,bz] = verts[1], [cx,cy,cz] = verts[2];
+      const ex=bx-ax, ey=by-ay, ez=bz-az, fx=cx-ax, fy=cy-ay, fz=cz-az;
+      const ny = ez*fx - ex*fz;
+      const nl = Math.sqrt((ey*fz-ez*fy)**2 + ny**2 + (ex*fy-ey*fx)**2) || 1;
+      const steep = 1 - Math.abs(ny / nl);
+      const [r,g,b] = hColor(hc, steep);
+      for (let k = 0; k < 3; k++) { flatCol[ci++] = r; flatCol[ci++] = g; flatCol[ci++] = b; }
+    };
+
     for (let z=0; z<SEGS; z++) {
       for (let x=0; x<SEGS; x++) {
-        const a = z*(SEGS+1)+x, b = a+1;
-        const c = (z+1)*(SEGS+1)+x, d = c+1;
-        idx.push(a,c,b, b,c,d);
+        const a = z*_g+x, b = a+1, c = (z+1)*_g+x, d = c+1;
+        pushTri(a, c, b);
+        pushTri(b, c, d);
       }
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.BufferAttribute(flatPos, 3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(flatCol, 3));
     geo.computeVertexNormals();
-    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
+    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+      vertexColors: true, flatShading: true,
+      polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2,
+    })));
 
     // Lookup bilinéaire rapide — remplace le fBm 8 octaves (~200× plus rapide) (A3)
     {

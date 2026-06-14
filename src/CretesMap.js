@@ -360,7 +360,10 @@ export class CretesMap {
     geo.setAttribute('position', new THREE.BufferAttribute(flatPos, 3));
     geo.setAttribute('color',    new THREE.BufferAttribute(flatCol, 3));
     geo.computeVertexNormals();
-    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+    this.scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+      vertexColors: true, flatShading: true,
+      polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2,
+    })));
 
     // Lookup bilinéaire rapide — remplace le fBm 8 octaves (~200× plus rapide) (A3)
     {
