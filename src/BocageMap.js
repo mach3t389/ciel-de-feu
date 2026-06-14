@@ -56,7 +56,7 @@ const AIRPORTS = [
 
 const rng = (a, b) => a + Math.random() * (b - a);
 
-export class VillageMap {
+export class BocageMap {
   constructor(scene) {
     this.scene = scene;
     this.getTerrainHeight = null;

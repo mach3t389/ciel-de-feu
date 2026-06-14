@@ -10,7 +10,7 @@ import { TEAM_COLORS } from './Menu.js';
 import { ProgressionSystem, calcRewards, xpToNextLevel } from './ProgressionSystem.js';
 import { UPGRADES, computeStats, loadModifiers, missileParams, serviceTimeMult, activeDefenseParams, missileLoadPenalties } from './UpgradeTree.js';
 import { MissileSystem } from './MissileSystem.js';
-import { VillageMap } from './VillageMap.js';
+import { BocageMap } from './BocageMap.js';
 import { NormandyMap } from './NormandyMap.js';
 import { CretesMap } from './CretesMap.js';
 import { GroundDefense } from './GroundDefense.js';
@@ -122,7 +122,7 @@ export class Game {
     if (this._config.map === 1) {
       this._villageMap = new CretesMap(this.scene);
     } else if (this._config.map === 4) {
-      this._villageMap = new VillageMap(this.scene);
+      this._villageMap = new BocageMap(this.scene);
     } else if (this._config.map === 5) {
       this._villageMap = new NormandyMap(this.scene);
     } else {
