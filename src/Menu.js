@@ -6,7 +6,7 @@ import { t, tTips, tModeInfo, tModeBullets, tCtrlKb, tCtrlGp, getLang, setLang, 
 import { ProgressionSystem, xpToNextLevel, calcRewards } from './ProgressionSystem.js';
 import { UPGRADES, CAT_ORDER, CAT_LABELS, BASE_STATS, computeStats, loadModifiers, serviceTimeMult, EQUIPMENT_CATALOG, DEFAULT_LOADOUT, loadoutToUpgradeIds, interleaveSlots, OPTION_COSTS } from './UpgradeTree.js';
 import { IS_MOBILE } from './MobileControls.js';
-import { showBugReport } from './BugReport.js';
+import { showBugReport, isBugReportOpen } from './BugReport.js';
 import { showSettingsOverlay } from './SettingsOverlay.js';
 
 // ── Scrollbar cockpit — injectée une seule fois ───────────────────────────────
@@ -484,8 +484,6 @@ export class Menu {
     rimLight.position.set(-3, 0.5, -5);
     scene.add(rimLight);
 
-    // Montagnes + nuages
-    this._buildMenuMountains(scene);
     this._buildMenuClouds(scene);
 
     // État souris + zoom caméra
@@ -610,7 +608,6 @@ export class Menu {
       if (aileronR) aileronR.rotation.z = -Math.sin(t * 0.19) * 0.055;
 
       this._updateMenuClouds(t, this._camOrbit.x, this._camOrbit.y);
-      this._updateMenuMountains(t, this._camOrbit.x);
 
       renderer.render(scene, camera);
     };
@@ -691,103 +688,6 @@ export class Menu {
     });
   }
 
-  _buildMenuMountains(scene) {
-    const rng = (a, b) => a + Math.random() * (b - a);
-    this._menuMountains = [];
-
-    // Deux couches : proche (couleurs vives) + lointaine (silhouette dans le fog)
-    const configs = [
-      {
-        z: -10, baseY: -1.6, width: 82, depth: 8, SEGS_X: 46, SEGS_Z: 5,
-        peaks: [[-32, 0, 10, 5.2], [-9, 0, 8, 7.1], [16, 0, 12, 4.8], [40, 0, 7, 6.3]],
-        phase: rng(0, Math.PI * 2),
-      },
-      {
-        z: -25, baseY: -2.2, width: 135, depth: 11, SEGS_X: 58, SEGS_Z: 4,
-        peaks: [[-58, 0, 15, 7.5], [-24, 0, 11, 9.2], [10, 0, 17, 6.8], [52, 0, 12, 8.4], [84, 0, 9, 5.6]],
-        phase: rng(0, Math.PI * 2),
-      },
-    ];
-
-    const hColor = (h, steep) => {
-      if (steep > 0.62) return [0.52, 0.48, 0.42];
-      if (h < 1.5) return [0.30, 0.68, 0.22];
-      if (h < 4.0) return [0.24, 0.58, 0.18];
-      if (h < 7.0) return [0.50, 0.46, 0.38];
-      return [0.92, 0.94, 0.96];
-    };
-
-    for (const cfg of configs) {
-      const { SEGS_X, SEGS_Z, width, depth } = cfg;
-      const _g = SEGS_X + 1;
-
-      const ys = new Float32Array(_g * (SEGS_Z + 1));
-      for (let iz = 0; iz <= SEGS_Z; iz++) {
-        for (let ix = 0; ix <= SEGS_X; ix++) {
-          const wx = (ix / SEGS_X - 0.5) * width;
-          const wz = (iz / SEGS_Z - 0.5) * depth;
-          let h = 0;
-          for (const [px, pz, r, maxH] of cfg.peaks) {
-            const dd = (wx - px) ** 2 + (wz - pz) ** 2;
-            h += maxH * Math.exp(-dd / (2 * r * r));
-          }
-          ys[iz * _g + ix] = Math.max(0, h);
-        }
-      }
-
-      const triCount = SEGS_X * SEGS_Z * 2;
-      const flatPos = new Float32Array(triCount * 9);
-      const flatCol = new Float32Array(triCount * 9);
-      let pi = 0, ci = 0;
-
-      const pushTri = (i0, i1, i2) => {
-        const verts = [i0, i1, i2].map(i => {
-          const gx = i % _g, gz = Math.floor(i / _g);
-          return [(gx / SEGS_X - 0.5) * width, ys[i], (gz / SEGS_Z - 0.5) * depth];
-        });
-        for (const [x, y, zv] of verts) { flatPos[pi++] = x; flatPos[pi++] = y; flatPos[pi++] = zv; }
-        const hc = (ys[i0] + ys[i1] + ys[i2]) / 3;
-        const [ax, ay, az] = verts[0], [bx, by, bz] = verts[1], [cx, cy, cz] = verts[2];
-        const ex = bx-ax, ey = by-ay, ez = bz-az, fx = cx-ax, fy = cy-ay, fz = cz-az;
-        const ny = ez*fx - ex*fz;
-        const nl = Math.sqrt((ey*fz-ez*fy)**2 + ny**2 + (ex*fy-ey*fx)**2) || 1;
-        const steep = 1 - Math.abs(ny / nl);
-        const [r, g, b] = hColor(hc, steep);
-        for (let k = 0; k < 3; k++) { flatCol[ci++] = r; flatCol[ci++] = g; flatCol[ci++] = b; }
-      };
-
-      for (let iz = 0; iz < SEGS_Z; iz++) {
-        for (let ix = 0; ix < SEGS_X; ix++) {
-          const a = iz*_g+ix, b = a+1, c = (iz+1)*_g+ix, d = c+1;
-          pushTri(a, c, b);
-          pushTri(b, c, d);
-        }
-      }
-
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(flatPos, 3));
-      geo.setAttribute('color',    new THREE.BufferAttribute(flatCol, 3));
-      geo.computeVertexNormals();
-
-      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
-        vertexColors: true,
-        flatShading: true,
-      }));
-      mesh.position.set(0, cfg.baseY, cfg.z);
-      scene.add(mesh);
-
-      this._menuMountains.push({ mesh, baseY: cfg.baseY, phase: cfg.phase });
-    }
-  }
-
-  _updateMenuMountains(t, mouseX) {
-    if (!this._menuMountains) return;
-    this._menuMountains.forEach((m, i) => {
-      const parallax = -mouseX * (0.7 / (i + 1));
-      const sway = Math.sin(t * 0.055 + m.phase) * 0.22;
-      m.mesh.position.x = parallax + sway;
-    });
-  }
 
   _showPreview(zoom = 'normal', anchor = true) {
     if (this._previewCanvas) this._previewCanvas.style.opacity = '1';

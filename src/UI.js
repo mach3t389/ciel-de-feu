@@ -136,10 +136,17 @@ export class UI {
   }
 
   showRefueling(active) {
-    // Ne pas écraser le message "terminé" si le timer tourne encore
     if (this._refuelCompleteTimer > 0) return;
     this._ensureRefuelEl();
-    if (active) this._refuelEl.textContent = t('refuelInProgress');
+    if (active) {
+      this._refuelEl.textContent = t('refuelInProgress');
+      Object.assign(this._refuelEl.style, {
+        color      : '#ff8800',
+        textShadow : '0 0 10px rgba(255,140,0,0.7)',
+        background : 'rgba(20,10,0,0.55)',
+        border     : '1px solid rgba(255,140,0,0.4)',
+      });
+    }
     this._refuelEl.style.display = active ? 'block' : 'none';
   }
 
@@ -150,6 +157,12 @@ export class UI {
   showRefuelComplete() {
     this._ensureRefuelEl();
     this._refuelEl.textContent = t('refuelDone');
+    Object.assign(this._refuelEl.style, {
+      color      : '#44ff88',
+      textShadow : '0 0 10px rgba(0,255,100,0.7)',
+      background : 'rgba(0,20,0,0.55)',
+      border     : '1px solid rgba(0,255,100,0.4)',
+    });
     this._refuelEl.style.display = 'block';
     this._refuelCompleteTimer = 3.0;
   }
@@ -159,6 +172,41 @@ export class UI {
       this._refuelCompleteTimer = 0;
       if (this._refuelEl) this._refuelEl.style.display = 'none';
     }
+  }
+
+  showLandingApproach(speed, visible) {
+    if (!this._landingEl) {
+      this._landingEl = document.createElement('div');
+      Object.assign(this._landingEl.style, {
+        position     : 'absolute',
+        bottom       : '130px',
+        left         : '50%',
+        transform    : 'translate(-50%, 0)',
+        fontFamily   : 'Rajdhani, sans-serif',
+        fontSize     : '13px',
+        letterSpacing: '3px',
+        textTransform: 'uppercase',
+        pointerEvents: 'none',
+        zIndex       : '200',
+        padding      : '6px 18px',
+        borderRadius : '3px',
+        display      : 'none',
+      });
+      (this._root ?? document.body).appendChild(this._landingEl);
+    }
+    if (!visible) { this._landingEl.style.display = 'none'; return; }
+    const safe  = speed <= 12;
+    const warn  = speed <= 25;
+    const color = safe ? '#44ff88' : (warn ? '#ff8800' : '#ff4444');
+    const bg    = safe ? 'rgba(0,20,0,0.55)' : (warn ? 'rgba(20,10,0,0.55)' : 'rgba(20,0,0,0.55)');
+    Object.assign(this._landingEl.style, {
+      color,
+      textShadow: `0 0 8px ${color}99`,
+      background: bg,
+      border    : `1px solid ${color}66`,
+      display   : 'block',
+    });
+    this._landingEl.textContent = `${t('landingSpeed')} — ${Math.round(speed)} / 12 KM/H`;
   }
 
   // ── Conseil contextuel (tutoriel) ─────────────────────────────────────────
@@ -2464,7 +2512,12 @@ export class UI {
     // Le score individuel est désormais dans le tableau central (TAB / Select).
     // Ici on ne gère plus que le compteur de vague persistant en survie.
     if (this._survivalMode && this._waveTopEl) {
-      this._waveTopEl.textContent = `${t('waveLabel')} ${stats.survivalWave ?? 0}`;
+      this._currentSurvivalWave = stats.survivalWave ?? 0;
+      const alive     = this._survivalAliveCount ?? 0;
+      const enemyText = alive <= 1 ? t('enemy') : t('enemies');
+      this._waveTopEl.textContent = alive > 0
+        ? `${t('waveLabel')} ${this._currentSurvivalWave}  ·  ${alive} ${enemyText}`
+        : `${t('waveLabel')} ${this._currentSurvivalWave}`;
     }
   }
 
@@ -3240,12 +3293,23 @@ export class UI {
     this._survivalBannerTitle.textContent = `${t('waveLabel')} ${wave}`;
     this._survivalBannerCount.textContent = `${count} ${t('enemies')}`;
     this._survivalBanner.style.opacity = '1';
+    this._survivalBannerTimer = setTimeout(() => {
+      if (this._survivalBanner) this._survivalBanner.style.opacity = '0';
+    }, 4000);
   }
 
   updateSurvivalAlive(count) {
-    if (!this._survivalBannerCount) return;
-    this._survivalBannerCount.textContent = `${count} ${count <= 1 ? t('enemy') : t('enemies')}`;
-    if (this._survivalBanner) this._survivalBanner.style.opacity = '1';
+    this._survivalAliveCount = count;
+    if (this._survivalBannerCount) {
+      this._survivalBannerCount.textContent = `${count} ${count <= 1 ? t('enemy') : t('enemies')}`;
+    }
+    if (this._waveTopEl && this._survivalMode) {
+      const wave      = this._currentSurvivalWave ?? 0;
+      const enemyText = count <= 1 ? t('enemy') : t('enemies');
+      this._waveTopEl.textContent = count > 0
+        ? `${t('waveLabel')} ${wave}  ·  ${count} ${enemyText}`
+        : `${t('waveLabel')} ${wave}`;
+    }
   }
 
   // ── Compte à rebours entre vagues ────────────────────────────────────────

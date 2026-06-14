@@ -1224,6 +1224,7 @@ export class Game {
     // Réapparition des ennemis au sol toutes les 5 vagues (ne compte pas pour la fin de vague)
     if (this._groundDefense && this._survivalWave > 1 && this._survivalWave % 5 === 1) {
       this._groundDefense.respawnEnemies();
+      this.ui.showTip(t('groundReinforcements'), 5, { dismissible: false });
     }
     // Plus de joueurs → vagues plus grosses + avions un peu plus coriaces
     const count = Math.floor((3 + this._survivalWave * 1.5) * (this._countScale ?? 1));
@@ -1247,8 +1248,8 @@ export class Game {
       const skill = Math.random() < aceChance ? 'ace' : (Math.random() < 0.5 ? 'regular' : 'rookie');
       const isDefender = i < defenderCount;
       const opts = isDefender
-        ? { role: 'defender', homeZone: { x: enemyBase.x, z: enemyBase.z, radius: 700 }, leash: 900, detect: 2400 }
-        : { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 6000 }, leash: 7000 };
+        ? { role: 'defender', homeZone: { x: enemyBase.x,  z: enemyBase.z,  radius: 700  }, leash: 900,  detect: 2400 }
+        : { role: 'attacker', homeZone: { x: playerBase.x, z: playerBase.z, radius: 1500 }, leash: 2500, alwaysChase: true };
       const enemy = new Enemy(this.scene, sp, {
         hp, skill, ...opts,
         preloadedScene: this._enemyModelScene,
@@ -2365,6 +2366,7 @@ export class Game {
             this._audio?.playExplosion(0.7);
             this.stats.kills++;
             this._bumpLifetime('stats_kills');
+            if (this._isSurvival) this._survivalKills++;
           }
         }
       }
@@ -2538,8 +2540,10 @@ export class Game {
       const p = this.player;
       let nearAirport = false;
       let refueling = false;
+      let nearAirportApproach = false;
       for (const ap of this._villageMap.airports) {
         const d2D = Math.hypot(p.position.x - ap.center.x, p.position.z - ap.center.z);
+        if (d2D < ap.radius * 3) nearAirportApproach = true;
         if (d2D < ap.radius && p.isLanded && p.speed < 12) {
           nearAirport = true;
           this._refuelTimer += delta;
@@ -2606,7 +2610,9 @@ export class Game {
                 this._audio?.playRefuelTick();
                 this._refuelSoundTimer = 0;
               }
-              if (p.fuel >= maxFuel && p.ammo >= maxAmmo && p.health >= maxHealth) {
+              if (p.fuel >= maxFuel && p.ammo >= maxAmmo && p.health >= maxHealth
+                && (p.missileCount ?? 0) >= (p._maxMissiles ?? 0)
+                && ((p._maxDecoys ?? 0) === 0 || (p.decoyCount ?? 0) >= (p._maxDecoys ?? 0))) {
                 this.ui.showRefuelComplete();
               }
             } else {
@@ -2619,6 +2625,7 @@ export class Game {
       if (!nearAirport) { this._refuelTimer = 0; this._refuelSoundTimer = 0; this._missileAccum = 0; this._decoyAccum = 0; }
       if (!p.isLanded) this.ui.clearRefuelMessage();
       this.ui.showRefueling(refueling);
+      this.ui.showLandingApproach(p.speed, nearAirportApproach && !refueling);
     }
 
     // Met à jour la caméra pour qu'elle suive l'avion

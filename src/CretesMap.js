@@ -42,7 +42,7 @@ const VILLAGES = [
 // Repositionnés à ±2400 (pas ±2800) pour éviter que l'approche touche la zone de fondu côtier
 const AIRPORTS = [
   { x: -2400, z: 0, h: 35, len: 280, wid: 28, ang: Math.PI / 2 },
-  { x:  2400, z: 0, h: 35, len: 280, wid: 28, ang: Math.PI / 2 },
+  { x:  1800, z: 0, h: 35, len: 280, wid: 28, ang: Math.PI / 2 },
 ];
 
 const rng = (a, b) => a + Math.random() * (b - a);
