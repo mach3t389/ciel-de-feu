@@ -292,7 +292,9 @@ export class CretesMap {
             const lx  = (wx - ap.x) * cos - (wz - ap.z) * sin;
             const lz  = (wx - ap.x) * sin + (wz - ap.z) * cos;
             const flatHW = ap.wid / 2 + 22, flatHL = ap.len / 2 + 80;
-            if (Math.abs(lx) < flatHW + 10 && Math.abs(lz) < flatHL + 10) { lock = true; break; }
+            // zone plate + zone de fondu (blend=120) + couloir d'approche (900u)
+            if (Math.abs(lx) < flatHW + 140 && Math.abs(lz) < flatHL + 140) { lock = true; break; }
+            if (Math.abs(lx) < 100          && Math.abs(lz) < flatHL + 920)  { lock = true; break; }
           }
           if (!lock) for (const v of VILLAGES)
             if (Math.hypot(wx - v.x, wz - v.z) < v.outerR + 10) { lock = true; break; }
