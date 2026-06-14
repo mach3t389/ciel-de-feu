@@ -654,44 +654,43 @@ export class AudioManager {
   // ── ALARME LOCK MISSILE ENNEMI ────────────────────────────────────────────
   playMissileLock() {
     if (!this._ctx) return;
-    // Throttle : max 1 bip toutes les 0.35s
     const now = this._ctx.currentTime;
-    if (this._lastLockBeep && now - this._lastLockBeep < 0.35) return;
+    if (this._lastLockBeep && now - this._lastLockBeep < 0.38) return;
     this._lastLockBeep = now;
     const ctx = this._ctx;
     const t   = ctx.currentTime;
-    // Double bip aigu rapide
-    for (let i = 0; i < 2; i++) {
-      const osc = ctx.createOscillator();
-      osc.type = 'square';
-      osc.frequency.value = 880 + i * 220;
-      const env = ctx.createGain();
-      const d   = t + i * 0.12;
-      env.gain.setValueAtTime(0, d);
-      env.gain.linearRampToValueAtTime(0.12, d + 0.02);
-      env.gain.linearRampToValueAtTime(0,    d + 0.09);
-      osc.connect(env); env.connect(this._bus.sfx);
-      osc.start(d); osc.stop(d + 0.1);
-    }
+    // Ping radar court : impulsion sinusoïdale 660 Hz, attaque dure, decay net
+    const osc = ctx.createOscillator();
+    osc.type  = 'sine';
+    osc.frequency.value = 660;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.18, t + 0.005);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(env); env.connect(this._bus.sfx);
+    osc.start(t); osc.stop(t + 0.15);
   }
 
   // ── MISSILE ENNEMI EN VOL ─────────────────────────────────────────────────
   playMissileIncoming() {
     if (!this._ctx) return;
     const now = this._ctx.currentTime;
-    if (this._lastIncoming && now - this._lastIncoming < 2.0) return;
+    if (this._lastIncoming && now - this._lastIncoming < 2.2) return;
     this._lastIncoming = now;
     const ctx = this._ctx;
     const t   = ctx.currentTime;
-    // Descente rapide 1200 → 380 Hz + vibrato
-    const osc  = ctx.createOscillator();
-    osc.type   = 'sawtooth';
-    osc.frequency.setValueAtTime(1200, t);
-    osc.frequency.exponentialRampToValueAtTime(380, t + 0.7);
-    const env  = ctx.createGain();
-    env.gain.setValueAtTime(0.15, t);
-    env.gain.linearRampToValueAtTime(0.0, t + 0.75);
-    osc.connect(env); env.connect(this._bus.sfx);
-    osc.start(t); osc.stop(t + 0.8);
+    // Trois impulsions courtes montantes — urgence RWR sans effet cartoon
+    for (let i = 0; i < 3; i++) {
+      const d   = t + i * 0.18;
+      const osc = ctx.createOscillator();
+      osc.type  = 'triangle';
+      osc.frequency.setValueAtTime(520 + i * 60, d);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, d);
+      env.gain.linearRampToValueAtTime(0.16, d + 0.01);
+      env.gain.exponentialRampToValueAtTime(0.001, d + 0.13);
+      osc.connect(env); env.connect(this._bus.sfx);
+      osc.start(d); osc.stop(d + 0.14);
+    }
   }
 }

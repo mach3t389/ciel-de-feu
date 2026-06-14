@@ -201,25 +201,7 @@ export class UI {
   }
 
   showLandingApproach(speed, visible) {
-    if (!this._landingEl) {
-      this._landingEl = document.createElement('div');
-      Object.assign(this._landingEl.style, {
-        position     : 'absolute',
-        bottom       : '130px',
-        left         : '50%',
-        transform    : 'translate(-50%, 0)',
-        fontFamily   : 'Rajdhani, sans-serif',
-        fontSize     : '13px',
-        letterSpacing: '3px',
-        textTransform: 'uppercase',
-        pointerEvents: 'none',
-        zIndex       : '200',
-        padding      : '6px 18px',
-        borderRadius : '3px',
-        display      : 'none',
-      });
-      (this._root ?? document.body).appendChild(this._landingEl);
-    }
+    if (!this._landingEl) return;
     if (!visible || this._refuelCompleteTimer > 0) { this._landingEl.style.display = 'none'; return; }
     const safe  = speed <= 12;
     const warn  = speed <= 25;
@@ -1285,6 +1267,24 @@ export class UI {
       whiteSpace   : 'nowrap',
     });
     this._topCenter.appendChild(this._engineStatus);
+
+    // Indicateur d'approche aéroport (sous moteur, au-dessus du tip)
+    this._landingEl = document.createElement('div');
+    Object.assign(this._landingEl.style, {
+      fontFamily   : 'Rajdhani, sans-serif',
+      fontSize     : '13px',
+      letterSpacing: '3px',
+      fontWeight   : 'bold',
+      padding      : '5px 18px',
+      border       : '1.5px solid rgba(212,200,138,0.4)',
+      borderRadius : '4px',
+      display      : 'none',
+      pointerEvents: 'none',
+      whiteSpace   : 'nowrap',
+      textTransform: 'uppercase',
+      alignSelf    : 'center',
+    });
+    this._topCenter.appendChild(this._landingEl);
 
     // Si showTip() a été appelé avant _build(), migre le tip dans _topCenter
     if (this._tipEl && this._tipEl.parentNode !== this._topCenter) {

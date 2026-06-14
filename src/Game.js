@@ -644,6 +644,7 @@ export class Game {
     this._maxActive         = MAX_ACTIVE;
     this._waveSize          = WAVE_SIZE;
     this._missionComplete   = false;
+    this._rewardsGiven      = false;
     this._aiDebug           = false;
 
     // Debug perf overlay (F3) + Low Graphics mode (F4)
@@ -843,13 +844,8 @@ export class Game {
 
     const isPvP  = !!this._config.networkManager;
     const onQuit = () => {
-      if (this._isSurvival) {
-        this._setPause(false);
-        this.ui.showSurvivalEnd(() => this._quit());
-      } else {
-        this._setPause(false);  // nettoie _resumeHandler avant que la promise resolve
-        this._quit();
-      }
+      this._setPause(false);
+      this._showEndRewards(false, () => this._quit());
     };
 
     // Menu ESC multijoueur — toggle unifié (clavier, manette, perte de pointer lock)
@@ -1002,7 +998,7 @@ export class Game {
   // Câble les missiles ennemis sur un lourd ou un boss
   _wireEnemyMissile(enemy, { cooldown, lockTime, trackQuality, range } = {}) {
     enemy._missileCdMax   = cooldown     ?? 22;
-    enemy._missileCd      = (cooldown ?? 22) * (0.4 + Math.random() * 0.4);
+    enemy._missileCd      = (cooldown ?? 22) * (0.7 + Math.random() * 0.8);
     enemy._missileLockReq = lockTime     ?? 2.5;
     enemy._missileTrackQ  = trackQuality ?? 1;
     enemy._missileRange   = range        ?? 1800;
@@ -1233,8 +1229,8 @@ export class Game {
       this._wireEnemyFire(leader);
       if (type.dmg !== 7) leader.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
       if (type.isHeavy && this._config?.difficulty !== 'easy') {
-        const _mcd = { standard: 18, hard: 14, expert: 10 }[this._config?.difficulty] ?? 18;
-        const _mlt = { standard: 2.5, hard: 2.2, expert: 1.8 }[this._config?.difficulty] ?? 2.5;
+        const _mcd = { standard: 24, hard: 18, expert: 14 }[this._config?.difficulty] ?? 24;
+        const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
         this._wireEnemyMissile(leader, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000 });
       }
       this.enemies.push(leader);
@@ -1256,8 +1252,8 @@ export class Game {
         this._wireEnemyFire(wingman);
         if (type.dmg !== 7) wingman.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
         if (type.isHeavy && this._config?.difficulty !== 'easy') {
-          const _mcd = { standard: 22, hard: 18, expert: 14 }[this._config?.difficulty] ?? 22;
-          const _mlt = { standard: 2.5, hard: 2.2, expert: 1.8 }[this._config?.difficulty] ?? 2.5;
+          const _mcd = { standard: 30, hard: 24, expert: 18 }[this._config?.difficulty] ?? 30;
+          const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
           this._wireEnemyMissile(wingman, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 1800 });
         }
         this.enemies.push(wingman);
@@ -1322,8 +1318,8 @@ export class Game {
       this._wireEnemyFire(enemy);
       if (tDmg !== 7) enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, tDmg);
       if (isHeavy && this._config?.difficulty !== 'easy') {
-        const _mcd = { standard: 18, hard: 14, expert: 10 }[this._config?.difficulty] ?? 18;
-        const _mlt = { standard: 2.5, hard: 2.2, expert: 1.8 }[this._config?.difficulty] ?? 2.5;
+        const _mcd = { standard: 24, hard: 18, expert: 14 }[this._config?.difficulty] ?? 24;
+        const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
         this._wireEnemyMissile(enemy, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000 });
       }
       this.enemies.push(enemy);
@@ -1890,7 +1886,8 @@ export class Game {
 
   // ── Récompenses de fin de partie ────────────────────────────────────────────
   _showEndRewards(won, onContinue) {
-    if (this._isTraining || !this._progression) { onContinue?.(); return; }
+    if (this._isTraining || !this._progression || this._rewardsGiven) { onContinue?.(); return; }
+    this._rewardsGiven = true;
 
     const kills  = this.stats?.kills  ?? 0;
     const deaths = this.stats?.deaths ?? 0;
@@ -2828,7 +2825,7 @@ export class Game {
       let nearAirportApproach = false;
       for (const ap of this._villageMap.airports) {
         const d2D = Math.hypot(p.position.x - ap.center.x, p.position.z - ap.center.z);
-        if (d2D < ap.radius * 3) nearAirportApproach = true;
+        if (d2D < ap.radius * 1.8 && this.player.altitude < 300) nearAirportApproach = true;
         if (d2D < ap.radius && p.isLanded && p.speed < 12) {
           nearAirport = true;
           this._refuelTimer += delta;
