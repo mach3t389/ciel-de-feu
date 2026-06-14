@@ -23,7 +23,7 @@ export function showBugReport(contextFn = null) {
     background: 'rgba(0,0,0,0.88)',
     fontFamily: 'Rajdhani, sans-serif',
     color: CREAM, zIndex: '99999',
-    pointerEvents: 'auto', cursor: 'default',
+    pointerEvents: 'auto',
   });
 
   const box = document.createElement('div');
