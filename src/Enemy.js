@@ -71,8 +71,10 @@ export class Enemy {
     this._home  = options.homeZone ?? { x: spawnPos.x, z: spawnPos.z, radius: 600 };
     this._leash = options.leash ?? (this.role === 'attacker' ? 5000 : 1500);
 
-    this._passive     = options.passive     ?? false; // mode pratique : ne détecte ni tire jamais
-    this._alwaysChase = options.alwaysChase ?? false; // mode test : voit/poursuit partout
+    this._passive     = options.passive     ?? false;
+    this._alwaysChase = options.alwaysChase ?? false;
+    this._modelScale  = options.scale       ?? 1;
+    this._speedMult   = options.speedMult   ?? 1;
     this._leader     = options.leader ?? null;
     this._wingOffset = options.wingOffset ?? new THREE.Vector3(-35, 5, -25);
 
@@ -188,6 +190,7 @@ export class Enemy {
     this.mesh.traverse(n => {
       if (n.name === 'SK_Veh_Plane_Stunt_01_Prop') this._propBone = n;
     });
+    if (this._modelScale !== 1) this.mesh.scale.multiplyScalar(this._modelScale);
     this.pivot.add(this.mesh);
     this._buildLabel();
     this._loaded = true;
@@ -534,8 +537,8 @@ export class Enemy {
 
   // ── Physique ────────────────────────────────────────────────────────────────
   _fly(delta) {
-    // Vitesse cible
-    const ds = this._desiredSpeed ?? SPD_PATROL;
+    // Vitesse cible (multipliée pour les boss)
+    const ds = (this._desiredSpeed ?? SPD_PATROL) * this._speedMult;
     this.speed = THREE.MathUtils.lerp(this.speed, ds, delta * 1.2);
 
     const man = 1 - 0.3 * (this.speed / SPD_MAX);

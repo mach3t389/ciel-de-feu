@@ -1258,7 +1258,33 @@ export class Game {
       this._wireEnemyFire(enemy);
       this.enemies.push(enemy);
     }
-    this.ui.showSurvivalWave(this._survivalWave, count);
+    // Boss toutes les 5 vagues : plus gros, plus fort, plus rapide, orange vif
+    if (this._survivalWave % 5 === 0) {
+      const bossHp  = Math.round((150 + this._survivalWave * 50) * (this._enemyHpMult ?? 1));
+      const bossAng = Math.random() * Math.PI * 2;
+      const bossSp  = new THREE.Vector3(
+        enemyBase.x + Math.cos(bossAng) * 200,
+        160 + Math.random() * 80,
+        enemyBase.z + Math.sin(bossAng) * 200,
+      );
+      const boss = new Enemy(this.scene, bossSp, {
+        hp: bossHp, skill: 'ace',
+        role: 'attacker',
+        homeZone: { x: playerBase.x, z: playerBase.z, radius: 1500 },
+        leash: 2500, alwaysChase: true,
+        baseColor: 0xff4400,
+        scale: 1.6,
+        speedMult: 1.25,
+        preloadedScene: this._enemyModelScene,
+      });
+      boss.getTerrainHeight = this.getTerrainHeight ?? null;
+      this._wireEnemyFire(boss);
+      boss.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, 15);
+      this.enemies.push(boss);
+      this.ui.showTip(t('bossWarning'), 5, { dismissible: false });
+    }
+
+    this.ui.showSurvivalWave(this._survivalWave, count + (this._survivalWave % 5 === 0 ? 1 : 0));
     this.ui.showSurvivalCountdown(0);
   }
 
