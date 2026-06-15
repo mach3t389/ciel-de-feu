@@ -2843,7 +2843,7 @@ export class Game {
       let nearAirportApproach = false;
       for (const ap of this._villageMap.airports) {
         const d2D = Math.hypot(p.position.x - ap.center.x, p.position.z - ap.center.z);
-        if (d2D < ap.radius * 1.8 && this.player.altitude < 80) nearAirportApproach = true;
+        if (d2D < ap.radius * 1.8 && this.player.altitude < 25) nearAirportApproach = true;
         if (d2D < ap.radius && p.isLanded && p.speed < 12) {
           nearAirport = true;
           this._refuelTimer += delta;

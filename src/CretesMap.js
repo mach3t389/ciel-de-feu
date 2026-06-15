@@ -30,6 +30,22 @@ const LAKES = [
   [  320,   850,  80, 4],  // lac central sud
 ];
 
+// ── Canyons volables ──────────────────────────────────────────────────────────
+// Corridor principal non-linéaire : base alliée → base ennemie
+const CANYON_MAIN = [
+  [-2400,    0], [-2100, -350], [-1700, -550], [-1300, -350],
+  [ -800,   80], [ -350, -450], [  150, -650], [  600, -550],
+  [  950, -250], [ 1200,    0],
+];
+// Branche secondaire : débranchement vers le massif NO (exploration)
+const CANYON_BRANCH = [
+  [-1300, -350], [-1100,  100], [ -900,  550], [ -750,  900],
+];
+const CANYON_PATHS   = [CANYON_MAIN, CANYON_BRANCH];
+const CANYON_HALF_W  = 90;   // demi-largeur du corridor volable (unités monde)
+const CANYON_BLEND_W = 65;   // zone de fondu vers terrain naturel
+const CANYON_FLOOR   = 28;   // altitude plancher du canyon
+
 // Village 0 = allié (près base joueur), villages 1-3 = ennemis
 const VILLAGES = [
   { name: 'Rochefort', x: -2050, z:  200, h: 38, outerR: 490, innerR: 165 },
@@ -146,8 +162,27 @@ export class CretesMap {
       return h;
     };
 
+    const segD = (px, pz, ax, az, bx, bz) => {
+      const dx = bx-ax, dz = bz-az, l2 = dx*dx+dz*dz;
+      if (l2 < 0.001) return Math.hypot(px-ax, pz-az);
+      const t = Math.max(0, Math.min(1, ((px-ax)*dx+(pz-az)*dz)/l2));
+      return Math.hypot(px-ax-t*dx, pz-az-t*dz);
+    };
+
     const getH = (wx, wz) => {
       let h = getBase(wx, wz);
+
+      // ── Canyons : creuse des corridors volables dans le relief ───────────────
+      for (const path of CANYON_PATHS) {
+        let minD = Infinity;
+        for (let i = 0; i < path.length - 1; i++)
+          minD = Math.min(minD, segD(wx, wz, path[i][0], path[i][1], path[i+1][0], path[i+1][1]));
+        if (minD >= CANYON_HALF_W + CANYON_BLEND_W) continue;
+        const t = Math.max(0, Math.min(1, (minD - CANYON_HALF_W) / CANYON_BLEND_W));
+        const s = t*t*(3-2*t); // 0 = fond plat, 1 = terrain naturel
+        if (h > CANYON_FLOOR)
+          h = Math.min(h, h * s + CANYON_FLOOR * (1 - s));
+      }
 
       // Plateau village
       for (const v of VILLAGES) {
