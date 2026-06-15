@@ -1895,54 +1895,58 @@ export class Menu {
       { id:'souffle', name: t('prestigeSkillSouffle'), desc: t('prestigeSkillSouffleD') },
     ];
 
-    let selected = null;
-    const cards  = [];
-    const grid   = document.createElement('div');
-    Object.assign(grid.style, { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'24px' });
+    const nextId   = prog.nextPrestigeSkill;
+    const nextSkill = SKILLS.find(s => s.id === nextId);
 
-    for (const skill of SKILLS) {
-      const owned = prog.hasPrestigeSkill(skill.id);
-      const card  = document.createElement('div');
-      Object.assign(card.style, {
-        padding: '14px', borderRadius: '6px',
-        border: owned ? `1px solid ${M.yellow}66` : `1px solid ${M.border}`,
-        background: owned ? `${M.yellow}0a` : 'rgba(20,20,15,0.6)',
-        cursor: owned ? 'default' : 'pointer',
-        opacity: owned ? '0.6' : '1',
-        transition: 'all 0.15s', position: 'relative',
+    // Carte mise en avant : le prochain déblocage
+    const nextCard = document.createElement('div');
+    Object.assign(nextCard.style, {
+      padding:'18px 20px', borderRadius:'6px', marginBottom:'20px',
+      border:`1px solid ${M.yellow}`, background:`${M.yellow}14`,
+    });
+    const nextLabel = document.createElement('div');
+    nextLabel.textContent = t('prestigeNext');
+    Object.assign(nextLabel.style, { fontSize:'10px', letterSpacing:'2px', color: M.yellow, marginBottom:'6px' });
+    const nextName = document.createElement('div');
+    nextName.textContent = nextSkill?.name ?? '';
+    Object.assign(nextName.style, { fontSize:'15px', letterSpacing:'2px', fontWeight:'700', color: M.cream, marginBottom:'6px' });
+    const nextDesc = document.createElement('div');
+    nextDesc.textContent = nextSkill?.desc ?? '';
+    Object.assign(nextDesc.style, { fontSize:'11px', color: M.dimCream, lineHeight:'1.6' });
+    nextCard.appendChild(nextLabel);
+    nextCard.appendChild(nextName);
+    nextCard.appendChild(nextDesc);
+
+    // Roadmap : liste des 4 prestiges avec statut
+    const roadmap = document.createElement('div');
+    Object.assign(roadmap.style, { display:'flex', flexDirection:'column', gap:'6px', marginBottom:'24px' });
+    for (let i = 0; i < SKILLS.length; i++) {
+      const sk     = SKILLS[i];
+      const owned  = prog.hasPrestigeSkill(sk.id);
+      const isNext = sk.id === nextId;
+      const row    = document.createElement('div');
+      Object.assign(row.style, {
+        display:'flex', alignItems:'center', gap:'10px',
+        padding:'8px 12px', borderRadius:'4px',
+        border: isNext ? `1px solid ${M.yellow}55` : `1px solid transparent`,
+        background: owned ? `${M.yellow}08` : isNext ? `${M.yellow}0a` : 'transparent',
+        opacity: (!owned && !isNext) ? '0.4' : '1',
       });
-      const cName = document.createElement('div');
-      cName.textContent = skill.name;
-      Object.assign(cName.style, { fontSize:'13px', letterSpacing:'2px', fontWeight:'700', color: owned ? M.yellow : M.cream, marginBottom:'6px' });
-      const cDesc = document.createElement('div');
-      cDesc.textContent = skill.desc;
-      Object.assign(cDesc.style, { fontSize:'11px', letterSpacing:'0.5px', color: M.dimCream, lineHeight:'1.5' });
-      if (owned) {
-        const badge = document.createElement('div');
-        badge.textContent = t('prestigeAlready');
-        Object.assign(badge.style, { position:'absolute', top:'8px', right:'10px', fontSize:'10px', color: M.yellow, letterSpacing:'1px' });
-        card.appendChild(badge);
-      }
-      card.appendChild(cName);
-      card.appendChild(cDesc);
-      if (!owned) {
-        card.addEventListener('mouseover', () => { if (selected !== skill.id) { card.style.borderColor = `${M.yellow}88`; card.style.background = `${M.yellow}12`; } });
-        card.addEventListener('mouseout',  () => { if (selected !== skill.id) { card.style.borderColor = M.border; card.style.background = 'rgba(20,20,15,0.6)'; } });
-        card.addEventListener('click', () => {
-          selected = skill.id;
-          cards.forEach((c, i) => {
-            if (!prog.hasPrestigeSkill(SKILLS[i].id)) {
-              c.style.borderColor = SKILLS[i].id === selected ? M.yellow : M.border;
-              c.style.background  = SKILLS[i].id === selected ? `${M.yellow}1a` : 'rgba(20,20,15,0.6)';
-            }
-          });
-          confirmBtn.disabled = false;
-          confirmBtn.style.opacity = '1';
-          confirmBtn.style.cursor  = 'pointer';
-        });
-      }
-      cards.push(card);
-      grid.appendChild(card);
+      const dot = document.createElement('div');
+      dot.textContent = owned ? '✓' : isNext ? '▶' : `${i + 1}`;
+      Object.assign(dot.style, {
+        fontSize:'11px', fontWeight:'700', width:'18px', textAlign:'center',
+        color: owned ? M.yellow : isNext ? M.cream : M.dimCream,
+      });
+      const rowName = document.createElement('div');
+      rowName.textContent = sk.name;
+      Object.assign(rowName.style, {
+        fontSize:'12px', letterSpacing:'1px', fontWeight:'700',
+        color: owned ? M.yellow : M.cream,
+      });
+      row.appendChild(dot);
+      row.appendChild(rowName);
+      roadmap.appendChild(row);
     }
 
     const btnRow = document.createElement('div');
@@ -1961,17 +1965,16 @@ export class Menu {
 
     const confirmBtn = document.createElement('button');
     confirmBtn.textContent = t('prestigeConfirm');
-    confirmBtn.disabled = true;
     Object.assign(confirmBtn.style, {
       background: `${M.yellow}22`, border:`1px solid ${M.yellow}`,
       color: M.yellow, fontFamily:'Rajdhani, sans-serif', fontSize:'13px',
       letterSpacing:'2px', fontWeight:'700', padding:'10px 24px',
-      cursor:'not-allowed', borderRadius:'4px', transition:'all 0.15s', opacity:'0.4',
+      cursor:'pointer', borderRadius:'4px', transition:'all 0.15s',
     });
-    confirmBtn.addEventListener('mouseover', () => { if (!confirmBtn.disabled) { confirmBtn.style.background = `${M.yellow}33`; } });
-    confirmBtn.addEventListener('mouseout',  () => { if (!confirmBtn.disabled) { confirmBtn.style.background = `${M.yellow}22`; } });
+    confirmBtn.addEventListener('mouseover', () => { confirmBtn.style.background = `${M.yellow}33`; });
+    confirmBtn.addEventListener('mouseout',  () => { confirmBtn.style.background = `${M.yellow}22`; });
     confirmBtn.addEventListener('click', () => {
-      if (!selected || !prog.prestige?.(selected)) return;
+      if (!prog.prestige?.()) return;
       overlay.remove();
       this._refreshProfileBar();
     });
@@ -1981,7 +1984,8 @@ export class Menu {
     box.appendChild(title);
     box.appendChild(sub);
     box.appendChild(warn);
-    box.appendChild(grid);
+    box.appendChild(nextCard);
+    box.appendChild(roadmap);
     box.appendChild(btnRow);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
@@ -4284,7 +4288,7 @@ export class Menu {
         const AD_CZ = _mpIsMob ? 34 : 44;
         const mkCircle = (icon, label, isEquipped, isUnlocked, isOwned, cost, onClick, onOver, onOut) => {
           let borderCol, bgCol, textCol;
-          if (isEquipped)       { borderCol = catColor;       bgCol = `${catColor}33`; textCol = catColor; }
+          if (isEquipped)       { borderCol = catColor;       bgCol = `${catColor}33`; textCol = M.cream; }
           else if (!isUnlocked) { borderCol = '#553322';      bgCol = 'rgba(14,11,8,0.9)'; textCol = '#8a6a4a'; }
           else if (!isOwned)    { borderCol = M.yellow+'88';  bgCol = 'rgba(20,18,10,0.95)'; textCol = M.yellow; }
           else                  { borderCol = M.border+'aa';  bgCol = 'rgba(22,20,15,0.95)'; textCol = M.cream; }
@@ -4396,7 +4400,7 @@ export class Menu {
 
         // Couleurs selon état
         let borderCol, bgCol, textCol;
-        if (isEquipped)         { borderCol = catColor;        bgCol = `${catColor}33`;          textCol = catColor;    }
+        if (isEquipped)         { borderCol = catColor;        bgCol = `${catColor}33`;          textCol = M.cream;     }
         else if (!isUnlocked)   { borderCol = '#553322';       bgCol = 'rgba(14,11,8,0.9)';      textCol = '#8a6a4a';   }
         else if (!isOwned)      { borderCol = M.yellow+'88';   bgCol = 'rgba(20,18,10,0.95)';    textCol = M.yellow;    }
         else                    { borderCol = M.border+'aa';   bgCol = 'rgba(22,20,15,0.95)';    textCol = M.cream;     }
@@ -4450,7 +4454,7 @@ export class Menu {
         }
         item.appendChild(circleWrap);
         item.appendChild(el('div', { text: tEquip(opt.name), style:{
-          fontSize:'10px', color: isEquipped ? catColor : isOwned ? M.cream : isUnlocked ? M.yellow : '#9a7a5a',
+          fontSize:'10px', color: isEquipped ? M.cream : isOwned ? M.cream : isUnlocked ? M.yellow : '#9a7a5a',
           textAlign:'center', letterSpacing:'0.3px', maxWidth:'68px', lineHeight:'1.2',
           fontWeight: isEquipped ? '700' : '500',
         }}));
@@ -4600,7 +4604,7 @@ export class Menu {
               fontSize:'clamp(12px, 1.5vw, 17px)',
               border: isActive ? `2px solid ${cc}` : isLocked ? `1px solid ${M.border}55` : `2px solid ${cc}66`,
               background: isActive ? `${cc}2a` : isLocked ? 'transparent' : `${cc}14`,
-              color: isLocked ? M.dimCream : cc,
+              color: isLocked ? M.dimCream : M.cream,
               opacity: isLocked ? '0.38' : '1',
               transition:'all 0.1s',
             }});

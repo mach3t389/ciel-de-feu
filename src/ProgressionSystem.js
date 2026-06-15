@@ -244,19 +244,26 @@ export class ProgressionSystem {
   }
 
   // ── Prestige ─────────────────────────────────────────────────────────────
+  // Ordre fixe — pas de choix, chaque prestige débloque le suivant dans la liste
+  static get PRESTIGE_ORDER() { return ['arsenal', 'cellule', 'moteur', 'souffle']; }
+
   get prestigeSkills() { return [...(this._state.prestigeSkills ?? [])]; }
   get prestigeLevel()  { return (this._state.prestigeSkills ?? []).length; }
   hasPrestigeSkill(id) { return (this._state.prestigeSkills ?? []).includes(id); }
 
-  canPrestige() {
-    return this.level >= 50 && (this._state.prestigeSkills?.length ?? 0) < 4;
+  get nextPrestigeSkill() {
+    const order = ProgressionSystem.PRESTIGE_ORDER;
+    return order[this.prestigeLevel] ?? null;
   }
 
-  prestige(skillId) {
-    const VALID = ['arsenal', 'cellule', 'moteur', 'souffle'];
+  canPrestige() {
+    return this.level >= 50 && this.prestigeLevel < 4;
+  }
+
+  prestige() {
     if (!this.canPrestige()) return false;
-    if (!VALID.includes(skillId)) return false;
-    if (this.hasPrestigeSkill(skillId)) return false;
+    const skillId = this.nextPrestigeSkill;
+    if (!skillId) return false;
     if (!Array.isArray(this._state.prestigeSkills)) this._state.prestigeSkills = [];
     this._state.prestigeSkills.push(skillId);
     this._state.totalXp  = 0;
