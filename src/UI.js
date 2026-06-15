@@ -3064,6 +3064,7 @@ export class UI {
     if (isActive) {
       stateText  = t('adActive');
       stateColor = '#4488ff';
+      if (timeRemaining > 0) subText = `${Math.ceil(timeRemaining)}s`;
     } else if (cooldownPct > 0) {
       stateText  = t('adRecharge');
       stateColor = C.tickMinor;
@@ -3082,13 +3083,13 @@ export class UI {
       ctx.fillText(subText, W / 2, centerY + 14);
     }
 
-    // Barre de recharge en bas
+    // Barre en bas : se vide pendant l'active, se remplit pendant la recharge
     const barY = H - 10, barH = 4;
     const barW = W - 16;
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.fillRect(8, barY - barH / 2, barW, barH);
     if (isActive || cooldownPct > 0) {
-      const fill = isActive ? (count / max) : (1 - cooldownPct);
+      const fill = 1 - cooldownPct;  // active: reste à faire = pct restant; recharge: progresse vers 1
       ctx.fillStyle = isActive ? '#4488ff' : '#88aaff55';
       ctx.fillRect(8, barY - barH / 2, barW * Math.max(0, Math.min(1, fill)), barH);
     } else {

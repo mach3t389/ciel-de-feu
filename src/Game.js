@@ -1009,16 +1009,18 @@ export class Game {
   }
 
   // Câble les missiles ennemis sur un lourd ou un boss
-  _wireEnemyMissile(enemy, { cooldown, lockTime, trackQuality, range } = {}) {
+  _wireEnemyMissile(enemy, { cooldown, lockTime, trackQuality, range, maxMissiles } = {}) {
     enemy._missileCdMax   = cooldown     ?? 22;
     enemy._missileCd      = (cooldown ?? 22) * (0.7 + Math.random() * 0.8);
     enemy._missileLockReq = lockTime     ?? 2.5;
     enemy._missileTrackQ  = trackQuality ?? 1;
     enemy._missileRange   = range        ?? 1800;
+    enemy._missilesLeft   = maxMissiles  ?? 3;
     const TRACK_TIMES  = [0, 3.5, 5.5];
     const TURN_SPEEDS  = [0, 3.0, 4.5];
-    const q = Math.min(2, trackQuality ?? 1);
     enemy.onFireMissile = (pos, dir, tq) => {
+      if (enemy._missilesLeft <= 0) return;
+      enemy._missilesLeft--;
       const qi = Math.min(2, tq ?? 1);
       this._enemyMissileManager.fire(pos, dir, {
         damage    : 35,
@@ -1068,7 +1070,7 @@ export class Game {
       if (this._ecmActive) {
         this._ecmTimer -= delta;
         const pct = Math.max(0, this._ecmTimer / ad.ecmDuration);
-        this.ui.setActiveDefenseStatus('ecm', 1, 1, 1 - pct, true);
+        this.ui.setActiveDefenseStatus('ecm', 1, 1, 1 - pct, true, this._ecmTimer);
         if (this._ecmTimer <= 0) {
           this._ecmActive = false;
           this._ecmCooldown = ad.ecmCooldown;
@@ -1084,7 +1086,7 @@ export class Game {
       if (this._shieldActive) {
         this._shieldTimer -= delta;
         const pct = Math.max(0, this._shieldTimer / ad.shieldDuration);
-        this.ui.setActiveDefenseStatus(ad.type, 1, 1, 1 - pct, true);
+        this.ui.setActiveDefenseStatus(ad.type, 1, 1, 1 - pct, true, this._shieldTimer);
         if (this._shieldMesh) {
           this._shieldMesh.material.opacity = 0.15 + 0.20 * Math.abs(Math.sin(performance.now() / 280));
         }
@@ -2832,7 +2834,7 @@ export class Game {
       let nearAirportApproach = false;
       for (const ap of this._villageMap.airports) {
         const d2D = Math.hypot(p.position.x - ap.center.x, p.position.z - ap.center.z);
-        if (d2D < ap.radius * 1.8 && this.player.altitude < 300) nearAirportApproach = true;
+        if (d2D < ap.radius * 1.8 && this.player.altitude < 80) nearAirportApproach = true;
         if (d2D < ap.radius && p.isLanded && p.speed < 12) {
           nearAirport = true;
           this._refuelTimer += delta;

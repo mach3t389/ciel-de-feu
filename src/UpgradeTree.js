@@ -253,7 +253,7 @@ export const UPGRADES = {
   },
   decoy1: {
     id:'decoy1', cat:'utility', name:'Leurres',
-    levelReq:23, cost:5000, requires:null,
+    levelReq:5, cost:5000, requires:null,
     stats: { maneuverability:-3, fuel:-4, logistics:-4 },
     desc:'2 leurres pyrotechniques contre missiles guidés. Lanceurs et cartouches embarqués.',
     grantsDecoys: 2,
@@ -687,7 +687,7 @@ export const EQUIPMENT_CATALOG = {
     ]},
     active_defense: { label:'DÉFENSE ACTIVE', options:[
       { id:'none',          name:'Aucune',         icon:'○',  levelReq:1,  pros:[],                                        cons:[],                                                       upgrades:[] },
-      { id:'leurres_1',     name:'Leurres I',       icon:'◉',  levelReq:23, pros:['2 leurres anti-missile'],               cons:['Maniab. −2%'],                                         upgrades:['decoy1'] },
+      { id:'leurres_1',     name:'Leurres I',       icon:'◉',  levelReq:5,  pros:['2 leurres anti-missile'],               cons:['Maniab. −2%'],                                         upgrades:['decoy1'] },
       { id:'leurres_2',     name:'Leurres II',      icon:'◉',  levelReq:40, pros:['4 leurres anti-missile'],               cons:['Maniab. −3%'],                                         upgrades:['decoy1','decoy2'] },
       { id:'leurres_3',     name:'Leurres III',     icon:'◉',  levelReq:52, pros:['6 leurres anti-missile'],               cons:['Maniab. −4%'],                                         upgrades:['decoy1','decoy2','decoy3'] },
       { id:'ecm_1',         name:'ECM I',           icon:'⊡',  levelReq:30, pros:['Brouille lock missile','3s / cd 20s'],  cons:['Carburant −6%','Logistique −5%'],                      upgrades:['ecm1'] },
