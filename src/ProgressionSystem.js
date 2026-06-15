@@ -320,9 +320,9 @@ export function calcRewards({ mode, kills, deaths, won, wavesCleared, diff, isTr
 
   const addR = (label, x, c) => { xp += x; credits += c; bd.push({ label, xp: x, credits: c }); };
 
-  if (kills > 0)         addR(`${t('rwKills')} ×${kills}`,         kills * 85,          kills * 45);
-  if (won)               addR(t('rwVictory'),                        350,                 175);
-  if (wavesCleared > 0)  addR(`${t('rwWaves')} ×${wavesCleared}`,   wavesCleared * 140,  wavesCleared * 70);
+  if (kills > 0)         addR(`${t('rwKills')} ×${kills}`,         kills * 85,          kills * 80);
+  if (won)               addR(t('rwVictory'),                        350,                 280);
+  if (wavesCleared > 0)  addR(`${t('rwWaves')} ×${wavesCleared}`,   wavesCleared * 140,  wavesCleared * 120);
   if (deaths > 0)        addR(`${t('rwDeaths')} ×${deaths}`,        -deaths * 50,        0);
 
   xp       = Math.max(0, Math.round(xp      * mult));

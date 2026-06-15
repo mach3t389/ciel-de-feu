@@ -375,7 +375,7 @@ export class Game {
         fireCooldownMult: stats.fireRate ? 100 / stats.fireRate : 1.0,
         damageMult      : stats.weaponry / 100,
         resistTurrets   : 0, resistPlanes: 0,
-        repairMult      : 1.0, rearmMult: 1.0, refuelMult: 1.0,
+        repairMult      : 1.0, rearmMult: 1.0, rearmAmmoMult: 1.0, rearmMissileMult: 1.0, refuelMult: 1.0,
       };
 
       // Prestige bonuses permanents
@@ -406,16 +406,21 @@ export class Game {
         const shieldMult = this._getShieldDmgMult?.(new THREE.Vector3(0, 0, -1)) ?? 1.0;
         const reduced    = Math.round(dmg * shieldMult * (1 - (this._playerReduceDmg ?? 0)));
         this.player.health = Math.max(0, this.player.health - reduced);
-        this.ui.showPlayerHit?.();
-        this._audio?.playPlayerHit?.();
-        this._audio?.playExplosion?.(0.6);
+        this.ui.showMissileHit?.();
+        this._audio?.playMissileImpact?.();
+        this._audio?.playExplosion?.(0.7);
       };
       this._enemyMissileManager.onMissileFired = () => {
         this.ui.showMissileIncoming?.();
-        this._audio?.playMissileIncoming?.();
+        this._audio?.startMissileAlarm?.();
       };
       this._enemyMissileManager.onAllGone = () => {
         this.ui.hideMissileWarning?.();
+        this._audio?.stopMissileAlarm?.();
+      };
+      this._enemyMissileManager.onDecoySuccess = () => {
+        this._audio?.stopMissileAlarm?.();
+        this._audio?.playDecoySuccess?.();
       };
       this._groundTargetCache = new Map();
       const msParams = missileParams(upgradeIds);
@@ -514,9 +519,11 @@ export class Game {
 
       // Vitesses de service (repair/rearm/refuel) depuis les upgrades
       const svc = serviceTimeMult(upgradeIds);
-      mods.repairMult = svc.repair;
-      mods.rearmMult  = svc.rearm;
-      mods.refuelMult = svc.refuel;
+      mods.repairMult       = svc.repair;
+      mods.rearmMult        = svc.rearm;
+      mods.rearmAmmoMult    = svc.rearmAmmo;
+      mods.rearmMissileMult = svc.rearmMissile;
+      mods.refuelMult       = svc.refuel;
 
       // Résistances aux dégâts
       upgradeIds.forEach(id => {
@@ -2834,10 +2841,10 @@ export class Game {
             const maxAmmo   = p._maxAmmoOverride  ?? 200;
             const maxHealth = 100 + (p._upgMods?.healthBonus ?? 0);
             const upgIds    = this._progression?.getUpgrades(this._progression?.activePlane ?? 0) ?? [];
-            // repairMult/rearmMult/refuelMult < 1 = plus rapide (serviceTimeMult retourne <1)
-            const repairSpd = 18 * (1 / (p._upgMods?.repairMult ?? 1));
-            const rearmSpd  = 25 * (1 / (p._upgMods?.rearmMult  ?? 1));
-            const refuelSpd = 12 * (1 / (p._upgMods?.refuelMult ?? 1));
+            // repairMult/rearmAmmoMult/rearmMissileMult/refuelMult < 1 = plus rapide
+            const repairSpd       = 18  * (1 / (p._upgMods?.repairMult       ?? 1));
+            const rearmAmmoSpd    = 25  * (1 / (p._upgMods?.rearmAmmoMult    ?? 1));
+            const refuelSpd       = 12  * (1 / (p._upgMods?.refuelMult       ?? 1));
 
             const wasFull = p.fuel >= maxFuel && p.ammo >= maxAmmo && p.health >= maxHealth
               && (p.missileCount ?? 0) >= (p._maxMissiles ?? 0)
@@ -2845,11 +2852,11 @@ export class Game {
 
             if (!wasFull) {
               p.fuel   = Math.min(maxFuel,   p.fuel   + delta * refuelSpd);
-              p.ammo   = Math.min(maxAmmo,   p.ammo   + delta * rearmSpd);
+              p.ammo   = Math.min(maxAmmo,   p.ammo   + delta * rearmAmmoSpd);
               p.health = Math.min(maxHealth, p.health + delta * repairSpd);
 
               // Recharger missiles progressivement (1 missile toutes les ~3s)
-              const missileRate = 0.33 / (p._upgMods?.rearmMult ?? 1);
+              const missileRate = 0.33 / (p._upgMods?.rearmMissileMult ?? 1);
               if (p._maxMissiles > 0 && (p.missileCount ?? 0) < p._maxMissiles) {
                 this._missileAccum = (this._missileAccum ?? 0) + delta * missileRate;
                 if (this._missileAccum >= 1.0) {
@@ -2871,7 +2878,7 @@ export class Game {
               }
 
               // Recharger leurres progressivement (1 leurre toutes les ~3s)
-              const decoyRate = 0.33 / (p._upgMods?.rearmMult ?? 1);
+              const decoyRate = 0.33 / (p._upgMods?.rearmMissileMult ?? 1);
               if (p._maxDecoys > 0 && (p.decoyCount ?? 0) < p._maxDecoys) {
                 this._decoyAccum = (this._decoyAccum ?? 0) + delta * decoyRate;
                 if (this._decoyAccum >= 1.0) {

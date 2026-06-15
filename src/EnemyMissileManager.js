@@ -14,6 +14,7 @@ export class EnemyMissileManager {
     this.onPlayerHit    = null;  // (damage) → Game.js
     this.onMissileFired = null;  // () → UI / audio
     this.onAllGone      = null;  // () → UI
+    this.onDecoySuccess = null;  // () → audio (leurre a intercepté un missile)
   }
 
   setTerrainHeightFn(fn) { this._getTerrainH = fn; }
@@ -82,11 +83,15 @@ export class EnemyMissileManager {
       // Attire par un leurre et le touche
       if (ms.decoyed && ms.decoyTarget &&
           ms.mesh.position.distanceTo(ms.decoyTarget) < HIT_RADIUS) {
+        this.onDecoySuccess?.();
         toRemove.push(ms);
         continue;
       }
 
-      if (ms.age > MAX_AGE) { toRemove.push(ms); continue; }
+      if (ms.age > MAX_AGE) {
+        if (ms.decoyed) this.onDecoySuccess?.();
+        toRemove.push(ms); continue;
+      }
     }
 
     for (const ms of toRemove) {

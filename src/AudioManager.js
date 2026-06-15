@@ -651,6 +651,76 @@ export class AudioManager {
     }
   }
 
+  // ── ALARME CONTINUE MISSILE EN VOL ───────────────────────────────────────
+  startMissileAlarm() {
+    if (!this._ctx || this._missileAlarmInterval) return;
+    const ping = () => {
+      if (!this._ctx) return;
+      const ctx = this._ctx;
+      const t   = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      osc.type  = 'sine';
+      osc.frequency.setValueAtTime(920, t);
+      osc.frequency.linearRampToValueAtTime(1080, t + 0.07);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.20, t + 0.01);
+      env.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      osc.connect(env); env.connect(this._bus.sfx);
+      osc.start(t); osc.stop(t + 0.23);
+    };
+    ping();
+    this._missileAlarmInterval = setInterval(ping, 360);
+  }
+
+  stopMissileAlarm() {
+    if (this._missileAlarmInterval) {
+      clearInterval(this._missileAlarmInterval);
+      this._missileAlarmInterval = null;
+    }
+  }
+
+  // ── DÉCOY RÉUSSI ──────────────────────────────────────────────────────────
+  playDecoySuccess() {
+    if (!this._ctx) return;
+    const ctx = this._ctx;
+    const t   = ctx.currentTime;
+    // Deux tonalités rapides montantes — "évadé !"
+    for (let i = 0; i < 2; i++) {
+      const d   = t + i * 0.14;
+      const osc = ctx.createOscillator();
+      osc.type  = 'sine';
+      osc.frequency.setValueAtTime(500 + i * 180, d);
+      osc.frequency.linearRampToValueAtTime(820 + i * 120, d + 0.12);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, d);
+      env.gain.linearRampToValueAtTime(0.18, d + 0.015);
+      env.gain.exponentialRampToValueAtTime(0.001, d + 0.15);
+      osc.connect(env); env.connect(this._bus.sfx);
+      osc.start(d); osc.stop(d + 0.16);
+    }
+  }
+
+  // ── IMPACT MISSILE SUR LE JOUEUR ─────────────────────────────────────────
+  playMissileImpact() {
+    if (!this._ctx) return;
+    this.playPlayerHit();
+    const ctx = this._ctx;
+    const t   = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * 0.5);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d   = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const lp  = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 90;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(2.0, t + 0.02);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    src.connect(lp); lp.connect(env); env.connect(this._bus.sfx);
+    src.start(t); src.stop(t + 0.5);
+  }
+
   // ── ALARME LOCK MISSILE ENNEMI ────────────────────────────────────────────
   playMissileLock() {
     if (!this._ctx) return;

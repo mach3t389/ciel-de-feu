@@ -442,6 +442,50 @@ export const UPGRADES = {
     stats: { defense:+5, speed:-3, maneuverability:-3, fuel:-4 },
     desc:'−40% tous les dégâts. Actif 7s, recharge 18s.',
   },
+
+  // ═══════════════════════ RÉARMEMENT ══════════════════════════
+  rearm_ammo1: {
+    id:'rearm_ammo1', cat:'rearmement', name:'Munitions Auto I',
+    levelReq:10, cost:1500, requires:null,
+    stats: { logistics:+8, maneuverability:-2 },
+    desc:'Chargeur automatisé : munitions −30% plus vite. Mécanismes embarqués → moins agile.',
+    rearmAmmoSpeed: 0.30,
+  },
+  rearm_ammo2: {
+    id:'rearm_ammo2', cat:'rearmement', name:'Munitions Auto II',
+    levelReq:30, cost:3500, requires:'rearm_ammo1',
+    stats: { logistics:+7, maneuverability:-2, speed:-2 },
+    desc:'Chargement haute cadence : munitions −55% au total. Systèmes plus lourds.',
+    rearmAmmoSpeed: 0.30,
+  },
+  rearm_ammo3: {
+    id:'rearm_ammo3', cat:'rearmement', name:'Chargeur Express',
+    levelReq:44, cost:7000, requires:'rearm_ammo2',
+    stats: { logistics:+7, maneuverability:-2, speed:-2 },
+    desc:'Chargeur express mécanique : munitions −75% au total. Très lourd, entretien complexe.',
+    rearmAmmoSpeed: 0.30,
+  },
+  rearm_miss1: {
+    id:'rearm_miss1', cat:'rearmement', name:"Pont d'Armement I",
+    levelReq:15, cost:2000, requires:null,
+    stats: { logistics:+8, speed:-3 },
+    desc:"Rails de chargement embarqués : missiles −30% plus vite. Poids des rails → −vitesse.",
+    rearmMissileSpeed: 0.30,
+  },
+  rearm_miss2: {
+    id:'rearm_miss2', cat:'rearmement', name:"Pont d'Armement II",
+    levelReq:35, cost:4500, requires:'rearm_miss1',
+    stats: { logistics:+4, speed:-2, maneuverability:-3 },
+    desc:"Rails haute capacité : missiles −55% au total. Charge sous les ailes accrue.",
+    rearmMissileSpeed: 0.30,
+  },
+  rearm_miss3: {
+    id:'rearm_miss3', cat:'rearmement', name:'Système AERO',
+    levelReq:50, cost:9000, requires:'rearm_miss2',
+    stats: { logistics:+6, speed:-3, maneuverability:-2, fuel:-5 },
+    desc:'Chargement pneumatique guidé : missiles −75% au total. Systèmes complexes et lourds.',
+    rearmMissileSpeed: 0.30,
+  },
 };
 
 // ── Ordre d'affichage par catégorie ──────────────────────────────────────────
@@ -697,10 +741,17 @@ export const EQUIPMENT_CATALOG = {
       { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:8,  pros:['Réparation −20%','Logistique +10%'],   cons:['Vitesse −2%'],         upgrades:['repair1'] },
       { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:26, pros:['Réparation −40%','Logistique +20%'],   cons:['Vitesse −4%'],         upgrades:['repair1','repair2'] },
     ]},
-    rearm:       { label:'RÉARMEMENT', options:[
-      { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                        cons:[],                      upgrades:[] },
-      { id:'rapide1',  name:'Rapide I',  icon:'◑',  levelReq:18, pros:['Réarmement −20%','Logistique +10%'],   cons:['Maniab. −2%'],         upgrades:['rearm1'] },
-      { id:'rapide2',  name:'Rapide II', icon:'●',  levelReq:36, pros:['Réarmement −40%','Logistique +20%'],   cons:['Maniab. −4%'],         upgrades:['rearm1','rearm2'] },
+    rearm_ammo: { label:'RÉARM. MUNITIONS', options:[
+      { id:'standard', name:'Standard',         icon:'○', levelReq:1,  pros:[],                                         cons:[],                                   upgrades:[] },
+      { id:'auto1',    name:'Automatisé I',     icon:'◑', levelReq:10, pros:['Munitions −30%','Logistique +8%'],       cons:['Maniab. −2%'],                      upgrades:['rearm_ammo1'] },
+      { id:'auto2',    name:'Automatisé II',    icon:'●', levelReq:30, pros:['Munitions −55%','Logistique +15%'],      cons:['Maniab. −4%','Vitesse −2%'],        upgrades:['rearm_ammo1','rearm_ammo2'] },
+      { id:'express',  name:'Chargeur Express', icon:'⚡', levelReq:44, pros:['Munitions −75%','Logistique +22%'],      cons:['Maniab. −6%','Vitesse −4%'],        upgrades:['rearm_ammo1','rearm_ammo2','rearm_ammo3'] },
+    ]},
+    rearm_missiles: { label:'RÉARM. MISSILES', options:[
+      { id:'standard', name:'Standard',       icon:'○', levelReq:1,  pros:[],                                          cons:[],                                              upgrades:[] },
+      { id:'pont1',    name:"Pont I",         icon:'◑', levelReq:15, pros:['Missiles −30%','Logistique +8%'],         cons:['Vitesse −3%'],                                 upgrades:['rearm_miss1'] },
+      { id:'pont2',    name:"Pont II",        icon:'●', levelReq:35, pros:['Missiles −55%','Logistique +12%'],        cons:['Vitesse −5%','Maniab. −3%'],                   upgrades:['rearm_miss1','rearm_miss2'] },
+      { id:'aero',     name:'Système AERO',  icon:'⚡', levelReq:50, pros:['Missiles −75%','Logistique +18%'],        cons:['Vitesse −8%','Maniab. −5%','Carburant −5%'],   upgrades:['rearm_miss1','rearm_miss2','rearm_miss3'] },
     ]},
     refuel:      { label:'RAVITAILLEMENT', options:[
       { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                          cons:[],                      upgrades:[] },
@@ -793,8 +844,12 @@ export const OPTION_COSTS = {
   // LOGISTIQUE
   'repair:rapide1'         : 1500,
   'repair:rapide2'         : 3500,
-  'rearm:rapide1'          : 2000,
-  'rearm:rapide2'          : 4000,
+  'rearm_ammo:auto1'       : 1500,
+  'rearm_ammo:auto2'       : 3500,
+  'rearm_ammo:express'     : 7000,
+  'rearm_missiles:pont1'   : 2000,
+  'rearm_missiles:pont2'   : 4500,
+  'rearm_missiles:aero'    : 9000,
   'refuel:rapide1'         : 2500,
   'refuel:rapide2'         : 5000,
   'maintenance:active'     : 8000,
@@ -812,7 +867,7 @@ export const DEFAULT_LOADOUT = {
   ammo:'100', ap:'standard', calibre:'standard', firerate:'standard',
   missiles_aa:'none', missiles_ag:'none', tracking:'none', acquisition:'none', missile_power:'standard', active_defense:'none',
   armor:'none', resist:'none', structure:'none',
-  repair:'standard', rearm:'standard', refuel:'standard', maintenance:'none',
+  repair:'standard', rearm_ammo:'standard', rearm_missiles:'standard', refuel:'standard', maintenance:'none',
   radar:'standard', alt_filter:'none', roll:'standard', tail_cam:'none',
 };
 
@@ -872,12 +927,15 @@ export function activeDefenseParams(loadout) {
 // ── Temps de service au sol avec améliorations ──────────────────────────────
 export function serviceTimeMult(upgradeIds) {
   let repair = 1.0, rearm = 1.0, refuel = 1.0;
+  let rearmAmmo = 1.0, rearmMissile = 1.0;
   for (const id of upgradeIds) {
     const u = UPGRADES[id];
     if (!u) continue;
-    if (u.repairSpeed) repair *= (1 - u.repairSpeed);
-    if (u.rearmSpeed)  rearm  *= (1 - u.rearmSpeed);
-    if (u.refuelSpeed) refuel *= (1 - u.refuelSpeed);
+    if (u.repairSpeed)       repair       *= (1 - u.repairSpeed);
+    if (u.rearmSpeed)        { rearm *= (1 - u.rearmSpeed); rearmAmmo *= (1 - u.rearmSpeed); rearmMissile *= (1 - u.rearmSpeed); }
+    if (u.rearmAmmoSpeed)    rearmAmmo    *= (1 - u.rearmAmmoSpeed);
+    if (u.rearmMissileSpeed) rearmMissile *= (1 - u.rearmMissileSpeed);
+    if (u.refuelSpeed)       refuel       *= (1 - u.refuelSpeed);
   }
-  return { repair, rearm, refuel };
+  return { repair, rearm, refuel, rearmAmmo, rearmMissile };
 }

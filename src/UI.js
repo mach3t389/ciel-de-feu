@@ -152,6 +152,7 @@ export class UI {
 
   showHitMarker()   { this._hitMarkerTimer  = 0.22; }
   showPlayerHit()   { this._playerHitTimer  = 0.45; }
+  showMissileHit()  { this._playerHitTimer  = 1.1; this._missileHit = true; }
 
   // ── Alarmes missiles ennemis ──────────────────────────────────────────────
   showMissileLock() {
@@ -1973,6 +1974,21 @@ export class UI {
           diamond();
           ctx.strokeStyle = col; ctx.lineWidth = lockOK ? 2.2 : 1.6;
           ctx.stroke();
+          // Double contour pour les ennemis lourds
+          if (e.isHeavy) {
+            const d2 = 4;
+            const savedAlpha = ctx.globalAlpha;
+            ctx.globalAlpha = savedAlpha * 0.45;
+            ctx.beginPath();
+            ctx.moveTo(sx,           sy - dh*2 - d2);
+            ctx.lineTo(sx + dh + d2, sy - dh);
+            ctx.lineTo(sx,           sy + d2);
+            ctx.lineTo(sx - dh - d2, sy - dh);
+            ctx.closePath();
+            ctx.strokeStyle = col; ctx.lineWidth = 1.0;
+            ctx.stroke();
+            ctx.globalAlpha = savedAlpha;
+          }
           // Pulse subtil quand verrouillé
           if (lockOK) {
             const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.012);
@@ -2055,10 +2071,14 @@ export class UI {
     // ── Vignette rouge quand le joueur est touché ─────────────────────────────
     if (this._playerHitTimer > 0) {
       this._playerHitTimer -= dt;
-      const a = Math.min(1, this._playerHitTimer / 0.25) * 0.30;
-      const grad = ctx.createRadialGradient(W/2, H/2, H*0.18, W/2, H/2, H*0.72);
+      const isMissile = this._missileHit;
+      if (this._playerHitTimer <= 0) this._missileHit = false;
+      const maxAlpha = isMissile ? 0.62 : 0.30;
+      const refTime  = isMissile ? 0.5  : 0.25;
+      const a = Math.min(1, this._playerHitTimer / refTime) * maxAlpha;
+      const grad = ctx.createRadialGradient(W/2, H/2, H*0.12, W/2, H/2, H*0.75);
       grad.addColorStop(0, 'rgba(180,0,0,0)');
-      grad.addColorStop(1, `rgba(200,0,0,${a})`);
+      grad.addColorStop(1, `rgba(220,0,0,${a})`);
       ctx.save(); ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H); ctx.restore();
     }
 

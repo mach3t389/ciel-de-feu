@@ -405,8 +405,8 @@ export class Player {
         this.keys.f_prev = true;
         if (this.onFireMissile) this.onFireMissile();
       }
-      // G : déployer un leurre
-      if ((e.key === 'g' || e.key === 'G') && !this.keys.g_prev) {
+      // X : déployer un leurre
+      if ((e.key === 'x' || e.key === 'X') && !this.keys.g_prev) {
         this.keys.g_prev = true;
         if (this.onDeployDecoy) this.onDeployDecoy();
       }
@@ -426,7 +426,7 @@ export class Player {
       if (e.key === 'Tab') { this.keys.tab_prev = false; if (this.onScoreboardShow) this.onScoreboardShow(false); }
       if (e.key === 'r' || e.key === 'R') this.keys.lookBack = false;
       if (e.key === 'f' || e.key === 'F') this.keys.f_prev = false;
-      if (e.key === 'g' || e.key === 'G') this.keys.g_prev = false;
+      if (e.key === 'x' || e.key === 'X') this.keys.g_prev = false;
       if (e.key === 'v' || e.key === 'V') this._vKeyActive = false;
     };
     // Clic gauche : tirer + (optionnellement) acquérir le pointer lock.

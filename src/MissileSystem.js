@@ -10,11 +10,11 @@ const DAMAGE_DIRECT   = 70;       // dégâts à l'impact direct
 const SPLASH_RADIUS   = 22;       // rayon de dégâts de zone
 const SPLASH_DMG_PCTG = 0.30;     // fraction des dégâts directs à distance splash
 const DECOY_EFFECT    = 0.75;
-const HIT_RADIUS      = 14;       // rayon d'impact direct (légèrement réduit)
+const HIT_RADIUS      = 18;       // rayon d'impact direct
 // Vitesse de guidage par niveau de tracking (0=standard … 3=IA)
-const TURN_SPEED_LEVELS = [5, 9, 13, 17];
+const TURN_SPEED_LEVELS = [6, 13, 18, 22];
 // Durée de piste bonus par niveau de tracking
-const TRACK_TIME_BONUS  = [0, 1.5, 2.5, 4.0];
+const TRACK_TIME_BONUS  = [0, 2.5, 4.0, 6.0];
 const DEBUG_MISSILES  = true;     // logs console pour diagnostiquer — passer false après validation
 
 export class MissileSystem {
