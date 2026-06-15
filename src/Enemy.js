@@ -269,12 +269,13 @@ export class Enemy {
     this._underAllyFire = 6.0; // reste réactif 6s après le dernier hit
   }
 
-  update(delta, playerPos, allyGroundTargets = []) {
+  update(delta, playerPos, allyGroundTargets = [], ecmActive = false) {
     if (!this._loaded) return;
     if (this.isDead) { this._death(delta); return; }
 
     if (this._underAllyFire > 0) this._underAllyFire -= delta;
     this._allyGroundTargets = allyGroundTargets;
+    this._ecmActive = ecmActive;
     this._think(delta, playerPos);   // FSM + choix du but de navigation
     this._avoidTerrain();            // PRIORITÉ : relève le but au-dessus du relief
     this._steer();                   // calcule stickX / stickY vers le but
@@ -324,7 +325,7 @@ export class Enemy {
       this.role = 'defender';   // leader mort → autonome
     }
 
-    const detected = (!this._passive && this._alwaysChase) ? true : (!this._passive && this._canSee(playerPos, dist));
+    const detected = (!this._passive && !this._ecmActive && this._alwaysChase) ? true : (!this._passive && !this._ecmActive && this._canSee(playerPos, dist));
 
     // Mémoire d'engagement : tant qu'elle dure, l'ennemi garde la cible même hors de vue
     if (detected) this._engage = this._engageTime;
@@ -636,6 +637,7 @@ export class Enemy {
   // ── Tir ─────────────────────────────────────────────────────────────────────
   _combat(delta, playerPos) {
     this._shootCd -= delta;
+    if (this._ecmActive) { this.missileLocking = false; this._missileLockT = 0; return; }
     this._updateMissileLock(delta, playerPos);
     if (!this.onFire || this._shootCd > 0 || this._passive) return;
     const canFire = (this.role === 'wingman') ? true : (this._state === ATTACK);

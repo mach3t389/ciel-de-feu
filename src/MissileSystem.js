@@ -247,7 +247,7 @@ export class MissileSystem {
       velocity        : new THREE.Vector3(0, 0, -1).applyQuaternion(playerPivot.quaternion).multiplyScalar(MISSILE_SPEED),
       trackRemaining  : target ? trackTime * guidanceStrength : 0,
       trackTimeBase   : trackTime,
-      life            : 10.0,
+      life            : 14.0,
       exploded        : false,
       frameCount      : 0,
       trackingLevel,

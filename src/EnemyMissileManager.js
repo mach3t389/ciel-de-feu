@@ -30,6 +30,7 @@ export class EnemyMissileManager {
 
   // Appelé quand le joueur déploie un leurre — attire les missiles proches
   deployDecoy(decoyPos) {
+    let count = 0;
     for (const ms of this._missiles) {
       if (ms.decoyed) continue;
       if (ms.mesh.position.distanceTo(decoyPos) < DECOY_RANGE) {
@@ -37,8 +38,10 @@ export class EnemyMissileManager {
         ms.decoyTarget = decoyPos.clone().add(
           new THREE.Vector3((Math.random() - 0.5) * 40, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 40)
         );
+        count++;
       }
     }
+    return count;
   }
 
   update(delta, playerPos) {

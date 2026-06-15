@@ -116,9 +116,9 @@ export class UI {
     this._refuelEl = document.createElement('div');
     Object.assign(this._refuelEl.style, {
       position     : 'absolute',
-      top          : '50%',
+      top          : '22%',
       left         : '50%',
-      transform    : 'translate(-50%, -50%)',
+      transform    : 'translateX(-50%)',
       color        : '#44ff88',
       fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '15px',
@@ -204,8 +204,8 @@ export class UI {
   showLandingApproach(speed, visible) {
     if (!this._landingEl) return;
     if (!visible || this._refuelCompleteTimer > 0) { this._landingEl.style.display = 'none'; return; }
-    const safe  = speed <= 12;
-    const warn  = speed <= 25;
+    const safe  = speed <= 50;
+    const warn  = speed <= 80;
     const color = safe ? '#44ff88' : (warn ? '#ff8800' : '#ff4444');
     const bg    = safe ? 'rgba(0,20,0,0.55)' : (warn ? 'rgba(20,10,0,0.55)' : 'rgba(20,0,0,0.55)');
     Object.assign(this._landingEl.style, {
@@ -3028,7 +3028,7 @@ export class UI {
   // type: 'leurres' | 'ecm' | 'shield_front' | 'shield_rear' | 'shield_full' | null
   // Pour leurres :  count = restants, max = total
   // Pour ECM/shield: isActive = true/false, cooldownPct = 0→1 (1 = en recharge complète)
-  setActiveDefenseStatus(type, count, max, cooldownPct = 0, isActive = false) {
+  setActiveDefenseStatus(type, count, max, cooldownPct = 0, isActive = false, timeRemaining = 0) {
     if (this._decoyEl) { this._decoyEl.remove(); this._decoyEl = null; }
     if (!this._decoyCanvas) return;
     if (!type || type === 'none' || max <= 0) { this._decoyCanvas.style.display = 'none'; return; }
@@ -3060,13 +3060,14 @@ export class UI {
     ctx.fillText(label, W / 2, 6);
 
     // État central
-    let stateText, stateColor;
+    let stateText, stateColor, subText = null;
     if (isActive) {
       stateText  = t('adActive');
       stateColor = '#4488ff';
     } else if (cooldownPct > 0) {
       stateText  = t('adRecharge');
       stateColor = C.tickMinor;
+      if (timeRemaining > 0) subText = `${Math.ceil(timeRemaining)}s`;
     } else {
       stateText  = t('adReady');
       stateColor = '#44cc88';
@@ -3074,7 +3075,12 @@ export class UI {
     ctx.fillStyle = stateColor;
     ctx.font = 'bold 13px Rajdhani, sans-serif';
     ctx.textBaseline = 'middle';
-    ctx.fillText(stateText, W / 2, H / 2 + 2);
+    const centerY = subText ? H / 2 - 4 : H / 2 + 2;
+    ctx.fillText(stateText, W / 2, centerY);
+    if (subText) {
+      ctx.font = '10px Rajdhani, sans-serif';
+      ctx.fillText(subText, W / 2, centerY + 14);
+    }
 
     // Barre de recharge en bas
     const barY = H - 10, barH = 4;

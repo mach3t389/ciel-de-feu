@@ -452,7 +452,11 @@ export class Game {
           this.ui.setActiveDefenseStatus('leurres', this.player.decoyCount, this.player._maxDecoys);
           this._missileSystem.deployDecoy(this.player.pivot);
           this._missileSystem.removeDecoyPod?.();
-          this._enemyMissileManager.deployDecoy(this.player.position);
+          const decoyed = this._enemyMissileManager.deployDecoy(this.player.position);
+          if (decoyed > 0) {
+            this.ui.hideMissileWarning?.();
+            this._audio?.stopMissileAlarm?.();
+          }
           this._audio?.playDecoy();
         };
       } else if (adParams?.type === 'ecm') {
@@ -461,6 +465,11 @@ export class Game {
           this._ecmActive = true;
           this._ecmTimer  = adParams.ecmDuration;
           this._missileSystem.setECMActive(true);
+          const jammed = this._enemyMissileManager.deployDecoy(this.player.position);
+          if (jammed > 0) {
+            this.ui.hideMissileWarning?.();
+            this._audio?.stopMissileAlarm?.();
+          }
           this._audio?.playDecoy?.();
           this.ui.setActiveDefenseStatus('ecm', 1, 1, 0, true);
         };
@@ -1068,8 +1077,8 @@ export class Game {
       } else if (this._ecmCooldown > 0) {
         this._ecmCooldown -= delta;
         const pct = this._ecmCooldown / ad.ecmCooldown;
-        this.ui.setActiveDefenseStatus('ecm', 0, 1, pct, false);
-        if (this._ecmCooldown <= 0) this.ui.setActiveDefenseStatus('ecm', 1, 1, 0, false);
+        this.ui.setActiveDefenseStatus('ecm', 0, 1, pct, false, this._ecmCooldown);
+        if (this._ecmCooldown <= 0) this.ui.setActiveDefenseStatus('ecm', 1, 1, 0, false, 0);
       }
     } else if (ad.type?.startsWith('shield')) {
       if (this._shieldActive) {
@@ -1083,13 +1092,13 @@ export class Game {
           this._shieldActive = false;
           this._shieldCooldown = ad.shieldCooldown;
           if (this._shieldMesh) this._shieldMesh.visible = false;
-          this.ui.setActiveDefenseStatus(ad.type, 0, 1, 1, false);
+          this.ui.setActiveDefenseStatus(ad.type, 0, 1, 1, false, this._shieldCooldown);
         }
       } else if (this._shieldCooldown > 0) {
         this._shieldCooldown -= delta;
         const pct = this._shieldCooldown / ad.shieldCooldown;
-        this.ui.setActiveDefenseStatus(ad.type, 0, 1, pct, false);
-        if (this._shieldCooldown <= 0) this.ui.setActiveDefenseStatus(ad.type, 1, 1, 0, false);
+        this.ui.setActiveDefenseStatus(ad.type, 0, 1, pct, false, this._shieldCooldown);
+        if (this._shieldCooldown <= 0) this.ui.setActiveDefenseStatus(ad.type, 1, 1, 0, false, 0);
       }
     }
   }
@@ -2207,12 +2216,12 @@ export class Game {
     // ── Défense active (ECM / boucliers) ─────────────────────────────────────
     if (this._adParams) this._tickActiveDefense(delta);
 
-    // ── Recharge passive des leurres (1 toutes les 45s, hors aéroport) ───────
+    // ── Recharge passive des leurres (1 toutes les 15s, hors aéroport) ───────
     if (this._adParams?.type === 'leurres' && !this.player.isDead) {
       const p = this.player;
       if ((p.decoyCount ?? 0) < (p._maxDecoys ?? 0)) {
         this._decoyRechargeT = (this._decoyRechargeT ?? 0) + delta;
-        if (this._decoyRechargeT >= 45) {
+        if (this._decoyRechargeT >= 15) {
           this._decoyRechargeT = 0;
           p.decoyCount = Math.min(p._maxDecoys, (p.decoyCount ?? 0) + 1);
           this.ui.setActiveDefenseStatus('leurres', p.decoyCount, p._maxDecoys);
@@ -2415,7 +2424,7 @@ export class Game {
     if (this._groundDefense) {
       this._groundDefense.update(delta, {
         playerPos  : this.player.position,
-        playerAlive: !this.player.isDead,
+        playerAlive: !this.player.isDead && !this._ecmActive,
         enemies    : this.enemies,
         enemyFire  : (pos, quat, dmg) => { const b = this._enemyBulletManager.fire(pos, quat, dmg); if (b) b._fromTurret = true; },
         alliedFire : (pos, quat, dmg) => this._alliedBulletManager.fire(pos, quat, dmg, true),
@@ -2583,7 +2592,7 @@ export class Game {
       } else {
         const dt = Math.min(0.1, delta + (enemy._accDelta ?? 0));
         enemy._accDelta = 0;
-        enemy.update(dt, targetPos, allyGroundTargets);
+        enemy.update(dt, targetPos, allyGroundTargets, this._ecmActive);
       }
       this._frameAIUpdates++;
 
@@ -2738,8 +2747,8 @@ export class Game {
 
     // HUD mission
     if (!this._isSurvival && this._missionTotal > 0) {
-      const remaining = Math.max(0, this._missionTotal - this._missionKilled);
       const active    = this.enemies.filter(e => !e.isDead).length;
+      const remaining = active + Math.max(0, this._missionTotal - this._missionSpawned);
       const turrets   = this._groundDefense ? this._groundDefense.getEnemyCountByKind('mg')    : 0;
       const armor     = this._groundDefense ? this._groundDefense.getEnemyCountByKind('tank','truck') : 0;
       this.ui.updateMissionHUD(remaining, active, turrets, armor);
@@ -2896,7 +2905,6 @@ export class Game {
         }
       }
       if (!nearAirport) { this._refuelTimer = 0; this._refuelSoundTimer = 0; this._missileAccum = 0; this._decoyAccum = 0; }
-      if (!p.isLanded) this.ui.clearRefuelMessage();
       this.ui.showRefueling(refueling);
       this.ui.showLandingApproach(p.speed, nearAirportApproach && !refueling);
     }
