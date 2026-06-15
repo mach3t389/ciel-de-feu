@@ -3027,13 +3027,32 @@ export class Menu {
       4: {
         name  : t('mapName_4'),
         desc  : t('mapDesc_4'),
-        sky   : ['#0e1a0c', '#1c3018'],
-        water : '#2a6a8c', low: '#2e5a1a', forest: '#1a4a0e', rock: '#5a4830', snow: '#d0d4cc',
-        peaks : [[0.75,0.18,0.10],[0.85,0.38,0.08],[0.60,0.28,0.07],[0.20,0.20,0.08],[0.12,0.42,0.07]],
-        lakes : [[0.35,0.60,0.05],[0.62,0.70,0.04],[0.18,0.62,0.03],[0.50,0.45,0.03]],
-        villages: [[0.28,0.55],[0.50,0.65],[0.70,0.52]],
-        airports: [[0.24,0.44],[0.72,0.60]],
-        roads: [[[0.28,0.55],[0.50,0.65]],[[0.50,0.65],[0.70,0.52]]],
+        sky   : ['#0d1a0b', '#1a3016'],
+        water : '#2a5878', low: '#3a8c28', forest: '#206810', rock: '#8a6e48', snow: '#eef0f6',
+        peaks : [
+          [0.313, 0.575, 0.14],  // massif NO principal (~1400m)
+          [0.375, 0.463, 0.09],  // crête NO-centre (~620m)
+          [0.675, 0.375, 0.09],  // sommet NE (~580m)
+          [0.413, 0.275, 0.07],  // sommet SO (~520m)
+          [0.600, 0.713, 0.08],  // sommet SE (~540m)
+          [0.538, 0.525, 0.07],  // central (~460m)
+          [0.638, 0.613, 0.06],  // crête E-centre (~440m)
+        ],
+        lakes : [
+          [0.287, 0.554, 0.040],
+          [0.713, 0.446, 0.035],
+          [0.490, 0.419, 0.025],
+          [0.540, 0.606, 0.022],
+        ],
+        villages: [[0.244,0.525],[0.756,0.475],[0.500,0.200],[0.512,0.800]],
+        airports: [[0.200,0.500],[0.650,0.500]],
+        roads: [[[0.244,0.525],[0.500,0.200]],[[0.244,0.525],[0.512,0.800]],[[0.756,0.475],[0.500,0.200]],[[0.756,0.475],[0.512,0.800]]],
+        _canyons: [
+          // Canyon principal — base alliée vers base ennemie
+          [[0.200,0.500],[0.238,0.456],[0.288,0.431],[0.338,0.456],[0.400,0.510],[0.456,0.444],[0.519,0.419],[0.575,0.431],[0.619,0.469],[0.650,0.500]],
+          // Branche nord sinueuse — vers Sudvil (100, 2400)
+          [[0.338,0.456],[0.369,0.535],[0.415,0.597],[0.468,0.653],[0.509,0.710],[0.514,0.756],[0.513,0.800]],
+        ],
       },
     };
 
@@ -3080,19 +3099,51 @@ export class Menu {
       }
       ctx.globalAlpha = 1;
     } else {
-      // Terrain de base (bas de la carte) — part de haut pour que les montagnes ne flottent pas
+      // Terrain de base — fond plat style low-poly
       ctx.fillStyle = m.low; ctx.fillRect(0, H * 0.08, W, H);
 
-      // Forêt patches
-      ctx.globalAlpha = 0.6;
+      // Zones rocheuses — triangles plats qui simulent le relief (flat-shading)
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = m.rock;
+      [[0.12,0.28,0.38,0.22],[0.45,0.20,0.72,0.16],[0.62,0.35,0.88,0.28],[0.22,0.50,0.45,0.42],[0.68,0.58,0.90,0.50]].forEach(([x1,y1,x2,y2]) => {
+        ctx.beginPath();
+        ctx.moveTo(x1*W, y2*H); ctx.lineTo(((x1+x2)/2)*W, y1*H); ctx.lineTo(x2*W, y2*H);
+        ctx.closePath(); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+
+      // Forêt patches — polygones plats à 5-7 côtés (low-poly, sans dégradé)
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = m.forest;
       for (let i = 0; i < 9; i++) {
         const fx = (0.08 + i * 0.105) % 0.92, fy = 0.33 + (i * 0.137) % 0.55;
-        const grad = ctx.createRadialGradient(fx*W, fy*H, 0, fx*W, fy*H, 0.13*W);
-        grad.addColorStop(0, m.forest); grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.ellipse(fx*W, fy*H, 0.13*W, 0.10*H, 0, 0, Math.PI*2); ctx.fill();
+        const rW = (0.08 + (i * 0.031) % 0.055) * W;
+        const rH = rW * 0.72;
+        const sides = 5 + (i % 3);
+        ctx.beginPath();
+        for (let s = 0; s < sides; s++) {
+          const ang = (s / sides) * Math.PI * 2 + i * 0.7;
+          const jit = 0.80 + (s * 13 + i * 7) % 40 / 100;
+          const px = fx*W + Math.cos(ang) * rW * jit;
+          const py = fy*H + Math.sin(ang) * rH * jit;
+          s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath(); ctx.fill();
       }
       ctx.globalAlpha = 1;
+
+      // Canyons (maps avec _canyons) — corridors volables visibles sur la miniature
+      if (m._canyons) {
+        ctx.strokeStyle = 'rgba(140,100,50,0.80)';
+        ctx.setLineDash([]);
+        m._canyons.forEach((pts, ci) => {
+          ctx.lineWidth = ci === 0 ? 3.5 : 2.2;
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0]*W, pts[0][1]*H);
+          for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0]*W, pts[k][1]*H);
+          ctx.stroke();
+        });
+      }
     }
 
     // Lacs

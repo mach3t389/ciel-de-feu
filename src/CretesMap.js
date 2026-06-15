@@ -37,14 +37,17 @@ const CANYON_MAIN = [
   [ -800,   80], [ -350, -450], [  150, -650], [  600, -550],
   [  950, -250], [ 1200,    0],
 ];
-// Branche secondaire : débranchement vers le massif NO (exploration)
+// Branche secondaire : débranchement vers le village Sudvil (100, 2400) — plus étroit, plus sinueux
 const CANYON_BRANCH = [
-  [-1300, -350], [-1100,  100], [ -900,  550], [ -750,  900],
+  [-1300, -350], [-1050,  280], [ -680,  780],
+  [ -260, 1220], [   70, 1680], [  110, 2050], [  100, 2400],
 ];
-const CANYON_PATHS   = [CANYON_MAIN, CANYON_BRANCH];
-const CANYON_HALF_W  = 90;   // demi-largeur du corridor volable (unités monde)
-const CANYON_BLEND_W = 65;   // zone de fondu vers terrain naturel
-const CANYON_FLOOR   = 28;   // altitude plancher du canyon
+const CANYON_FLOOR  = 28;   // altitude plancher commun
+// { pts, halfW, blend } — largeurs différentes par canyon
+const CANYON_DEFS = [
+  { pts: CANYON_MAIN,   halfW: 90, blend: 65 },
+  { pts: CANYON_BRANCH, halfW: 62, blend: 45 },
+];
 
 // Village 0 = allié (près base joueur), villages 1-3 = ennemis
 const VILLAGES = [
@@ -173,12 +176,12 @@ export class CretesMap {
       let h = getBase(wx, wz);
 
       // ── Canyons : creuse des corridors volables dans le relief ───────────────
-      for (const path of CANYON_PATHS) {
+      for (const { pts, halfW, blend } of CANYON_DEFS) {
         let minD = Infinity;
-        for (let i = 0; i < path.length - 1; i++)
-          minD = Math.min(minD, segD(wx, wz, path[i][0], path[i][1], path[i+1][0], path[i+1][1]));
-        if (minD >= CANYON_HALF_W + CANYON_BLEND_W) continue;
-        const t = Math.max(0, Math.min(1, (minD - CANYON_HALF_W) / CANYON_BLEND_W));
+        for (let i = 0; i < pts.length - 1; i++)
+          minD = Math.min(minD, segD(wx, wz, pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1]));
+        if (minD >= halfW + blend) continue;
+        const t = Math.max(0, Math.min(1, (minD - halfW) / blend));
         const s = t*t*(3-2*t); // 0 = fond plat, 1 = terrain naturel
         if (h > CANYON_FLOOR)
           h = Math.min(h, h * s + CANYON_FLOOR * (1 - s));
