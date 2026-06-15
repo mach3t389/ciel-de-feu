@@ -1543,6 +1543,7 @@ export class Menu {
       id: 'local', name: this._config.pilotName, team: this._config.team,
       planeName: this._progression.getPlane(this._progression.activePlane).name,
       level: this._progression.level,
+      prestigeLevel: this._progression.prestigeLevel ?? 0,
       playerTeam: this._config.playerTeam ?? 'team1', isReady: false, isHost,
     };
     const players = [self];
@@ -1569,7 +1570,9 @@ export class Menu {
           background: pCol, flexShrink: '0',
         }}));
         const lvl = Number.isFinite(p.level) ? p.level : '?';
-        row.appendChild(el('span', { text: `${t('lvlReqPrefix')} ${lvl}`, style: {
+        const pLvl = p.prestigeLevel ?? 0;
+        const lvlText = pLvl > 0 ? `${t('lvlReqPrefix')} ${lvl}  ★${pLvl}` : `${t('lvlReqPrefix')} ${lvl}`;
+        row.appendChild(el('span', { text: lvlText, style: {
           color: M.yellow, fontSize: '9px', letterSpacing: '1px', flexShrink: '0', fontWeight: '600',
         }}));
         row.appendChild(el('span', { text: p.isReady ? '■' : '□', style: { color: p.isReady ? M.green : M.dimCream, fontSize: '12px', flexShrink: '0' }}));
@@ -1728,7 +1731,7 @@ export class Menu {
         await nm.connect();
 
         if (isHost) {
-          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, level: self.level, tdmAiCount: this._config.tdmAiCount ?? 0 });
+          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, level: self.level, prestigeLevel: self.prestigeLevel, tdmAiCount: this._config.tdmAiCount ?? 0 });
           statusEl.textContent = t('lobbyWaiting');
           statusEl.style.color = M.green;
         } else {
@@ -1737,7 +1740,7 @@ export class Menu {
           const MAX_RETRIES = 10, RETRY_MS = 3000;
           for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-              res = await nm.joinRoom(code, { name: self.name, team: self.team, level: self.level });
+              res = await nm.joinRoom(code, { name: self.name, team: self.team, level: self.level, prestigeLevel: self.prestigeLevel });
               break; // succès
             } catch (err) {
               const msg = err?.message ?? String(err);
@@ -1857,8 +1860,22 @@ export class Menu {
 
   // ── Modal Prestige ───────────────────────────────────────────────────────
   _showPrestigeModal() {
-    if (!this._progression?.canPrestige?.()) return;
     const prog = this._progression;
+    if (!prog) return;
+    const canP    = prog.canPrestige?.() ?? false;
+    const allDone = (prog.prestigeLevel ?? 0) >= 4;
+    const nextId  = prog.nextPrestigeSkill;
+
+    const SKILLS = [
+      { id:'arsenal', name: t('prestigeSkillArsenal'), desc: t('prestigeSkillArsenalD') },
+      { id:'cellule', name: t('prestigeSkillCellule'), desc: t('prestigeSkillCelluleD') },
+      { id:'moteur',  name: t('prestigeSkillMoteur'),  desc: t('prestigeSkillMoteurD')  },
+      { id:'souffle', name: t('prestigeSkillSouffle'), desc: t('prestigeSkillSouffleD') },
+    ];
+
+    // Index sélectionné par défaut : le prochain skill, sinon le dernier
+    let selIdx = SKILLS.findIndex(s => s.id === nextId);
+    if (selIdx < 0) selIdx = SKILLS.length - 1;
 
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
@@ -1870,85 +1887,145 @@ export class Menu {
 
     const box = document.createElement('div');
     Object.assign(box.style, {
-      background: 'rgba(10,10,8,0.98)', border: `1px solid ${M.yellow}`,
-      borderRadius: '8px', padding: '36px 40px', maxWidth: '520px', width: '90vw',
+      background: 'rgba(10,10,8,0.98)',
+      border: `1px solid ${canP ? M.yellow : M.border}`,
+      borderRadius: '8px', padding: '36px 44px', maxWidth: '720px', width: '94vw',
       fontFamily: 'Rajdhani, sans-serif', color: M.cream,
-      boxShadow: `0 0 40px ${M.yellow}33`,
+      boxShadow: canP ? `0 0 40px ${M.yellow}33` : 'none',
     });
 
+    // Titre + sous-titre
     const title = document.createElement('div');
-    title.textContent = t('prestigeTitle');
-    Object.assign(title.style, { fontSize:'18px', letterSpacing:'3px', color: M.yellow, fontWeight:'700', marginBottom:'8px' });
+    title.textContent = canP ? t('prestigeTitle') : t('prestigeLevel');
+    Object.assign(title.style, { fontSize:'18px', letterSpacing:'3px', color: canP ? M.yellow : M.cream, fontWeight:'700', marginBottom:'6px' });
+    box.appendChild(title);
 
     const sub = document.createElement('div');
-    sub.textContent = t('prestigeSub');
-    Object.assign(sub.style, { fontSize:'12px', letterSpacing:'1px', color: M.dimCream, marginBottom:'6px' });
+    sub.textContent = canP ? t('prestigeSub') : allDone ? t('prestigeMaxSub') : t('prestigeViewSub');
+    Object.assign(sub.style, { fontSize:'11px', letterSpacing:'0.5px', color: M.dimCream, marginBottom: canP ? '4px' : '20px', lineHeight:'1.5' });
+    box.appendChild(sub);
 
-    const warn = document.createElement('div');
-    warn.textContent = t('prestigeWarning');
-    Object.assign(warn.style, { fontSize:'11px', letterSpacing:'1px', color:'#ff9944', marginBottom:'24px' });
-
-    const SKILLS = [
-      { id:'arsenal', name: t('prestigeSkillArsenal'), desc: t('prestigeSkillArsenalD') },
-      { id:'cellule', name: t('prestigeSkillCellule'), desc: t('prestigeSkillCelluleD') },
-      { id:'moteur',  name: t('prestigeSkillMoteur'),  desc: t('prestigeSkillMoteurD')  },
-      { id:'souffle', name: t('prestigeSkillSouffle'), desc: t('prestigeSkillSouffleD') },
-    ];
-
-    const nextId   = prog.nextPrestigeSkill;
-    const nextSkill = SKILLS.find(s => s.id === nextId);
-
-    // Carte mise en avant : le prochain déblocage
-    const nextCard = document.createElement('div');
-    Object.assign(nextCard.style, {
-      padding:'18px 20px', borderRadius:'6px', marginBottom:'20px',
-      border:`1px solid ${M.yellow}`, background:`${M.yellow}14`,
-    });
-    const nextLabel = document.createElement('div');
-    nextLabel.textContent = t('prestigeNext');
-    Object.assign(nextLabel.style, { fontSize:'10px', letterSpacing:'2px', color: M.yellow, marginBottom:'6px' });
-    const nextName = document.createElement('div');
-    nextName.textContent = nextSkill?.name ?? '';
-    Object.assign(nextName.style, { fontSize:'15px', letterSpacing:'2px', fontWeight:'700', color: M.cream, marginBottom:'6px' });
-    const nextDesc = document.createElement('div');
-    nextDesc.textContent = nextSkill?.desc ?? '';
-    Object.assign(nextDesc.style, { fontSize:'11px', color: M.dimCream, lineHeight:'1.6' });
-    nextCard.appendChild(nextLabel);
-    nextCard.appendChild(nextName);
-    nextCard.appendChild(nextDesc);
-
-    // Roadmap : liste des 4 prestiges avec statut
-    const roadmap = document.createElement('div');
-    Object.assign(roadmap.style, { display:'flex', flexDirection:'column', gap:'6px', marginBottom:'24px' });
-    for (let i = 0; i < SKILLS.length; i++) {
-      const sk     = SKILLS[i];
-      const owned  = prog.hasPrestigeSkill(sk.id);
-      const isNext = sk.id === nextId;
-      const row    = document.createElement('div');
-      Object.assign(row.style, {
-        display:'flex', alignItems:'center', gap:'10px',
-        padding:'8px 12px', borderRadius:'4px',
-        border: isNext ? `1px solid ${M.yellow}55` : `1px solid transparent`,
-        background: owned ? `${M.yellow}08` : isNext ? `${M.yellow}0a` : 'transparent',
-        opacity: (!owned && !isNext) ? '0.4' : '1',
-      });
-      const dot = document.createElement('div');
-      dot.textContent = owned ? '✓' : isNext ? '▶' : `${i + 1}`;
-      Object.assign(dot.style, {
-        fontSize:'11px', fontWeight:'700', width:'18px', textAlign:'center',
-        color: owned ? M.yellow : isNext ? M.cream : M.dimCream,
-      });
-      const rowName = document.createElement('div');
-      rowName.textContent = sk.name;
-      Object.assign(rowName.style, {
-        fontSize:'12px', letterSpacing:'1px', fontWeight:'700',
-        color: owned ? M.yellow : M.cream,
-      });
-      row.appendChild(dot);
-      row.appendChild(rowName);
-      roadmap.appendChild(row);
+    if (canP) {
+      const warn = document.createElement('div');
+      warn.textContent = t('prestigeWarning');
+      Object.assign(warn.style, { fontSize:'11px', letterSpacing:'0.5px', color:'#ff9944', marginBottom:'20px' });
+      box.appendChild(warn);
     }
 
+    // ── Zone split : roadmap (gauche) + détail (droite) ──────────────────
+    const split = document.createElement('div');
+    Object.assign(split.style, { display:'flex', gap:'16px', marginBottom:'24px' });
+
+    // Colonne roadmap
+    const roadmapCol = document.createElement('div');
+    Object.assign(roadmapCol.style, { display:'flex', flexDirection:'column', gap:'6px', flexShrink:'0', width:'220px' });
+
+    // Panneau de détail
+    const detailPanel = document.createElement('div');
+    Object.assign(detailPanel.style, {
+      flex:'1', padding:'18px 20px', borderRadius:'6px', minHeight:'140px',
+      border:`1px solid ${M.border}`, background:'rgba(255,255,255,0.03)',
+      display:'flex', flexDirection:'column', gap:'8px',
+    });
+
+    const renderDetail = (idx) => {
+      detailPanel.innerHTML = '';
+      const sk      = SKILLS[idx];
+      const obtained = prog.hasPrestigeSkill(sk.id);
+      const isNext  = sk.id === nextId;
+
+      const statusLbl = document.createElement('div');
+      Object.assign(statusLbl.style, { fontSize:'9px', letterSpacing:'2px', fontWeight:'700', marginBottom:'2px' });
+      if (obtained) {
+        statusLbl.textContent = t('prestigeObtained');
+        statusLbl.style.color = M.yellow;
+      } else if (isNext) {
+        statusLbl.textContent = t('prestigeNext');
+        statusLbl.style.color = M.cream;
+      } else {
+        statusLbl.textContent = t('prestigeUpcoming');
+        statusLbl.style.color = M.dimCream;
+      }
+      detailPanel.appendChild(statusLbl);
+
+      const nameLbl = document.createElement('div');
+      nameLbl.textContent = sk.name;
+      Object.assign(nameLbl.style, {
+        fontSize:'15px', fontWeight:'700', letterSpacing:'1px',
+        color: obtained ? M.yellow : M.cream, marginBottom:'8px',
+      });
+      detailPanel.appendChild(nameLbl);
+
+      const descLbl = document.createElement('div');
+      descLbl.textContent = sk.desc;
+      Object.assign(descLbl.style, { fontSize:'12px', color: M.dimCream, lineHeight:'1.6' });
+      detailPanel.appendChild(descLbl);
+    };
+
+    const rowEls = [];
+    const highlightRow = (idx) => {
+      rowEls.forEach((r, i) => {
+        const sk      = SKILLS[i];
+        const obtained = prog.hasPrestigeSkill(sk.id);
+        const isNext  = sk.id === nextId;
+        const active  = i === idx;
+        r.style.border     = active ? `1px solid ${M.yellow}88` : obtained ? `1px solid ${M.yellow}33` : `1px solid transparent`;
+        r.style.background = active ? `${M.yellow}14` : obtained ? `${M.yellow}08` : isNext ? `${M.yellow}06` : 'transparent';
+      });
+    };
+
+    SKILLS.forEach((sk, i) => {
+      const obtained = prog.hasPrestigeSkill(sk.id);
+      const isNext   = sk.id === nextId;
+
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display:'flex', alignItems:'center', gap:'10px',
+        padding:'9px 12px', borderRadius:'4px', cursor:'pointer',
+        border: `1px solid transparent`,
+        background: obtained ? `${M.yellow}08` : isNext ? `${M.yellow}06` : 'transparent',
+        transition:'all 0.12s',
+      });
+      rowEls.push(row);
+
+      // Badge cercle : ✓ si obtenu, numéro sinon
+      const badge = document.createElement('div');
+      Object.assign(badge.style, {
+        width:'24px', height:'24px', borderRadius:'50%', flexShrink:'0',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize: obtained ? '12px' : '11px', fontWeight:'800',
+        border: obtained ? `1px solid ${M.yellow}` : isNext ? `1px solid ${M.cream}66` : `1px solid ${M.border}55`,
+        background: obtained ? `${M.yellow}22` : 'transparent',
+        color: obtained ? M.yellow : isNext ? M.cream : M.dimCream,
+      });
+      badge.textContent = obtained ? '✓' : String(i + 1);
+
+      const nameCol = document.createElement('div');
+      nameCol.textContent = sk.name;
+      Object.assign(nameCol.style, {
+        fontSize:'12px', fontWeight:'700', letterSpacing:'0.5px',
+        color: obtained ? M.yellow : isNext ? M.cream : M.dimCream,
+        opacity: (!obtained && !isNext) ? '0.5' : '1',
+      });
+
+      row.appendChild(badge);
+      row.appendChild(nameCol);
+
+      row.addEventListener('click', () => { selIdx = i; renderDetail(i); highlightRow(i); });
+      row.addEventListener('mouseover', () => { if (i !== selIdx) row.style.background = `${M.border}11`; });
+      row.addEventListener('mouseout',  () => { if (i !== selIdx) row.style.background = obtained ? `${M.yellow}08` : isNext ? `${M.yellow}06` : 'transparent'; });
+
+      roadmapCol.appendChild(row);
+    });
+
+    renderDetail(selIdx);
+    highlightRow(selIdx);
+
+    split.appendChild(roadmapCol);
+    split.appendChild(detailPanel);
+    box.appendChild(split);
+
+    // Boutons
     const btnRow = document.createElement('div');
     Object.assign(btnRow.style, { display:'flex', gap:'12px', justifyContent:'flex-end' });
 
@@ -1963,31 +2040,29 @@ export class Menu {
     cancelBtn.addEventListener('mouseout',  () => { cancelBtn.style.borderColor = M.border; cancelBtn.style.color = M.dimCream; });
     cancelBtn.addEventListener('click', () => overlay.remove());
 
-    const confirmBtn = document.createElement('button');
-    confirmBtn.textContent = t('prestigeConfirm');
-    Object.assign(confirmBtn.style, {
-      background: `${M.yellow}22`, border:`1px solid ${M.yellow}`,
-      color: M.yellow, fontFamily:'Rajdhani, sans-serif', fontSize:'13px',
-      letterSpacing:'2px', fontWeight:'700', padding:'10px 24px',
-      cursor:'pointer', borderRadius:'4px', transition:'all 0.15s',
-    });
-    confirmBtn.addEventListener('mouseover', () => { confirmBtn.style.background = `${M.yellow}33`; });
-    confirmBtn.addEventListener('mouseout',  () => { confirmBtn.style.background = `${M.yellow}22`; });
-    confirmBtn.addEventListener('click', () => {
-      if (!prog.prestige?.()) return;
-      overlay.remove();
-      this._refreshProfileBar();
-    });
+    if (canP) {
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = t('prestigeConfirm');
+      Object.assign(confirmBtn.style, {
+        background: `${M.yellow}22`, border:`1px solid ${M.yellow}`,
+        color: M.yellow, fontFamily:'Rajdhani, sans-serif', fontSize:'13px',
+        letterSpacing:'2px', fontWeight:'700', padding:'10px 24px',
+        cursor:'pointer', borderRadius:'4px', transition:'all 0.15s',
+      });
+      confirmBtn.addEventListener('mouseover', () => { confirmBtn.style.background = `${M.yellow}33`; });
+      confirmBtn.addEventListener('mouseout',  () => { confirmBtn.style.background = `${M.yellow}22`; });
+      confirmBtn.addEventListener('click', () => {
+        if (!prog.prestige?.()) return;
+        overlay.remove();
+        this._refreshProfileBar();
+      });
+      btnRow.appendChild(confirmBtn);
+    }
 
     btnRow.appendChild(cancelBtn);
-    btnRow.appendChild(confirmBtn);
-    box.appendChild(title);
-    box.appendChild(sub);
-    box.appendChild(warn);
-    box.appendChild(nextCard);
-    box.appendChild(roadmap);
     box.appendChild(btnRow);
     overlay.appendChild(box);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
   }
 
@@ -3273,6 +3348,7 @@ export class Menu {
           <span class="pb-plane-icon" style="font-size:11px;color:${M.yellow}55;transition:color 0.15s;">✈</span>
           <span class="pb-name" style="font-size:12px;letter-spacing:1px;color:${M.cream};font-weight:700;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;"></span>
           <span class="pb-lvl" style="font-size:11px;letter-spacing:1px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
+          <span class="pb-prestige" style="display:none;font-size:10px;letter-spacing:1px;color:${M.yellow};font-weight:700;white-space:nowrap;opacity:0.85;"></span>
         </div>
         <div style="display:flex;align-items:center;gap:5px;">
           <div style="width:80px;height:4px;background:rgba(212,200,138,0.14);border-radius:2px;overflow:hidden;">
@@ -3289,6 +3365,7 @@ export class Menu {
           <span class="pb-plane-icon" style="font-size:13px;color:${M.yellow}55;transition:color 0.15s;">✈</span>
           <span class="pb-name" style="font-size:14px;letter-spacing:2px;color:${M.cream};font-weight:700;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;"></span>
           <span class="pb-lvl" style="font-size:12px;letter-spacing:2px;color:${M.yellow};font-weight:700;white-space:nowrap;"></span>
+          <span class="pb-prestige" style="display:none;font-size:11px;letter-spacing:1.5px;color:${M.yellow};font-weight:700;white-space:nowrap;opacity:0.85;"></span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="width:160px;height:5px;background:rgba(212,200,138,0.14);border-radius:2px;overflow:hidden;">
@@ -3462,27 +3539,42 @@ export class Menu {
     gearBtn.style.fontSize = '16px';
     gearBtn.style.padding = '4px 12px';
 
-    // Bouton Prestige — visible uniquement au niveau 50, disparaît après 4 prestiges
+    // Bouton Prestige — visible dès le niveau 1, grisé si non éligible, jaune si éligible, caché après 4 prestiges
     const prestigeBtn = document.createElement('button');
     prestigeBtn.textContent = t('prestigeBtn');
     Object.assign(prestigeBtn.style, {
-      pointerEvents: 'auto',
-      background   : `linear-gradient(135deg, ${M.yellow}22, rgba(255,180,0,0.08))`,
-      border       : `1px solid ${M.yellow}`,
-      color        : M.yellow,
+      pointerEvents: 'none',
+      background   : 'transparent',
+      border       : `1px solid ${M.border}`,
+      color        : M.dimCream,
       fontFamily   : 'Rajdhani, sans-serif',
       fontSize     : '12px',
       letterSpacing: '2px',
       fontWeight   : '700',
       padding      : '7px 14px',
-      cursor       : 'pointer',
+      cursor       : 'default',
       borderRadius : '4px',
-      display      : 'none',
+      display      : 'block',
       transition   : 'all 0.15s',
-      textShadow   : `0 0 8px ${M.yellow}66`,
+      textShadow   : 'none',
+      opacity      : '0.35',
     });
-    prestigeBtn.addEventListener('mouseover', () => { prestigeBtn.style.background = `${M.yellow}22`; prestigeBtn.style.boxShadow = `0 0 12px ${M.yellow}44`; });
-    prestigeBtn.addEventListener('mouseout',  () => { prestigeBtn.style.background = `linear-gradient(135deg, ${M.yellow}22, rgba(255,180,0,0.08))`; prestigeBtn.style.boxShadow = 'none'; });
+    prestigeBtn.addEventListener('mouseover', () => {
+      if (prestigeBtn.style.color === M.yellow) {
+        prestigeBtn.style.background = `${M.yellow}22`;
+        prestigeBtn.style.boxShadow = `0 0 12px ${M.yellow}44`;
+      } else {
+        prestigeBtn.style.background = `${M.border}11`;
+      }
+    });
+    prestigeBtn.addEventListener('mouseout',  () => {
+      if (prestigeBtn.style.color === M.yellow) {
+        prestigeBtn.style.background = `linear-gradient(135deg, ${M.yellow}22, rgba(255,180,0,0.08))`;
+        prestigeBtn.style.boxShadow = 'none';
+      } else {
+        prestigeBtn.style.background = 'transparent';
+      }
+    });
     prestigeBtn.addEventListener('click', () => this._showPrestigeModal());
     this._prestigeBtn = prestigeBtn;
 
@@ -3534,6 +3626,12 @@ export class Menu {
       : 'XP MAX';
     bar.querySelector('.pb-name').textContent  = name;
     bar.querySelector('.pb-lvl').textContent   = `${t('lvlReqPrefix')} ${level}`;
+    const presEl = bar.querySelector('.pb-prestige');
+    if (presEl) {
+      const pLvl = prog.prestigeLevel ?? 0;
+      presEl.style.display  = pLvl > 0 ? 'inline' : 'none';
+      presEl.textContent    = `★${pLvl}`;
+    }
     bar.querySelector('.pb-xp').style.width    = `${xpPct}%`;
     const _xpEl=bar.querySelector('.pb-xpnum'); if(_xpEl) _xpEl.textContent = xpStr.replace(/ | /g, ' ');
     bar.querySelector('.pb-cred').textContent  = `✦ ${credFmt}`;
@@ -3542,7 +3640,28 @@ export class Menu {
     const n = prog.newOptionCount?.() ?? 0;
     if (badge) badge.style.display = n > 0 ? 'block' : 'none';
     if (this._profileLangBtn) this._profileLangBtn.textContent = getLang() === 'fr' ? 'EN' : 'FR';
-    if (this._prestigeBtn) this._prestigeBtn.style.display = prog.canPrestige?.() ? 'block' : 'none';
+    if (this._prestigeBtn) {
+      const canP    = prog.canPrestige?.() ?? false;
+      if (canP) {
+        this._prestigeBtn.style.display      = 'block';
+        this._prestigeBtn.style.opacity      = '1';
+        this._prestigeBtn.style.color        = M.yellow;
+        this._prestigeBtn.style.border       = `1px solid ${M.yellow}`;
+        this._prestigeBtn.style.background   = `linear-gradient(135deg, ${M.yellow}22, rgba(255,180,0,0.08))`;
+        this._prestigeBtn.style.cursor       = 'pointer';
+        this._prestigeBtn.style.textShadow   = `0 0 8px ${M.yellow}66`;
+        this._prestigeBtn.style.pointerEvents= 'auto';
+      } else {
+        this._prestigeBtn.style.display      = 'block';
+        this._prestigeBtn.style.opacity      = '0.45';
+        this._prestigeBtn.style.color        = M.dimCream;
+        this._prestigeBtn.style.border       = `1px solid ${M.border}`;
+        this._prestigeBtn.style.background   = 'transparent';
+        this._prestigeBtn.style.cursor       = 'pointer';
+        this._prestigeBtn.style.textShadow   = 'none';
+        this._prestigeBtn.style.pointerEvents= 'auto';
+      }
+    }
     if (this._planeSelectorBtn && this._progression) {
       const idx  = this._progression.activePlane;
       const pname = (this._progression.getPlane(idx)?.name || `AVION ${idx + 1}`).toUpperCase();
@@ -4596,32 +4715,43 @@ export class Menu {
             cell.dataset.gpnav = '1';
             cell.setAttribute('data-slot', slotKey);
 
+            // Niveau minimum pour débloquer la prochaine option dans ce slot
+            const nextUnlockLvl = isLocked
+              ? Math.min(...slot.options.filter(o => o.levelReq > 1).map(o => o.levelReq))
+              : null;
+
             // Cercle mini
             const circleWrap = el('div', { style:{ position:'relative', width:CIRCLE_SIZE, height:CIRCLE_SIZE, flexShrink:'0' }});
             const circle = el('div', { style:{
               width:CIRCLE_SIZE, height:CIRCLE_SIZE, borderRadius:'50%',
               display:'flex', alignItems:'center', justifyContent:'center',
               fontSize:'clamp(12px, 1.5vw, 17px)',
-              border: isActive ? `2px solid ${cc}` : isLocked ? `1px solid ${M.border}55` : `2px solid ${cc}66`,
+              border: isActive ? `2px solid ${cc}` : isLocked ? `1px dashed ${M.border}66` : `2px solid ${cc}66`,
               background: isActive ? `${cc}2a` : isLocked ? 'transparent' : `${cc}14`,
-              color: isLocked ? M.dimCream : M.cream,
-              opacity: isLocked ? '0.38' : '1',
+              color: isLocked ? M.dimCream+'99' : M.cream,
               transition:'all 0.1s',
             }});
-            circle.textContent = equippedOpt?.icon ?? '○';
+            circle.textContent = isLocked ? '○' : (equippedOpt?.icon ?? '○');
             circleWrap.appendChild(circle);
             cell.appendChild(circleWrap);
 
             // Labels
-            const labels = el('div', { style:{ minWidth:'0', overflow:'hidden', opacity: isLocked ? '0.38' : '1' }});
+            const labels = el('div', { style:{ minWidth:'0', overflow:'hidden', opacity: isLocked ? '0.58' : '1' }});
             labels.appendChild(el('div', { text: tEquip(slot.label), style:{
               fontSize:'clamp(6px, 0.7vw, 9px)', letterSpacing:'clamp(0.5px, 0.12vw, 1.5px)',
               color:M.dimCream, marginBottom:'3px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
             }}));
-            labels.appendChild(el('div', { text: equippedOpt ? tEquip(equippedOpt.name) : '—', style:{
-              fontSize:'clamp(9px, 1.0vw, 13px)', fontWeight:'700', color: isActive ? cc : M.cream,
-              letterSpacing:'0.3px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-            }}));
+            if (isLocked && nextUnlockLvl !== Infinity) {
+              labels.appendChild(el('div', { text:`${t('lvlReqPrefix')} ${nextUnlockLvl}`, style:{
+                fontSize:'clamp(8px, 0.85vw, 11px)', fontWeight:'700', color:'#cc6644',
+                letterSpacing:'0.5px', whiteSpace:'nowrap',
+              }}));
+            } else {
+              labels.appendChild(el('div', { text: equippedOpt ? tEquip(equippedOpt.name) : '—', style:{
+                fontSize:'clamp(9px, 1.0vw, 13px)', fontWeight:'700', color: isActive ? cc : M.cream,
+                letterSpacing:'0.3px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+              }}));
+            }
             cell.appendChild(labels);
 
             // Badge NEW si le slot contient des options débloquées non consultées
@@ -4710,6 +4840,47 @@ export class Menu {
     // Barres de stats
     const statBarsEl = el('div', { style:{ flex:'1' }});
     statsPanel.appendChild(statBarsEl);
+
+    // ── Section prestige skills ─────────────────────────────────────────────
+    const prestigeOrder = ProgressionSystem.PRESTIGE_ORDER;
+    const prestigeSection = el('div', { style:{
+      marginTop:'14px', paddingTop:'12px',
+      borderTop:`1px solid ${M.border}`,
+    }});
+    prestigeSection.appendChild(el('div', { text: t('prestigeLevel'), style:{
+      fontSize:'10px', letterSpacing:'2.5px', color:M.dimCream, fontWeight:'700', marginBottom:'9px',
+    }}));
+    prestigeOrder.forEach((skillId, idx) => {
+      const obtained = prog.hasPrestigeSkill(skillId);
+      const isNext   = idx === prog.prestigeLevel;
+      const cap      = skillId.charAt(0).toUpperCase() + skillId.slice(1);
+      const row = el('div', { style:{
+        display:'flex', alignItems:'flex-start', gap:'9px',
+        marginBottom: idx < prestigeOrder.length - 1 ? '8px' : '0',
+        opacity: obtained ? '1' : isNext ? '0.8' : '0.35',
+      }});
+      const badge = el('div', { style:{
+        width:'20px', height:'20px', borderRadius:'50%', flexShrink:'0',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:'10px', fontWeight:'800',
+        background: obtained ? `${M.yellow}33` : isNext ? `${M.border}22` : 'transparent',
+        border: obtained ? `1px solid ${M.yellow}` : `1px solid ${M.border}44`,
+        color: obtained ? M.yellow : M.dimCream,
+      }});
+      badge.textContent = obtained ? '✓' : String(idx + 1);
+      row.appendChild(badge);
+      const info = el('div', { style:{ minWidth:'0' }});
+      info.appendChild(el('div', { text: t(`prestigeSkill${cap}`), style:{
+        fontSize:'11px', fontWeight:'700', letterSpacing:'0.5px', marginBottom:'2px',
+        color: obtained ? M.yellow : isNext ? M.cream : M.dimCream,
+      }}));
+      info.appendChild(el('div', { text: t(`prestigeSkill${cap}D`), style:{
+        fontSize:'10px', lineHeight:'1.35', color:M.dimCream,
+      }}));
+      row.appendChild(info);
+      prestigeSection.appendChild(row);
+    });
+    statsPanel.appendChild(prestigeSection);
 
     const statDefs = [
       { key:'speed',           label:t('statSpeed'),    maxVal:150, col:'#5588ff' },
