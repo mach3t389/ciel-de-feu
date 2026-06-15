@@ -3063,87 +3063,87 @@ export class Menu {
     bg.addColorStop(0, m.sky[0]); bg.addColorStop(1, m.sky[1]);
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-    if (m._normandy) {
-      // ── Rendu spécial Normandie : deux îles séparées par la Manche ──────────
-      // Mer en fond
-      ctx.fillStyle = m.water; ctx.fillRect(0, 0, W, H);
+    // ── Terrain triangulé — esthétique flat-shading identique au jeu 3D ────────
+    if (m._normandy) { ctx.fillStyle = m.water; ctx.fillRect(0, 0, W, H); }
 
-      // Île d'Angleterre (petite, NW) — décalée vers le haut
-      const exW = 0.21 * W, exH = 0.20 * H;
-      const eGrad = ctx.createRadialGradient(exW, exH, 0, exW, exH, 0.13*W);
-      eGrad.addColorStop(0, '#3a6020'); eGrad.addColorStop(0.7, '#2e5018'); eGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = eGrad;
-      ctx.beginPath(); ctx.ellipse(exW, exH, 0.12*W, 0.14*H, -0.4, 0, Math.PI*2); ctx.fill();
-      // Plage légère sur le bord sud de l'Angleterre
-      ctx.fillStyle = 'rgba(180,160,100,0.35)';
-      ctx.beginPath(); ctx.ellipse(exW+0.02*W, exH+0.06*H, 0.07*W, 0.04*H, 0.2, 0, Math.PI*2); ctx.fill();
-
-      // Île de Normandie (grande, SE, ellipse EW) — décalée vers le haut
-      const nxW = 0.57 * W, nxH = 0.54 * H;
-      const nGrad = ctx.createRadialGradient(nxW, nxH, 0, nxW, nxH, 0.36*W);
-      nGrad.addColorStop(0, '#385c14'); nGrad.addColorStop(0.65, '#2c5010'); nGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = nGrad;
-      ctx.beginPath(); ctx.ellipse(nxW, nxH, 0.37*W, 0.27*H, 0.15, 0, Math.PI*2); ctx.fill();
-      // Plages nord de Normandie (face à l'Angleterre)
-      ctx.fillStyle = 'rgba(190,165,105,0.45)';
-      ctx.beginPath(); ctx.ellipse(nxW - 0.08*W, nxH - 0.15*H, 0.24*W, 0.06*H, -0.1, 0, Math.PI*2); ctx.fill();
-
-      // Forêt bocage sur la Normandie
-      ctx.globalAlpha = 0.55;
-      for (let i = 0; i < 7; i++) {
-        const fx = 0.36 + (i * 0.083) % 0.38, fy = 0.40 + (i * 0.11) % 0.28;
-        const gr = ctx.createRadialGradient(fx*W, fy*H, 0, fx*W, fy*H, 0.09*W);
-        gr.addColorStop(0, m.forest); gr.addColorStop(1, 'transparent');
-        ctx.fillStyle = gr;
-        ctx.beginPath(); ctx.ellipse(fx*W, fy*H, 0.09*W, 0.07*H, 0, 0, Math.PI*2); ctx.fill();
+    // Altitude normalisée 0-1 en un point (nx,ny), basée sur les pics de la carte
+    const _alt = (nx, ny) => {
+      let a = 0;
+      for (const [px, py, pr] of (m.peaks || [])) {
+        const d = Math.hypot(nx - px, ny - py);
+        a = Math.max(a, Math.max(0, 1 - d / Math.max(pr * 3.2, 0.01)) ** 1.5);
       }
-      ctx.globalAlpha = 1;
-    } else {
-      // Terrain de base — fond plat style low-poly
-      ctx.fillStyle = m.low; ctx.fillRect(0, H * 0.08, W, H);
+      return a;
+    };
+    // Interp deux couleurs #rrggbb
+    const _h2r = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16));
+    const _mix  = (c1,c2,t) => { const [a,b]=[_h2r(c1),_h2r(c2)]; return `rgb(${a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(',')})`; };
+    // Couleur du terrain par altitude
+    const _col = (a) => {
+      if (a < 0.12) return m.low;
+      if (a < 0.38) return _mix(m.low,    m.forest, (a-0.12)/0.26);
+      if (a < 0.62) return _mix(m.forest, m.rock,   (a-0.38)/0.24);
+      if (a < 0.80) return _mix(m.rock,   m.snow,   (a-0.62)/0.18);
+      return m.snow;
+    };
 
-      // Zones rocheuses — triangles plats qui simulent le relief (flat-shading)
-      ctx.globalAlpha = 0.28;
-      ctx.fillStyle = m.rock;
-      [[0.12,0.28,0.38,0.22],[0.45,0.20,0.72,0.16],[0.62,0.35,0.88,0.28],[0.22,0.50,0.45,0.42],[0.68,0.58,0.90,0.50]].forEach(([x1,y1,x2,y2]) => {
-        ctx.beginPath();
-        ctx.moveTo(x1*W, y2*H); ctx.lineTo(((x1+x2)/2)*W, y1*H); ctx.lineTo(x2*W, y2*H);
-        ctx.closePath(); ctx.fill();
-      });
-      ctx.globalAlpha = 1;
+    // Grille : GX×GY cellules, chacune divisée en 4 triangles (fan depuis le centre)
+    const GX = 14, GY = 9;
+    const GT = m._normandy ? 0 : 0.04, GB = 0.98;
+    for (let gy = 0; gy < GY; gy++) {
+      for (let gx = 0; gx < GX; gx++) {
+        const x0 = gx/GX, x1 = (gx+1)/GX;
+        const y0 = GT + gy/GY*(GB-GT), y1 = GT + (gy+1)/GY*(GB-GT);
+        // Centre décalé de façon déterministe pour casser la grille régulière
+        const cx = (x0+x1)/2 + ((gx*1997+gy*31)%100-50)*0.00082;
+        const cy = (y0+y1)/2 + ((gx*37+gy*1013)%100-50)*0.00055;
 
-      // Forêt patches — polygones plats à 5-7 côtés (low-poly, sans dégradé)
-      ctx.globalAlpha = 0.65;
-      ctx.fillStyle = m.forest;
-      for (let i = 0; i < 9; i++) {
-        const fx = (0.08 + i * 0.105) % 0.92, fy = 0.33 + (i * 0.137) % 0.55;
-        const rW = (0.08 + (i * 0.031) % 0.055) * W;
-        const rH = rW * 0.72;
-        const sides = 5 + (i % 3);
-        ctx.beginPath();
-        for (let s = 0; s < sides; s++) {
-          const ang = (s / sides) * Math.PI * 2 + i * 0.7;
-          const jit = 0.80 + (s * 13 + i * 7) % 40 / 100;
-          const px = fx*W + Math.cos(ang) * rW * jit;
-          const py = fy*H + Math.sin(ang) * rH * jit;
-          s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.fill();
-      }
-      ctx.globalAlpha = 1;
+        const fan = [
+          [[x0,y0],[x1,y0],[cx,cy]],
+          [[x1,y0],[x1,y1],[cx,cy]],
+          [[x1,y1],[x0,y1],[cx,cy]],
+          [[x0,y1],[x0,y0],[cx,cy]],
+        ];
 
-      // Canyons (maps avec _canyons) — corridors volables visibles sur la miniature
-      if (m._canyons) {
-        ctx.strokeStyle = 'rgba(140,100,50,0.80)';
-        ctx.setLineDash([]);
-        m._canyons.forEach((pts, ci) => {
-          ctx.lineWidth = ci === 0 ? 3.5 : 2.2;
+        fan.forEach((pts, ti) => {
+          const mcx = (pts[0][0]+pts[1][0]+pts[2][0])/3;
+          const mcy = (pts[0][1]+pts[1][1]+pts[2][1])/3;
+
+          if (m._normandy) {
+            // Sauter les triangles hors des îles (ellipses approx.)
+            const dE = Math.hypot((mcx-0.21)/0.14, (mcy-0.20)/0.17);
+            const dN = Math.hypot((mcx-0.57)/0.37, (mcy-0.54)/0.27);
+            if (dE >= 1 && dN >= 1) return;
+            // Bande de plage dorée sur les bords d'île
+            const edge = Math.min(dE < 1 ? dE : 2, dN < 1 ? dN : 2);
+            ctx.fillStyle = edge > 0.74 ? _mix(m.low, '#b89050', (edge-0.74)/0.26) : _col(_alt(mcx,mcy));
+          } else {
+            ctx.fillStyle = _col(_alt(mcx, mcy));
+          }
+
           ctx.beginPath();
-          ctx.moveTo(pts[0][0]*W, pts[0][1]*H);
-          for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0]*W, pts[k][1]*H);
-          ctx.stroke();
+          pts.forEach(([px,py],i) => i ? ctx.lineTo(px*W,py*H) : ctx.moveTo(px*W,py*H));
+          ctx.closePath(); ctx.fill();
+
+          // Flat-shading : overlay clair/sombre alterné (simule un éclairage directionnel)
+          ctx.fillStyle = (gx+gy+ti)%2 ? 'rgba(255,255,255,0.055)' : 'rgba(0,0,0,0.090)';
+          ctx.beginPath();
+          pts.forEach(([px,py],i) => i ? ctx.lineTo(px*W,py*H) : ctx.moveTo(px*W,py*H));
+          ctx.closePath(); ctx.fill();
         });
       }
+    }
+
+    // Canyons (Crêtes) — corridors volables visibles sur la miniature
+    if (m._canyons) {
+      ctx.strokeStyle = 'rgba(140,100,50,0.80)'; ctx.setLineDash([]);
+      m._canyons.forEach((pts, ci) => {
+        ctx.lineWidth = ci === 0 ? 3.5 : 2.2;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0]*W, pts[0][1]*H);
+        for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0]*W, pts[k][1]*H);
+        ctx.stroke();
+      });
     }
 
     // Lacs
