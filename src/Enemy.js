@@ -595,6 +595,19 @@ export class Enemy {
     if (this.pivot.position.y > 950) this.pivot.position.y = 950;
   }
 
+  // Vérifie que le terrain ne coupe pas la ligne de vue ennemi→joueur
+  _hasTerrainLOS(playerPos) {
+    if (!this.getTerrainHeight) return true;
+    const fx = this.pivot.position.x, fy = this.pivot.position.y, fz = this.pivot.position.z;
+    const tx = playerPos.x, ty = playerPos.y, tz = playerPos.z;
+    for (let i = 1; i <= 7; i++) {
+      const t = i / 8;
+      const terrH = this.getTerrainHeight(fx + (tx-fx)*t, fz + (tz-fz)*t);
+      if (terrH > fy + (ty-fy)*t + 10) return false;
+    }
+    return true;
+  }
+
   // ── Lock-on missile ennemi ───────────────────────────────────────────────────
   _updateMissileLock(delta, playerPos) {
     if (!this.onFireMissile || this._missileCdMax <= 0) return;
@@ -612,8 +625,9 @@ export class Enemy {
     const fwd  = this._forward();
     const inRange = dist > 20 && dist < this._missileRange;
     const inArc   = inRange && fwd.dot(toP.clone().normalize()) > 0.30;
+    const hasLOS  = inArc && this._hasTerrainLOS(playerPos);
 
-    if (!inArc) {
+    if (!hasLOS) {
       if (this.missileLocking) {
         this.missileLocking = false;
         this._missileLockT  = 0;
