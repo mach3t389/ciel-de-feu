@@ -355,11 +355,12 @@ export class Game {
       this._shieldMesh       = null;
       this._initAACount = (['missile_aa','missile_imp1','missile_imp2'].filter(id => upgradeIds.includes(id)).length) * 2;
       this._initAGCount = (['missile_ag','missile_ag2','missile_ag3'].filter(id => upgradeIds.includes(id)).length) * 2;
-      // Prestige P1 : Arsenal unifié — missiles AS comptent comme AA
-      if ((this._progression?.prestigeSkills ?? []).includes('arsenal')) {
-        this._initAACount += this._initAGCount;
-        this._initAGCount = 0;
-      }
+      // Prestige Arsenal : chaque slot visuel représente 2 missiles — counts × 2
+      const _hasArsenal = (this._progression?.prestigeSkills ?? []).includes('arsenal');
+      this._arsenalMult = _hasArsenal ? 2 : 1;
+      this._initAACount *= this._arsenalMult;
+      this._initAGCount *= this._arsenalMult;
+      this._initMissileCount = stats.missiles * this._arsenalMult;
       const loadMod     = loadModifiers(stats.load);
 
       // Calculer les modificateurs de gameplay
@@ -383,7 +384,7 @@ export class Game {
       if (_pSkills.includes('cellule')) mods.healthBonus = (mods.healthBonus ?? 0) + 5;
       if (_pSkills.includes('moteur'))  mods.speedMult   = (mods.speedMult   ?? 1) * 1.10;
 
-      this.player.applyUpgradeModifiers(mods, stats.missiles, stats.decoys);
+      this.player.applyUpgradeModifiers(mods, stats.missiles * this._arsenalMult, stats.decoys);
 
       // Pénalités dynamiques liées au chargement en missiles
       const mlp = missileLoadPenalties(upgradeIds);
@@ -424,10 +425,6 @@ export class Game {
       };
       this._groundTargetCache = new Map();
       const msParams = missileParams(upgradeIds);
-      // Prestige P1 : Arsenal unifié — tous les missiles peuvent verrouiller des cibles aériennes
-      if (msParams && (this._progression?.prestigeSkills ?? []).includes('arsenal')) {
-        msParams.hasAA = true;
-      }
       if (msParams) {
         this._missileSystem.setParams(msParams);
         this.player.onFireMissile = () => {
@@ -497,7 +494,7 @@ export class Game {
         const tryAttach = (attempt = 0) => {
           const modelsReady = (stats.missiles <= 0 || this._missileSystem._modelAA);
           if (this.player.model && modelsReady) {
-            if (stats.missiles > 0) { this._missileSystem.attachWingMissiles(this.player.model, upgradeIds, stats.missiles); this._applyArsenalToWingSlots(); }
+            if (stats.missiles > 0) { this._missileSystem._arsenalMult = this._arsenalMult ?? 1; this._missileSystem.attachWingMissiles(this.player.model, upgradeIds, stats.missiles); }
             if (stats.decoys   > 0) this._missileSystem.attachDecoyPods(this.player.model, stats.decoys);
           } else if (attempt < 20) {
             setTimeout(() => tryAttach(attempt + 1), 200);
@@ -534,7 +531,7 @@ export class Game {
         if (u?.collisionDmgMult) mods.collisionDmgMult = (mods.collisionDmgMult ?? 1) * u.collisionDmgMult;
       });
 
-      this.player.applyUpgradeModifiers(mods, stats.missiles, stats.decoys);
+      this.player.applyUpgradeModifiers(mods, stats.missiles * (this._arsenalMult ?? 1), stats.decoys);
       this._playerDamageMult    = mods.damageMult;
       this._playerResistTurrets = mods.resistTurrets;
       this._playerResistPlanes  = mods.resistPlanes;
@@ -1334,12 +1331,6 @@ export class Game {
     this._missionSpawned += count;
   }
 
-  // Prestige P1 — Arsenal unifié : convertit tous les slots AG en AA visuellement et logiquement
-  _applyArsenalToWingSlots() {
-    if (!(this._progression?.prestigeSkills ?? []).includes('arsenal')) return;
-    (this._missileSystem?._wingSlots ?? []).forEach(s => { if (s) s.type = 'aa'; });
-  }
-
   // ── Vague survie ─────────────────────────────────────────────────────────
   // Recalcule speedMult et maneuverMult en fonction des missiles encore chargés
   _updateMissileLoadMods() {
@@ -1388,8 +1379,8 @@ export class Game {
       p.missileCount = p._maxMissiles;
       this._updateMissileLoadMods();
       if (this._missileSystem && p.model) {
+        this._missileSystem._arsenalMult = this._arsenalMult ?? 1;
         this._missileSystem.attachWingMissiles(p.model, upgIds, p.missileCount);
-        this._applyArsenalToWingSlots();
       }
       this.ui.setMissileCount(
         this._missileSystem?.missilesRemainingAA ?? 0, this._initAACount ?? 0,
@@ -2009,8 +2000,8 @@ export class Game {
       const mc = this._initMissileCount ?? 0;
       const dc = this._initDecoyCount   ?? 0;
       if (mc > 0) {
+        this._missileSystem._arsenalMult = this._arsenalMult ?? 1;
         this._missileSystem.attachWingMissiles(this.player.model, this._upgradeIds ?? [], mc);
-        this._applyArsenalToWingSlots();
         this._missileSystem._fireWingIdx = 0;
         p.missileCount = mc;
         this.ui.setMissileCount(
@@ -2865,8 +2856,8 @@ export class Game {
                   p.missileCount = Math.min(p._maxMissiles, (p.missileCount ?? 0) + add);
                   this._updateMissileLoadMods();
                   if (this._missileSystem && p.model) {
+                    this._missileSystem._arsenalMult = this._arsenalMult ?? 1;
                     this._missileSystem.attachWingMissiles(p.model, upgIds, p.missileCount);
-                    this._applyArsenalToWingSlots();
                   }
                   this.ui.setMissileCount(
                     this._missileSystem?.missilesRemainingAA ?? 0, this._initAACount ?? 0,
@@ -2875,23 +2866,6 @@ export class Game {
                 }
               } else {
                 this._missileAccum = 0;
-              }
-
-              // Recharger leurres progressivement (1 leurre toutes les ~3s)
-              const decoyRate = 0.33 / (p._upgMods?.rearmMissileMult ?? 1);
-              if (p._maxDecoys > 0 && (p.decoyCount ?? 0) < p._maxDecoys) {
-                this._decoyAccum = (this._decoyAccum ?? 0) + delta * decoyRate;
-                if (this._decoyAccum >= 1.0) {
-                  const add = Math.floor(this._decoyAccum);
-                  this._decoyAccum -= add;
-                  p.decoyCount = Math.min(p._maxDecoys, (p.decoyCount ?? 0) + add);
-                  this.ui.setActiveDefenseStatus('leurres', p.decoyCount, p._maxDecoys);
-                  if (this._missileSystem && p.model) {
-                    this._missileSystem.attachDecoyPods(p.model, p.decoyCount);
-                  }
-                }
-              } else {
-                this._decoyAccum = 0;
               }
 
               refueling = true;
@@ -2905,8 +2879,8 @@ export class Game {
                 && ((p._maxDecoys ?? 0) === 0 || (p.decoyCount ?? 0) >= (p._maxDecoys ?? 0))) {
                 // Sync final des missiles avant d'afficher le message "complet"
                 if (p._maxMissiles > 0 && this._missileSystem && p.model) {
+                  this._missileSystem._arsenalMult = this._arsenalMult ?? 1;
                   this._missileSystem.attachWingMissiles(p.model, upgIds, p.missileCount);
-                  this._applyArsenalToWingSlots();
                   this.ui.setMissileCount(
                     this._missileSystem?.missilesRemainingAA ?? 0, this._initAACount ?? 0,
                     this._missileSystem?.missilesRemainingAG ?? 0, this._initAGCount ?? 0,

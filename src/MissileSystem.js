@@ -32,6 +32,9 @@ export class MissileSystem {
     this._lockProgress = 0;  // 0→1
     this._lockParams = null;  // { lockTime, trackTime, dual, hasAA, hasAG }
 
+    this._arsenalMult = 1;   // 2 avec prestige Arsenal — chaque slot visuel = 2 missiles
+    this._slotCharges = [];  // charges restantes par slot visuel
+
     // Callbacks
     this.onHit = null;   // (target, dmg) → appelé à l'impact
 
@@ -305,11 +308,7 @@ export class MissileSystem {
         ms.velocity.lerp(toTarget.multiplyScalar(MISSILE_SPEED), Math.min(1, ms.turnSpeed * delta));
         ms.velocity.setLength(MISSILE_SPEED);
 
-        // Leurres
-        if (decoys.length > 0 && Math.random() < DECOY_EFFECT * decoys.length * delta * 0.3) {
-          if (DEBUG_MISSILES) console.log('[MISSILE] Decoy distracted missile!');
-          ms.target = null;
-        }
+        // (les leurres du joueur n'affectent pas ses propres missiles sortants)
 
         if (DEBUG_MISSILES && ms.frameCount % 30 === 0) {
           const dist = ms.mesh.position.distanceTo(targetPos);
@@ -481,6 +480,9 @@ export class MissileSystem {
 
     buildType(this._modelAA,                  aaSlots, 0, -Math.PI / 2 + 0.26, 0, 'aa');
     buildType(this._modelAG ?? this._modelAA, agSlots, 0, -Math.PI / 2,        0, 'ag');
+
+    // Initialise les charges par slot (Arsenal : 2 missiles par slot visuel)
+    this._slotCharges = this._wingSlots.map(() => this._arsenalMult);
   }
 
   _playLaunchSound(type = 'aa') {
@@ -558,8 +560,15 @@ export class MissileSystem {
     const idx  = this._lastFiredIdx ?? 0;
     const slot = this._wingSlots?.[idx];
     if (slot?.mesh) {
-      slot.mesh.parent?.remove(slot.mesh);
-      slot.mesh = null;
+      const charge = this._slotCharges?.[idx] ?? 1;
+      if (charge > 1) {
+        // Arsenal : consomme une charge, le visuel reste
+        this._slotCharges[idx] = charge - 1;
+      } else {
+        if (this._slotCharges) this._slotCharges[idx] = 0;
+        slot.mesh.parent?.remove(slot.mesh);
+        slot.mesh = null;
+      }
     } else if (this._wingMeshes?.length) {
       const m = this._wingMeshes.pop();
       m.parent?.remove(m);
@@ -606,12 +615,12 @@ export class MissileSystem {
     this._decoyParticles = this._decoyParticles ?? [];
 
     // Objet logique (pour la déviation des missiles ennemis)
-    const logicLife = 6.0;
+    const logicLife = 10.0;
     const logicPos  = pos.clone();
     const logicObj  = { position: logicPos, life: logicLife };
     this._decoyObjects.push(logicObj);
 
-    // Nuage de particules visuelles (chaff / leurres thermiques)
+    // Nuage de particules visuelles (chaff / leurres thermiques) — durée = protection logique
     const COLORS = [0xffffff, 0xffee88, 0xffcc22, 0xff8800, 0xffaaaa];
     const COUNT  = 20;
     for (let i = 0; i < COUNT; i++) {
@@ -625,14 +634,15 @@ export class MissileSystem {
       mesh.position.copy(pos);
       this._scene.add(mesh);
 
-      // Vélocité : majoritairement vers l'arrière + dispersion en cône
-      const spd = 12 + Math.random() * 22;
+      // Vélocité initiale vers l'arrière + dispersion en cône
+      const spd = 8 + Math.random() * 16;
       const vel = backward.clone().multiplyScalar(spd);
-      vel.x += (Math.random() - 0.5) * 14;
-      vel.y += (Math.random() - 0.5) * 10 + 2;
-      vel.z += (Math.random() - 0.5) * 14;
+      vel.x += (Math.random() - 0.5) * 10;
+      vel.y += (Math.random() - 0.5) * 6 + 1;
+      vel.z += (Math.random() - 0.5) * 10;
 
-      const life = 1.2 + Math.random() * 1.4;
+      // Particules durent aussi longtemps que la protection
+      const life = logicLife * (0.85 + Math.random() * 0.15);
       this._decoyParticles.push({ mesh, vel, life, totalLife: life });
     }
 
@@ -660,9 +670,9 @@ export class MissileSystem {
           this._decoyParticles.splice(i, 1);
           continue;
         }
-        // Physique : gravité légère + amortissement
-        p.vel.y -= 12 * delta;
-        p.vel.multiplyScalar(1 - 0.55 * delta);
+        // Physique : gravité très légère + amortissement doux pour tenir 10s
+        p.vel.y -= 2 * delta;
+        p.vel.multiplyScalar(1 - 0.18 * delta);
         p.mesh.position.addScaledVector(p.vel, delta);
         // Fondu de sortie sur les 40% finaux
         const t = p.life / p.totalLife;
@@ -687,12 +697,15 @@ export class MissileSystem {
   get isLocked()     { return this._lockDone; }
   get activeMissileCount() { return this._missiles.length; }
   get missilesRemaining() {
-    return (this._wingSlots ?? []).reduce((n, s) => n + (s?.mesh ? 1 : 0), 0);
+    return (this._wingSlots ?? []).reduce((n, s, i) =>
+      n + (s?.mesh ? (this._slotCharges?.[i] ?? 1) : 0), 0);
   }
   get missilesRemainingAA() {
-    return (this._wingSlots ?? []).reduce((n, s) => n + (s?.mesh && s.type === 'aa' ? 1 : 0), 0);
+    return (this._wingSlots ?? []).reduce((n, s, i) =>
+      n + (s?.mesh && s.type === 'aa' ? (this._slotCharges?.[i] ?? 1) : 0), 0);
   }
   get missilesRemainingAG() {
-    return (this._wingSlots ?? []).reduce((n, s) => n + (s?.mesh && s.type === 'ag' ? 1 : 0), 0);
+    return (this._wingSlots ?? []).reduce((n, s, i) =>
+      n + (s?.mesh && s.type === 'ag' ? (this._slotCharges?.[i] ?? 1) : 0), 0);
   }
 }

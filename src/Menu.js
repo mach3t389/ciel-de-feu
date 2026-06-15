@@ -3958,16 +3958,39 @@ export class Menu {
       display:'flex', alignItems:'center', gap:'8px', padding:'0 14px',
       borderLeft:`1px solid ${M.border}44`, borderRight:`1px solid ${M.border}44`, height:'100%',
     }});
+    const needsName = !this._config.pilotName?.trim();
     const pilotLbl = el('span');
-    Object.assign(pilotLbl.style, { fontSize:'10px', letterSpacing:'2px', color:M.dimCream, whiteSpace:'nowrap' });
-    pilotLbl.textContent = t('pilotPlaceh') || 'PILOTE';
-    const pilotInp = mkInput('', this._config.pilotName || '');
+    Object.assign(pilotLbl.style, {
+      fontSize:'10px', letterSpacing:'2px', whiteSpace:'nowrap',
+      color: needsName ? '#ff4444' : M.dimCream,
+      fontWeight: needsName ? '700' : 'normal',
+    });
+    pilotLbl.textContent = needsName ? '▶ ' + (t('pilotPlaceh') || 'PILOTE') : (t('pilotPlaceh') || 'PILOTE');
+    if (!document.getElementById('pilot-alert-style')) {
+      const s = document.createElement('style');
+      s.id = 'pilot-alert-style';
+      s.textContent = '@keyframes pilotBlink{0%,100%{border-color:#cc2222;box-shadow:0 0 7px #cc222270;}50%{border-color:#ff5555;box-shadow:0 0 14px #ff444490;}}';
+      document.head.appendChild(s);
+    }
+    const pilotInp = mkInput(needsName ? (t('pilotPlaceh') || 'PILOTE') : '', this._config.pilotName || '');
     Object.assign(pilotInp.style, { width: _mpIsMob ? 'min(110px, 22vw)' : '130px', fontSize:'11px', padding:'4px 8px', letterSpacing:'2px' });
+    if (needsName) {
+      pilotInp.style.borderColor = '#cc2222';
+      pilotInp.style.animation   = 'pilotBlink 1.2s ease-in-out infinite';
+      setTimeout(() => pilotInp.focus(), 350);
+    }
     pilotInp.addEventListener('input', () => {
       const v = pilotInp.value.toUpperCase().slice(0, 12);
       pilotInp.value = v;
       this._config.pilotName = v;
       localStorage.setItem('pilotName', v);
+      if (v.trim()) {
+        pilotInp.style.borderColor = '';
+        pilotInp.style.animation   = '';
+        pilotLbl.style.color       = M.dimCream;
+        pilotLbl.style.fontWeight  = 'normal';
+        pilotLbl.textContent       = t('pilotPlaceh') || 'PILOTE';
+      }
       this._refreshProfileBar();
     });
     pilotWrap.appendChild(pilotLbl);

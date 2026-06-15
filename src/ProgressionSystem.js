@@ -259,7 +259,13 @@ export class ProgressionSystem {
     if (this.hasPrestigeSkill(skillId)) return false;
     if (!Array.isArray(this._state.prestigeSkills)) this._state.prestigeSkills = [];
     this._state.prestigeSkills.push(skillId);
-    this._state.totalXp = 0;
+    this._state.totalXp  = 0;
+    this._state.ownedOptions = [];
+    this._state.seenOptions  = [];
+    for (const plane of this._state.planes) {
+      plane.upgrades = {};
+      plane.loadout  = {};
+    }
     this._save();
     return true;
   }
