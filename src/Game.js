@@ -1008,6 +1008,13 @@ export class Game {
     enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat);
   }
 
+  // Budget missiles selon difficulté + manche de survie
+  _missileBudget(wave = 0) {
+    const diff   = this._config?.difficulty ?? 'standard';
+    const byDiff = { standard: 2, hard: 3, expert: 4 }[diff] ?? 2;
+    return Math.min(byDiff + Math.floor(wave / 5), byDiff + 2);
+  }
+
   // Câble les missiles ennemis sur un lourd ou un boss
   _wireEnemyMissile(enemy, { cooldown, lockTime, trackQuality, range, maxMissiles } = {}) {
     enemy._missileCdMax   = cooldown     ?? 22;
@@ -1246,7 +1253,7 @@ export class Game {
       if (type.isHeavy && this._config?.difficulty !== 'easy') {
         const _mcd = { standard: 24, hard: 18, expert: 14 }[this._config?.difficulty] ?? 24;
         const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
-        this._wireEnemyMissile(leader, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000 });
+        this._wireEnemyMissile(leader, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000, maxMissiles: this._missileBudget() });
       }
       this.enemies.push(leader);
       created++;
@@ -1269,7 +1276,7 @@ export class Game {
         if (type.isHeavy && this._config?.difficulty !== 'easy') {
           const _mcd = { standard: 30, hard: 24, expert: 18 }[this._config?.difficulty] ?? 30;
           const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
-          this._wireEnemyMissile(wingman, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 1800 });
+          this._wireEnemyMissile(wingman, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 1800, maxMissiles: this._missileBudget() });
         }
         this.enemies.push(wingman);
         created++;
@@ -1335,7 +1342,7 @@ export class Game {
       if (isHeavy && this._config?.difficulty !== 'easy') {
         const _mcd = { standard: 24, hard: 18, expert: 14 }[this._config?.difficulty] ?? 24;
         const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
-        this._wireEnemyMissile(enemy, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000 });
+        this._wireEnemyMissile(enemy, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000, maxMissiles: this._missileBudget() });
       }
       this.enemies.push(enemy);
     }
@@ -1479,6 +1486,7 @@ export class Game {
           lockTime    : 2.8,
           trackQuality: w >= 15 ? 2 : 1,
           range       : 1800,
+          maxMissiles : this._missileBudget(w),
         });
       }
       this.enemies.push(enemy);
@@ -1502,7 +1510,8 @@ export class Game {
       this._wireEnemyFire(boss);
       boss.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, 15);
       if (this._config?.difficulty !== 'easy') {
-        this._wireEnemyMissile(boss, { cooldown: 10, lockTime: 2.0, trackQuality: 2, range: 2200 });
+        const w = cfg?.wave ?? 1;
+        this._wireEnemyMissile(boss, { cooldown: 10, lockTime: 2.0, trackQuality: 2, range: 2200, maxMissiles: this._missileBudget(w) + 2 });
       }
       this.enemies.push(boss);
       this.ui.showTip(t('bossWarning'), 5, { dismissible: false });
