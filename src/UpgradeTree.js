@@ -745,13 +745,13 @@ export const EQUIPMENT_CATALOG = {
       { id:'standard', name:'Standard',         icon:'○', levelReq:1,  pros:[],                                         cons:[],                                   upgrades:[] },
       { id:'auto1',    name:'Automatisé I',     icon:'◑', levelReq:10, pros:['Munitions −30%','Logistique +8%'],       cons:['Maniab. −2%'],                      upgrades:['rearm_ammo1'] },
       { id:'auto2',    name:'Automatisé II',    icon:'●', levelReq:30, pros:['Munitions −55%','Logistique +15%'],      cons:['Maniab. −4%','Vitesse −2%'],        upgrades:['rearm_ammo1','rearm_ammo2'] },
-      { id:'express',  name:'Chargeur Express', icon:'⚡', levelReq:44, pros:['Munitions −75%','Logistique +22%'],      cons:['Maniab. −6%','Vitesse −4%'],        upgrades:['rearm_ammo1','rearm_ammo2','rearm_ammo3'] },
+      { id:'express',  name:'Chargeur Express', icon:'↯', levelReq:44, pros:['Munitions −75%','Logistique +22%'],      cons:['Maniab. −6%','Vitesse −4%'],        upgrades:['rearm_ammo1','rearm_ammo2','rearm_ammo3'] },
     ]},
     rearm_missiles: { label:'RÉARM. MISSILES', options:[
       { id:'standard', name:'Standard',       icon:'○', levelReq:1,  pros:[],                                          cons:[],                                              upgrades:[] },
       { id:'pont1',    name:"Pont I",         icon:'◑', levelReq:15, pros:['Missiles −30%','Logistique +8%'],         cons:['Vitesse −3%'],                                 upgrades:['rearm_miss1'] },
       { id:'pont2',    name:"Pont II",        icon:'●', levelReq:35, pros:['Missiles −55%','Logistique +12%'],        cons:['Vitesse −5%','Maniab. −3%'],                   upgrades:['rearm_miss1','rearm_miss2'] },
-      { id:'aero',     name:'Système AERO',  icon:'⚡', levelReq:50, pros:['Missiles −75%','Logistique +18%'],        cons:['Vitesse −8%','Maniab. −5%','Carburant −5%'],   upgrades:['rearm_miss1','rearm_miss2','rearm_miss3'] },
+      { id:'aero',     name:'Système AERO',  icon:'↯', levelReq:50, pros:['Missiles −75%','Logistique +18%'],        cons:['Vitesse −8%','Maniab. −5%','Carburant −5%'],   upgrades:['rearm_miss1','rearm_miss2','rearm_miss3'] },
     ]},
     refuel:      { label:'RAVITAILLEMENT', options:[
       { id:'standard', name:'Standard',  icon:'○',  levelReq:1,  pros:[],                                          cons:[],                      upgrades:[] },
