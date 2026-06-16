@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Documentation détaillée dans [`docs/`](docs/index.md) : architecture, cartes, physique, armes, progression, multijoueur, HUD.
+
 ## Commandes
 
 ```bash
