@@ -1838,7 +1838,7 @@ export class UI {
       }
     }
 
-    // ── Cercles VILLAGES ENNEMIS (rouge, sans label) ──────────────────────
+    // ── Cercles VILLAGES ENNEMIS avec nom ────────────────────────────────
     const enemyVillages = villages.slice(1);
     for (const v of enemyVillages) {
       // Disparaît si toutes les défenses du village sont éliminées
@@ -1853,11 +1853,11 @@ export class UI {
       const sy = (-ndc.y * 0.5 + 0.5) * H;
       const inFront  = ndc.z < 1.0;
       const onScreen = inFront && sx > 10 && sx < W-10 && sy > 10 && sy < H-10;
-      // Pâlit quand le joueur est proche
       const vDist = vp.distanceTo(player.position);
       const vAlpha = THREE.MathUtils.clamp((vDist - 80) / 300, 0.08, 1.0);
       const col = '#cc4433';
       const r = 7;
+      const vName = v.name ?? '';
 
       if (onScreen) {
         ctx.save();
@@ -1868,6 +1868,13 @@ export class UI {
         ctx.fill();
         ctx.strokeStyle = col; ctx.lineWidth = 1.8;
         ctx.stroke();
+        // Nom du village sous le cercle
+        if (vName) {
+          ctx.font = '8px Courier New, monospace';
+          ctx.fillStyle = col;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          ctx.fillText(vName.toUpperCase(), 0, r + 3);
+        }
         ctx.restore();
       } else {
         const { ex, ey } = this._clampToEdge(sx, sy, W, H, 28, inFront);
@@ -1877,6 +1884,15 @@ export class UI {
         ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2);
         ctx.strokeStyle = col; ctx.lineWidth = 1.8;
         ctx.stroke();
+        // Nom à côté du cercle hors-écran
+        if (vName) {
+          ctx.font = '8px Courier New, monospace';
+          ctx.fillStyle = col;
+          ctx.textAlign = ex < W / 2 ? 'left' : 'right';
+          ctx.textBaseline = 'middle';
+          const offX = ex < W / 2 ? 10 : -10;
+          ctx.fillText(vName.toUpperCase(), offX, 0);
+        }
         ctx.restore();
       }
     }
@@ -3035,7 +3051,7 @@ export class UI {
     this._decoyCanvas.style.display = 'block';
 
     if (type === 'leurres') {
-      this._drawCounterBox(this._decoyCanvas, 'LEURRES', count, max, C.cream, '●', '○');
+      this._drawCounterBox(this._decoyCanvas, 'LEURRES', count, max, C.cream, '●', '○', t('adDescLeurres'));
       return;
     }
 
@@ -3051,13 +3067,20 @@ export class UI {
     ctx.lineWidth = isActive ? 1.8 : 1.2;
     ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
 
-    // Label
+    // Label + description spécifique au type
     const LABELS = { ecm:'ECM', shield_front:t('adShieldFront'), shield_rear:t('adShieldRear'), shield_full:t('adShield360') };
+    const DESCS  = { ecm:t('adDescEcm'), shield_front:t('adDescShieldFront'), shield_rear:t('adDescShieldRear'), shield_full:t('adDescShield360') };
     const label = LABELS[type] ?? t('adDefense');
+    const desc  = DESCS[type] ?? '';
     ctx.fillStyle = C.cream;
     ctx.font = '9px Rajdhani, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(label, W / 2, 6);
+    ctx.fillText(label, W / 2, 5);
+    if (desc) {
+      ctx.fillStyle = C.tickMinor;
+      ctx.font = '7px Rajdhani, sans-serif';
+      ctx.fillText(desc, W / 2, 16);
+    }
 
     // État central
     let stateText, stateColor, subText = null;
@@ -3076,7 +3099,7 @@ export class UI {
     ctx.fillStyle = stateColor;
     ctx.font = 'bold 13px Rajdhani, sans-serif';
     ctx.textBaseline = 'middle';
-    const centerY = subText ? H / 2 - 4 : H / 2 + 2;
+    const centerY = subText ? H / 2 : H / 2 + 5;
     ctx.fillText(stateText, W / 2, centerY);
     if (subText) {
       ctx.font = '10px Rajdhani, sans-serif';
@@ -3104,7 +3127,7 @@ export class UI {
   }
 
   // Encadré compteur réutilisable — style WW2 crème sur fond sombre
-  _drawCounterBox(canvas, label, count, max, valColor, symFull, symEmpty) {
+  _drawCounterBox(canvas, label, count, max, valColor, symFull, symEmpty, desc = '') {
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
@@ -3125,11 +3148,16 @@ export class UI {
     ctx.fillStyle = C.cream;
     ctx.font = '9px Rajdhani, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(label, W / 2, 6);
+    ctx.fillText(label, W / 2, 5);
+    if (desc) {
+      ctx.fillStyle = C.tickMinor;
+      ctx.font = '7px Rajdhani, sans-serif';
+      ctx.fillText(desc, W / 2, 16);
+    }
 
     // Ligne de séparation sous le label
     ctx.strokeStyle = C.tickMinor; ctx.lineWidth = 0.6;
-    ctx.beginPath(); ctx.moveTo(8, 18); ctx.lineTo(W - 8, 18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(8, desc ? 26 : 18); ctx.lineTo(W - 8, desc ? 26 : 18); ctx.stroke();
 
     // Icônes au centre (zone haute)
     const shown = Math.min(8, max);

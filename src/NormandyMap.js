@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { InstancedLOD } from './LODManager.js';
+import { t } from './i18n.js';
 
 const _loader = new GLTFLoader();
 const loadGLB = (path) => new Promise((res, rej) => _loader.load(path, res, null, rej));
@@ -86,7 +87,8 @@ export class NormandyMap {
 
   // Toutes les zones de villages (pour GroundDefense — toutes ennemies sur cette carte)
   getVillageZones() {
-    return VILLAGES.map(v => ({ x: v.x, z: v.z, radius: v.outerR * 1.8, team: 'enemy' }));
+    const DISPLAY = { 'sainte-mere-eglise': t('villageSteMere'), arromanches: t('villageArro'), bayeux: t('villageBayeux'), falaise: t('villageFalaise') };
+    return VILLAGES.map(v => ({ x: v.x, z: v.z, radius: v.outerR * 1.8, team: 'enemy', name: DISPLAY[v.id] ?? v.id }));
   }
 
   getEnemyZones() {

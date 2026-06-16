@@ -89,7 +89,7 @@ export class BocageMap {
   }
 
   getVillageZones() {
-    return VILLAGES.map(v => ({ x: v.x, z: v.z, radius: v.outerR * 1.8 }));
+    return VILLAGES.map(v => ({ x: v.x, z: v.z, radius: v.outerR * 1.8, name: v.name }));
   }
 
   // Zones ennemies seulement (exclut Alpha = base joueur, index 0)

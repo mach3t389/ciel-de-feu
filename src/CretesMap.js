@@ -100,6 +100,7 @@ export class CretesMap {
     return VILLAGES.map((v, i) => ({
       x: v.x, z: v.z, radius: v.outerR * 1.8,
       team: i === 0 ? 'ally' : 'enemy',
+      name: v.name,
     }));
   }
 
