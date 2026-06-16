@@ -1,120 +1,157 @@
-# Jeu Avion — Contexte du projet
+# CLAUDE.md
 
-## Stack & démarrage
-- **Vite + Three.js** (ES modules)
-- `npm run dev` → http://localhost:3000
-- Pas de TypeScript, pas de framework UI
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Structure des fichiers
+## Commandes
+
+```bash
+npm run dev      # dev Vite → http://localhost:3000
+npm run build    # bundle production dans dist/
+npm run server   # serveur WebSocket multijoueur (port 8080)
 ```
-src/
-  main.js          — point d'entrée, instancie Game et appelle start()
-  Game.js          — scène Three.js, boucle de rendu, terrain, eau, nuages, ciel, mire
-  Player.js        — physique de vol, input clavier, animation des bones, carburant/munitions
-  CameraController.js — caméra 3ème personne (NE PAS MODIFIER — version stable)
-  UI.js            — HUD canvas/HTML style WW2 cockpit
-  Bullet.js        — gestion des projectiles
-public/
-  SK_Veh_Plane_Stunt_01.glb  — modèle avion Skeletal Mesh (Unreal Engine export)
+
+Pas de tests automatisés, pas de linter configuré. Vérification manuelle dans le navigateur.
+
+## Stack
+
+**Vite + Three.js** — ES modules purs, zéro TypeScript, zéro framework UI. Rendu Three.js WebGL + overlays HTML/Canvas dessinés à la main.
+
+Serveur multijoueur séparé : `server.js` (Node.js + `ws`), déployé sur Railway. Variable d'environnement `VITE_WS_URL` pour pointer vers un WS distant.
+
+## Architecture
+
+### Boucle principale (`main.js`)
+
+`main.js` tourne avec `top-level await` dans une boucle infinie :
 ```
+Menu.show() → LoadingScreen → Game.preload() → Game.start() → (replay ou reboucle)
+```
+`Game.start()` retourne `{ action: 'replay' }` ou `null`. En multijoueur, le `networkManager` est injecté dans le `config` passé à `Game`.
+
+### Cartes (`BocageMap.js`, `CretesMap.js`, `NormandyMap.js`)
+
+Chaque carte est une classe autonome. `Game.js` détecte la carte via `config.map` (1 = Crêtes, 4 = Bocage, 5 = Normandie ; autres = terrain océan legacy généré dans Game.js).
+
+Toutes les cartes exposent la même interface après `await map.build()` :
+```js
+{ getTerrainHeight(x, z), isOnRunway(x, z), getVillageZones(), getAirportZones(), ... }
+```
+La hauteur terrain est calculée via noise fBm + pics gaussiens (tableaux `PEAKS`) — les valeurs sont codées en dur dans chaque fichier de carte.
+
+**CretesMap** a deux canyons volables (`CANYON_DEFS`) avec `halfW`/`blend` distincts par trajet.
+
+### Système de progression (`ProgressionSystem.js` + `UpgradeTree.js`)
+
+Persistance via `localStorage` (clé `cielDeFeu_progression`). Niveau 1-50, XP cumulé, crédits, 3 slots d'avions.
+
+`UpgradeTree.js` contient :
+- `UPGRADES` — dictionnaire plat de toutes les améliorations (id, cat, levelReq, cost, requires, stats, desc, effets spéciaux)
+- `computeStats(upgradeIds)` — fusionne les stats additives au-dessus de `BASE_STATS`
+- `loadModifiers(upgradeIds)` / `missileParams(upgradeIds)` / `activeDefenseParams(upgradeIds)` — effets dérivés
+- `EQUIPMENT_CATALOG` / `DEFAULT_LOADOUT` — système d'équipement par slot (défense active, missiles…)
+
+### Missiles et défense active
+
+**`MissileSystem.js`** — missiles joueur : lock-on (cône + range), tir AA et AG, guidage par niveau (`TURN_SPEED_LEVELS`, `TRACK_TIME_BONUS`). Slots visuels = charges via `_slotCharges`. Callbacks : `onHit`, `onLockStart/Complete/Lost`.
+
+**`EnemyMissileManager.js`** — missiles entrants : physique, impact, alarme HUD. Distinct de MissileSystem.
+
+### IA ennemie (`Enemy.js`)
+
+Machine à états PATROL → FOLLOW → ATTACK → FLEE. Trois tiers : `rookie / regular / ace` (portée, précision, cadence). Évitement terrain par look-ahead sur plusieurs distances (`LOOK_DISTS`). Gère aussi son propre lock-on missile (`_updateMissileLock`).
+
+### Défense sol (`GroundDefense.js`)
+
+Tanks, trucks, mitrailleuses AA placés autour des villages. `GroundDefense.preloadModels()` précharge les GLB avant `build()`. Les unités alliées réapparaissent (`ALLY_RESPAWN_CD = 45s`).
+
+### Multijoueur (`NetworkManager.js` + `MultiplayerManager.js`)
+
+`NetworkManager` : client WebSocket, protocole JSON `{ type, payload }`. `createRoom` / `joinRoom` / `send` / `on` / `once`.
+
+`MultiplayerManager` : interpolation snapshot des joueurs distants (buffer de 100 ms de retard pour absorber la gigue réseau Railway). Les joueurs distants chargent `/SK_Veh_Plane_Stunt_01.glb`.
+
+### HUD (`UI.js`)
+
+Canvas/HTML style cockpit WW2. Palette définie dans l'objet `C` en tête de fichier (`cream`, `dimCream`, `bezelHi`…). Fonts : Rajdhani (chiffres) + Courier New (labels).
+
+La mire est un `THREE.Sprite` rendu dans une **scène orthographique séparée** après la scène principale — elle s'affiche toujours par-dessus les balles.
+
+Méthodes HUD clés :
+- `setActiveDefenseStatus(type, count, max, cooldownPct, isActive, timeRemaining)` — panneau défense active
+- `_drawCounterBox(canvas, label, count, max, valColor, symFull, symEmpty, desc)` — encadré compteur réutilisable
+- `_drawWorldMarkers()` — cercles villages + indicateurs de bord d'écran
+
+### Autres modules
+
+| Fichier | Rôle |
+|---------|------|
+| `Player.js` | Physique de vol, input clavier/souris, animation bones, carburant/munitions/santé |
+| `CameraController.js` | Caméra 3e personne — **NE PAS MODIFIER** (version stable validée) |
+| `Bullet.js` | `BulletManager` + `EnemyBulletManager` — pool de projectiles instanciés |
+| `Trail.js` | Traînée persistante derrière l'avion |
+| `LODManager.js` | `InstancedLOD` — 3 niveaux de détail via `SimplifyModifier`, utilisé par les cartes pour les arbres/buissons |
+| `AudioManager.js` | Web Audio API + fichiers WAV (`public/sfx/`), synthèse pour effets ponctuels |
+| `PracticeMode.js` | Mode entraînement — anneaux + cibles autour de la base joueur |
+| `MobileControls.js` | Joystick virtuel touch, détection `IS_MOBILE` |
+| `LoadingScreen.js` | Écran de chargement avec barre de progression |
+| `BugReport.js` | Overlay de rapport de bug (contexte mode/carte/vague injecté par Game.js) |
+| `SettingsOverlay.js` | Overlay paramètres en jeu |
+| `CursorFX.js` | Effets visuels curseur dans le menu |
+| `i18n.js` | Dictionnaire FR/EN, fonctions `t()`, `tTips()`, `tModeInfo()`… |
+
+## Physique (`Player.js`)
+
+- Vitesse : MIN 20, MAX 120 km/h, accél 20/s, drag 3/s
+- Altitude max : **1000 m** (plafond bloquant)
+- Carburant : 100→0, drain 0.4/s + 0.93/s avec Shift — moteur coupe si vide
+- Munitions : 200 rounds de base (-1 par tir, modifiable par upgrades)
+- Santé : 100 HP, -50 HP par contact sol (cooldown 0.3s)
+- Bones animés : hélice, ailerons, gouverne, queue, flaps — axes calibrés par essai/erreur, **ne pas reset**
+- Traînée complexe intentionnellement absente (physique simplifiée)
 
 ## Contrôles
+
 | Touche | Action |
 |--------|--------|
 | Shift | Accélérer |
 | W / S | Monter / Descendre |
 | A / D | Virer gauche / droite |
 | Espace | Tirer |
+| Souris | Diriger (mode souris capturée) |
 
-## Physique (Player.js)
-- Vitesse : MIN 20, MAX 120 km/h, accél 20/s, drag 3/s
-- Altitude max : **1000 m** (plafond bloquant)
-- Carburant : 100→0, drain 0.4/s + 0.93/s avec Shift — moteur coupe si vide
-- Munitions : **200** rounds, -1 par tir, tir bloqué si vide
-- Santé : 100 HP, -50 HP par contact sol (cooldown 0.3s)
-- Mort → isDead = true → écran CRASH + bouton réapparaître
-- Bones animés : hélice, ailerons, gouverne, queue, flaps (cascade)
-- Vibration moteur : oscillation subtile sur model.position (intensity ∝ speed)
+## Assets (`public/`)
 
-## Getters exposés par Player
-```js
-player.speed      // km/h
-player.altitude   // mètres
-player.heading    // degrés 0-360 (0=Nord, 90=Est)
-player.fuel       // 0-100
-player.ammo       // 0-200
-player.health     // 0-100
-player.isDead     // bool
-player.position   // THREE.Vector3
-player.quaternion // THREE.Quaternion
+```
+Avions/          — 4 GLB (blanc, bleu, jaune, rouge)
+Village/         — bâtiments villages
+Village defense/ — tank, truck, mitrailleuse AA
+Arbres/ Buissons/— végétation instanciée (LOD)
+Missiles/        — modèles missiles AA et AG
+Montagnes/ Montgolfières/ Mode libre/ — props décoratifs
+sfx/             — fichiers WAV pour AudioManager
+SK_Veh_Plane_Stunt_01.glb — modèle avion générique (joueurs distants multijoueur)
 ```
 
-## HUD (UI.js) — style cockpit WW2, Courier New, palette crème #d4c88a
-| Élément | Position | Description |
-|---------|----------|-------------|
-| Cadran vitesse | Bas-gauche | 0-120 km/h, aiguille animée, zones colorées |
-| Cadran altitude | Bas-droite | 0-1000 m, aiguille animée |
-| Ruban de cap | Bas-centre | N/NE/E/SE/S/SO/O/NO, défile en continu |
-| Cadran carburant | Centre-bas gauche | E-¼-½-¾-F, icône jerrycan |
-| Cadran dommages | Centre-bas droite | OK-DMG-CRIT, icône clé plate |
-| Compteur munitions | Haut-droite | 3 chiffres mécaniques, rouge si < 20 |
-| Mire | Centre écran | Sprite Three.js orthographique (AU-DESSUS des balles) |
-| Aide touches | Haut-gauche | Panel semi-transparent |
+## Modes de jeu
 
-**Important** : la mire est un `THREE.Sprite` rendu dans une scène orthographique séparée après la scène principale — elle s'affiche toujours par-dessus les balles.
+`config.mode` dans `Game.js` :
 
-## Scène 3D (Game.js)
+| Mode | Description |
+|------|-------------|
+| `freeflight` | Vol libre, 5 IA |
+| `solo` | Mission solo, 10 IA |
+| `coop` | Coopératif, 12 IA |
+| `multiplayer` | Lobbys WebSocket, 0 IA |
+| `ffa` / `tdm` | Free-for-all / Team deathmatch, 0 IA |
+| `survival` | Vagues d'ennemis croissantes |
 
-### Terrain
-- `BufferGeometry` custom, **260×260 segments**, 12 000 unités de large
-- Height : fBm 8 octaves (value noise) + micro-relief 4 octaves + pics gaussiens
-- Zone plate autour origine (r < 400) pour décollage
-- **Vertex colors** par altitude :
-  - h < 5 : sable/berge
-  - h < 18 : plaine verte
-  - h < 60 : forêt
-  - h < 140 : prairie alpine
-  - h < 280 : roche claire
-  - h < 480 : roche sombre
-  - h < 600 : neige légère
-  - h ≥ 600 : neige épaisse
-  - pente > 0.68 : roche (quelle qu'altitude)
+## Règles impératives
 
-### Pics montagneux (PEAKS)
-```js
-[ 1600, -1200, 1500, 700]  // GRANDE montagne principale (~1500m)
-[ 2400, -1800,  750, 500]
-[-2800,  2000,  820, 480]
-[ 1600,  3200,  680, 440]
-```
+### i18n — OBLIGATOIRE
+- **Tout texte visible par l'utilisateur DOIT passer par `t('clé')`** — jamais de string FR ou EN hardcodée dans JS/HTML
+- Si une clé n'existe pas, l'ajouter dans **les deux sections** (FR et EN) de `src/i18n.js` avant de l'utiliser
+- Exception : commentaires de code, noms de variables, logs console de debug
 
-### Lacs (12 lacs, surfaces planes MeshLambertMaterial bleu)
-- Format `[cx, cz, rayon, niveau_eau]`
-- Lac principal : `[650, -550, 340, 4]` — visible depuis le spawn
-- Lacs alpins jusqu'à h=125, grands lacs de plaine h=4-8
-- Surface plane `CircleGeometry` à `lh + 1.0` avec `renderOrder = 1`
-
-### Nuages (30 formations)
-- Clusters d'`IcosahedronGeometry(r, 1)` avec `flatShading: true`
-- 6-12 blobs par formation, blobs core + satellites
-- Altitude 440-700 m, semi-transparents
-
-### Ciel
-- `SphereGeometry(4000)` BackSide, suit `camera.position` chaque frame (pas de bulle noire)
-- Fog : `THREE.Fog(0x7aa0c8, 800, 4500)`
-
-### Balles
-- `CylinderGeometry(0.10, 0.10, 0.9)` couleur `0xff3300` (rouge-orangé traceur)
-- Vitesse 950 unités/s, durée de vie 2.5s
-- Rendu SOUS la mire (mire = sprite orthographique)
-
-## Règles importantes
-- **Ne pas toucher à CameraController.js** — version stable validée
-- Les axes des bones ont été déterminés par essai/erreur — ne pas reset
-- Pas de traînée complexe (physique simplifiée intentionnelle)
-- Pas de commentaires sauf si WHY non-évident
-
-## Règle i18n — OBLIGATOIRE
-- **Tout texte visible par l'utilisateur DOIT passer par `t('clé')`** — jamais de string FR ou EN hardcodée dans le JS/HTML
-- Si une clé n'existe pas encore, l'ajouter dans les deux sections (FR et EN) de `src/i18n.js` avant de l'utiliser
-- Exception autorisée : commentaires de code, noms de variables/fonctions, logs console de debug
+### Ne pas modifier
+- **`CameraController.js`** — version stable, ne pas toucher
+- Les axes des bones dans `Player.js` — déterminés par essai/erreur, ne pas reset
