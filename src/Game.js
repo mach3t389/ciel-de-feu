@@ -777,7 +777,12 @@ export class Game {
         // FFA/coop client : tuer le RemoteBot immédiatement sans attendre le bot_state
         const bots = this._multiplayerManager.getRemoteBots();
         const bot  = bots.find(b => b.netId === netId && !b.isDead);
-        if (bot) bot.applyState({ dead: true });
+        if (bot) {
+          bot.applyState({ dead: true });
+          // Après _die() pour ne pas être écrasé — empêche double-crédit si notre
+          // balle arrive juste après le message réseau d'un autre joueur.
+          bot._killSent = true;
+        }
       });
 
       // Notifications arrivée / départ des autres joueurs
@@ -1568,6 +1573,8 @@ export class Game {
 
   // Spawne les ennemis depuis une config pré-calculée (identique sur tous les clients)
   _spawnSurvivalFromConfig(cfg) {
+    // Synchronise le compteur de vague côté client (ravitaillement vague 10, 20, etc.)
+    if (cfg.wave !== undefined) this._survivalWave = cfg.wave;
     const enemyBase  = this._villageMap?.airports?.[1]?.center ?? new THREE.Vector3(800, 45, 800);
     const playerBase = this._villageMap?.airports?.[0]?.center ?? new THREE.Vector3(0, 45, 0);
 
@@ -2886,6 +2893,7 @@ export class Game {
         this._netSyncTimer = 0;
       }
       // Diffuse notre score dès qu'il change → tableau des scores synchronisé
+      if (this._lastSentKills === undefined) { this._lastSentKills = 0; this._lastSentDeaths = 0; }
       const k = this.stats?.kills ?? 0, d = this.stats?.deaths ?? 0;
       if (k !== this._lastSentKills || d !== this._lastSentDeaths) {
         this._lastSentKills = k; this._lastSentDeaths = d;
