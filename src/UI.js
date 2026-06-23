@@ -23,6 +23,9 @@ const C = {
   tickMinor: '#4a4030',
   rivetHi  : '#9a8a60',
   rivetLo  : '#2a2418',
+  // Alliés (joueurs amis + IA alliées) — bleu contrasté, distinct du rouge ennemi
+  ally     : '#3aa6ff',
+  allyDim  : '#2f7fcc',
   // Fond gris uniforme pour tous les overlays (pause, crash, victoire, scoreboard)
   menuBackdrop : 'rgba(10,11,13,0.66)',
 };
@@ -1506,6 +1509,7 @@ export class UI {
       const sorted = [...enemies].sort((a,b) =>
         a.position.distanceTo(player.position) - b.position.distanceTo(player.position)
       );
+      let closestEnemyDrawn = false;
       for (let i = 0; i < sorted.length; i++) {
         const e = sorted[i];
         const dx = e.position.x - player.position.x;
@@ -1517,10 +1521,23 @@ export class UI {
         const mx = W/2 + delta * PX_PER_DEG;
         if (mx < 4 || mx > W - 4) continue;
 
-        const isClosest = i === 0;
-        const col = isClosest ? '#ff3322' : '#cc3322';
         const dy = e.position.y - player.position.y;
         const altSym = dy > 30 ? '▲' : dy < -30 ? '▼' : '■';
+
+        // ── Allié : point bleu rempli, jamais traité comme cible ──────────────
+        if (e.isEnemy === false) {
+          ctx.save();
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath(); ctx.arc(mx, y0 - 3, 3, 0, Math.PI * 2);
+          ctx.fillStyle = C.ally; ctx.fill();
+          ctx.restore();
+          continue;
+        }
+
+        // Premier ennemi rencontré (liste triée par distance) = le plus proche
+        const isClosest = !closestEnemyDrawn;
+        if (isClosest) closestEnemyDrawn = true;
+        const col = isClosest ? '#ff3322' : '#cc3322';
 
         ctx.save();
         if (!isClosest) ctx.globalAlpha = 0.35;
@@ -1608,6 +1625,7 @@ export class UI {
     const sorted = [...enemies].sort((a,b) =>
       a.position.distanceTo(player.position) - b.position.distanceTo(player.position)
     );
+    let closestEnemyDrawn = false;
     for (let i = 0; i < sorted.length; i++) {
       const e = sorted[i];
       const dx = e.position.x - player.position.x;
@@ -1617,9 +1635,12 @@ export class UI {
       const rz =  dx * Math.sin(hRad) - dz * Math.cos(hRad);
       const ex = cx + rx * SCALE;
       const ey = cy - rz * SCALE;
-      const isClosest = i === 0;
-      const dotR = isClosest ? 4 : 2.5;
-      const col  = isClosest ? '#ff5030' : '#c08840';
+
+      const isAlly = e.isEnemy === false;
+      const isClosest = !isAlly && !closestEnemyDrawn;
+      if (isClosest) closestEnemyDrawn = true;
+      const dotR = isAlly ? 3 : (isClosest ? 4 : 2.5);
+      const col  = isAlly ? C.ally : (isClosest ? '#ff5030' : '#c08840');
 
       ctx.beginPath(); ctx.arc(ex, ey, dotR, 0, Math.PI*2);
       ctx.fillStyle = col; ctx.fill();
@@ -1857,7 +1878,6 @@ export class UI {
       const vAlpha = THREE.MathUtils.clamp((vDist - 80) / 300, 0.08, 1.0);
       const col = '#cc4433';
       const r = 7;
-      const vName = v.name ?? '';
 
       if (onScreen) {
         ctx.save();
@@ -1868,13 +1888,6 @@ export class UI {
         ctx.fill();
         ctx.strokeStyle = col; ctx.lineWidth = 1.8;
         ctx.stroke();
-        // Nom du village sous le cercle
-        if (vName) {
-          ctx.font = '8px Courier New, monospace';
-          ctx.fillStyle = col;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-          ctx.fillText(vName.toUpperCase(), 0, r + 3);
-        }
         ctx.restore();
       } else {
         const { ex, ey } = this._clampToEdge(sx, sy, W, H, 28, inFront);
@@ -1884,15 +1897,6 @@ export class UI {
         ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2);
         ctx.strokeStyle = col; ctx.lineWidth = 1.8;
         ctx.stroke();
-        // Nom à côté du cercle hors-écran
-        if (vName) {
-          ctx.font = '8px Courier New, monospace';
-          ctx.fillStyle = col;
-          ctx.textAlign = ex < W / 2 ? 'left' : 'right';
-          ctx.textBaseline = 'middle';
-          const offX = ex < W / 2 ? 10 : -10;
-          ctx.fillText(vName.toUpperCase(), offX, 0);
-        }
         ctx.restore();
       }
     }
@@ -1930,19 +1934,21 @@ export class UI {
       ctx.save();
 
       if (isAlly) {
-        // ── Allié : simple chevron vert discret ─────────────────────────────
-        ctx.globalAlpha = 0.55;
-        const col = '#33cc66';
+        // ── Allié : point rempli bleu (distinct du losange ennemi) ──────────
+        ctx.globalAlpha = 0.85;
+        const col = C.ally;
         if (onScreen) {
-          const dh = 5;
-          ctx.beginPath();
-          ctx.moveTo(sx - dh, sy - dh); ctx.lineTo(sx, sy - dh*2); ctx.lineTo(sx + dh, sy - dh);
-          ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.stroke();
+          const r = 4.5;
+          ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
+          ctx.fillStyle = col; ctx.fill();
+          ctx.beginPath(); ctx.arc(sx, sy, r + 2, 0, Math.PI * 2);
+          ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = 0.4; ctx.stroke();
+          ctx.globalAlpha = 0.85;
           if (dist < 400) {
             ctx.font = '9px Rajdhani, sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             ctx.fillStyle = col;
-            ctx.fillText(distStr, sx, sy - dh*2 - 4);
+            ctx.fillText(distStr, sx, sy - r - 5);
           }
         } else {
           const angle = inFront

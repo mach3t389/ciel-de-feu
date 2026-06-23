@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// Couleurs fixes : allié = vert, ennemi = rouge
-const ALLY_COLOR = 0x33cc66;
+// Couleurs fixes : allié = bleu, ennemi = rouge
+const ALLY_COLOR = 0x3aa6ff;
 const ENEMY_COLOR = 0xcc2222;
 
 // Interpolation par snapshots : on affiche les joueurs distants ~100 ms dans le
@@ -38,7 +38,7 @@ class RemotePlayer {
     this._initialized = false; // true dès le premier paquet (téléportation initiale)
     this._velocity    = new THREE.Vector3();
 
-    this._markerColor = isEnemy ? '#cc2222' : '#33cc66';
+    this._markerColor = isEnemy ? '#cc2222' : '#3aa6ff';
     this._emissiveHex = isEnemy ? ENEMY_COLOR : ALLY_COLOR;
 
     this._load(scene);
@@ -270,6 +270,10 @@ class RemoteBot {
     this.isEnemy  = true;
     this.isDead   = false;
     this.hp       = 100;
+    // Estimation de PV pour décider du kill côté client. L'hôte est autoritaire à la
+    // baisse uniquement : un bot_state ne « soigne » jamais cette estimation, sinon les
+    // dégâts encaissés entre deux paquets seraient effacés et l'ennemi serait increvable.
+    this._localHp = 100;
     this._killSent = false;
 
     this.pivot = new THREE.Object3D();
@@ -333,7 +337,10 @@ class RemoteBot {
   }
 
   applyState(state) {
-    if (state.hp   !== undefined) this.hp = state.hp;
+    if (state.hp !== undefined) {
+      this.hp = state.hp;
+      this._localHp = Math.min(this._localHp, state.hp);  // autoritaire à la baisse
+    }
     if (state.dead && !this.isDead)        this._die();
     if (state.dead === false && this.isDead) this._revive(state.pos);
     if (state.pos && state.quat) {
@@ -357,7 +364,8 @@ class RemoteBot {
 
   applyLocalHit(dmg) {
     if (this.isDead) return;
-    this.hp = Math.max(0, this.hp - dmg);
+    this._localHp = Math.max(0, this._localHp - dmg);
+    this.hp = this._localHp;
   }
 
   _die() {
@@ -371,6 +379,7 @@ class RemoteBot {
   _revive(pos) {
     this.isDead  = false;
     this.hp      = 100;
+    this._localHp = 100;
     this._killSent = false;
     this._buffer.length = 0;
     this._initialized   = false;
@@ -498,6 +507,16 @@ export class MultiplayerManager {
       this._emit('survival_wave_config', cfg);
     });
 
+    // Coop : tir d'un ennemi de l'hôte → le client le rejoue localement
+    on('enemy_bullet', (data) => {
+      this._emit('enemy_bullet', data);
+    });
+
+    // Coop : avancement de mission diffusé par l'hôte (total abattus, victoire)
+    on('mission_state', (data) => {
+      this._emit('mission_state', data);
+    });
+
     on('score_update', ({ id, kills, deaths, name }) => {
       const p = this._players.get(id);
       if (p) {
@@ -579,6 +598,22 @@ export class MultiplayerManager {
   sendSurvivalWaveConfig(cfg) {
     if (!this._network) return;
     this._network.send('survival_wave_config', cfg);
+  }
+
+  // Coop hôte : diffuse un tir ennemi pour que les clients subissent le feu de l'IA
+  sendEnemyBullet(position, quaternion, dmg) {
+    if (!this._network) return;
+    this._network.send('enemy_bullet', {
+      position  : { x: position.x,   y: position.y,   z: position.z },
+      quaternion: { x: quaternion.x, y: quaternion.y, z: quaternion.z, w: quaternion.w },
+      dmg,
+    });
+  }
+
+  // Coop hôte : diffuse l'avancement de mission (total abattus, restant, victoire)
+  sendMissionState(state) {
+    if (!this._network) return;
+    this._network.send('mission_state', state);
   }
 
   // Active la réception des bot_state (clients FFA uniquement)

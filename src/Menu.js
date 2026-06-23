@@ -393,6 +393,9 @@ export class Menu {
     // couleur de l'avion actif (#1 par défaut), sans flash de la couleur par défaut.
     this._progression = new ProgressionSystem();
     this._config.team = this._progression.getPlane(this._progression.activePlane).color;
+    // Nouveaux joueurs : démarrer en Facile tant qu'ils n'ont pas atteint le niveau
+    // qui débloque les contre-mesures (missiles ennemis gated à partir du niv. 5).
+    if (this._progression.level < 5) this._config.difficulty = 'easy';
     this._init3DPreview();
 
     // DEV : taper cheat() dans la console pour passer niveau 50 + crédits illimités
@@ -1777,12 +1780,12 @@ export class Menu {
             nm.send('player_plane', { plane: this._config.team, planeName: self.planeName, level: self.level });
           }
           // Diffuse aussi notre niveau (en cas d'absence côté serveur)
-          if (nm) nm.send('player_level', { level: self.level });
+          if (nm) nm.send('player_level', { level: self.level, prestigeLevel: self.prestigeLevel });
         });
         nm.on('player_left',    ({ id })               => { const i = players.findIndex(p => p.id === id); if (i > -1) players.splice(i, 1); renderPlayers(); });
         nm.on('player_ready',   ({ id, ready })        => { const p = players.find(p => p.id === id); if (p) { p.isReady = ready; renderPlayers(); } });
         nm.on('player_plane',   ({ id, plane, planeName, level }) => { const p = players.find(p => p.id === id); if (p) { p.team = plane; if (planeName !== undefined) p.planeName = planeName; if (Number.isFinite(level)) p.level = level; renderPlayers(); } });
-        nm.on('player_level',   ({ id, level })        => { const p = players.find(p => p.id === id); if (p && Number.isFinite(level)) { p.level = level; renderPlayers(); } });
+        nm.on('player_level',   ({ id, level, prestigeLevel }) => { const p = players.find(p => p.id === id); if (p && Number.isFinite(level)) { p.level = level; if (Number.isFinite(prestigeLevel)) p.prestigeLevel = prestigeLevel; renderPlayers(); } });
         nm.on('player_team',    ({ id, playerTeam })   => { const p = players.find(p => p.id === id); if (p) { p.playerTeam = playerTeam; renderPlayers(); } });
         nm.on('config_update',  applyConfigPatch);
         nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));

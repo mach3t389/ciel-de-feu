@@ -39,6 +39,11 @@ const DIFFICULTY = {
   expert  : { hp: 200, countMult: 1.2 },
 };
 
+// Difficulté adaptative selon le niveau de progression du joueur.
+// Les missiles ennemis ne se débloquent qu'au niveau où le joueur peut obtenir
+// sa première contre-mesure (leurres, niv. 5) — sinon le débutant est sans défense.
+const ENEMY_MISSILE_MIN_LEVEL = 5;
+
 export class Game {
   constructor(container, config = {}) {
     this.container = container;
@@ -624,9 +629,19 @@ export class Game {
     const isTDM      = mode === 'tdm';
     const isSurvival = mode === 'survival';
     const isMulti    = ['multiplayer', 'coop', 'ffa', 'tdm', 'freeflight', 'survival'].includes(mode);
+    const isHost     = this._config.isHost === true;
     this._isSurvival = isSurvival;
     this._isTDM      = isTDM;
     this._isFFA      = isFFA;
+    this._isHost     = isHost;
+
+    // ── Coop host-authoritative ───────────────────────────────────────────────
+    // En coop networké, l'hôte possède les ennemis (IA + progression de mission)
+    // et diffuse leur état + leur feu. Les clients ne spawnent aucun ennemi : ils
+    // affichent des RemoteBot, leur tirent dessus et créditent leurs propres kills.
+    const coopNetworked = mode === 'coop' && isMulti && !!this._config.networkManager;
+    this._coopHost   = coopNetworked && isHost;
+    this._coopClient = coopNetworked && !isHost;
 
     // ── Mise à l'échelle selon le nombre de joueurs (coop/survie multijoueur) ──
     // Solo : playerCount=1 → aucun changement. Chaque joueur additionnel ajoute des
@@ -669,17 +684,13 @@ export class Game {
     this._camFwd            = new THREE.Vector3();
     if (this._lowGraphics > 0) this._setLowGraphics(this._lowGraphics, false);
 
-    const pickSkill = () => {
-      if (isPractice || isFFA) return 'regular';
-      const r = Math.random();
-      if (r < 0.65) return 'regular';
-      return 'ace';
-    };
+    const pickSkill = () => this._pickEnemySkill(isPractice, isFFA);
 
     this.enemies = [];
     this._enemyNetIdCounter = 0;
     const initialCount = Math.min(MAX_ACTIVE, missionTotal);
-    if (initialCount > 0) {
+    // Client coop : aucun spawn local — les ennemis appartiennent à l'hôte.
+    if (initialCount > 0 && !this._coopClient) {
       this._spawnInitialWave(initialCount, diff, playerBase, enemyBase, pickSkill, isFFA);
     }
 
@@ -731,11 +742,39 @@ export class Game {
       // Ajouter les joueurs déjà présents dans le lobby au moment du démarrage
       (this._config.remotePlayers || []).forEach(p => this._multiplayerManager.addRemotePlayer(p.id, p));
 
+      // Config de vague survie reçue de l'hôte → spawner les mêmes ennemis (clients)
+      if (this._isSurvival && !isHost) {
+        this._multiplayerManager.on('survival_wave_config', (cfg) => {
+          this._spawnSurvivalFromConfig(cfg);
+        });
+      }
+
+      // Client coop : feu de l'IA de l'hôte → rejoué localement (touche le joueur)
+      if (this._coopClient) {
+        this._multiplayerManager.on('enemy_bullet', ({ position, quaternion, dmg }) => {
+          const p = new THREE.Vector3(position.x, position.y, position.z);
+          const q = new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+          this._enemyBulletManager.fire(p, q, dmg);
+        });
+        // Avancement de mission autoritaire (total abattus, restant, victoire)
+        this._multiplayerManager.on('mission_state', (s) => {
+          if (s.killed  !== undefined) this._missionKilled  = s.killed;
+          if (s.total   !== undefined) this._missionTotal   = s.total;
+          if (s.spawned !== undefined) this._missionSpawned = s.spawned;
+          if (s.complete) this._showMissionVictory();
+        });
+      }
+
       // Ennemi abattu par un autre joueur → le tuer localement aussi
       this._multiplayerManager.on('enemy_killed', ({ netId }) => {
         const e = this.enemies.find(e => e.netId === netId && !e.isDead);
-        if (e) e.hit(99999);
-        // FFA client : tuer le RemoteBot immédiatement sans attendre le prochain bot_state
+        if (e) {
+          e.hit(99999);
+          // Hôte coop : un client a abattu un de nos ennemis → créditer la mission
+          // (le kill est attribué au tireur via son propre score_update).
+          if (this._coopHost) this._creditMissionKill();
+        }
+        // FFA/coop client : tuer le RemoteBot immédiatement sans attendre le bot_state
         const bots = this._multiplayerManager.getRemoteBots();
         const bot  = bots.find(b => b.netId === netId && !b.isDead);
         if (bot) bot.applyState({ dead: true });
@@ -788,12 +827,6 @@ export class Game {
     this._oppTeamScore = 0;
     if (isTDM) {
       this.ui.setTDMMode(true, this._config.playerTeam ?? 'team1');
-      // Config de vague survie reçue de l'hôte → spawner les mêmes ennemis (clients coop)
-      if (this._isSurvival && !isHost) {
-        this._multiplayerManager.on('survival_wave_config', (cfg) => {
-          this._spawnSurvivalFromConfig(cfg);
-        });
-      }
 
       // Quand un joueur distant meurt → crédit à l'équipe adverse ou à la nôtre
       if (this._multiplayerManager) {
@@ -837,6 +870,13 @@ export class Game {
       }
     }
 
+    // ── Coop host-authoritative : diffusion (hôte) / réception (client) ───────
+    if (this._coopHost) {
+      this._startBotBroadcast();        // diffuse positions ennemies + mission_state
+    } else if (this._coopClient) {
+      this._multiplayerManager.enableBotReceive();
+    }
+
     // Stats DE LA PARTIE (repartent à 0) — affichées sur le HUD
     // Le cumul de toutes les parties reste dans localStorage (visible au menu)
     this.stats = {
@@ -864,7 +904,6 @@ export class Game {
     // Menu ESC multijoueur — toggle unifié (clavier, manette, perte de pointer lock)
     this._escMenuVisible = false;
     // Hôte + temps illimité → bouton "Fin de partie" disponible
-    const isHost         = this._config.isHost === true;
     const isUnlimited    = this._timeRemaining === null;
     const onEndGame      = (isPvP && isHost && isUnlimited) ? () => {
       this._toggleEscMenu(false);
@@ -1005,7 +1044,54 @@ export class Game {
 
   _wireEnemyFire(enemy) {
     enemy.netId = this._enemyNetIdCounter++;
-    enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat);
+    enemy.onFire = (pos, quat) => this._fireEnemyBullet(pos, quat);
+  }
+
+  // Tir ennemi : émet la balle localement et, si l'hôte coop possède les ennemis,
+  // le diffuse aux clients pour qu'ils subissent le feu de l'IA (host-authoritative).
+  _fireEnemyBullet(pos, quat, dmg, fromTurret = false) {
+    const b = this._enemyBulletManager.fire(pos, quat, dmg);
+    if (b && fromTurret) b._fromTurret = true;
+    // La défense au sol est simulée localement par chaque client → ne pas diffuser
+    // (sinon double feu). Seuls les avions ennemis, propriété de l'hôte, sont relayés.
+    if (this._coopHost && this._multiplayerManager && !fromTurret) {
+      this._multiplayerManager.sendEnemyBullet(pos, quat, dmg);
+    }
+    return b;
+  }
+
+  // Affiche l'écran de victoire de mission (hôte/solo, ou client coop sur signal de l'hôte).
+  // Idempotent : un seul déclenchement par partie.
+  _showMissionVictory() {
+    if (this._missionComplete) return;
+    this._missionComplete = true;
+    if (this.player) this.player._blockPointerLock = true;
+    this._audio?.pauseEngine(true);
+    document.exitPointerLock();
+    if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
+    this._updateMissionRecord();
+    this._showEndRewards(true, () => {
+      this.ui.showVictory(
+        this.stats,
+        this._config.networkManager ? null : () => this._quit('replay'),
+        () => this._quit(),
+        this._buildScoreboardRows(),
+      );
+    });
+  }
+
+  // Comptabilise un ennemi abattu dans la progression de mission (hôte/solo) et
+  // déclenche les renforts. N'incrémente PAS stats.kills (crédité au tireur).
+  _creditMissionKill() {
+    if (this._practiceMode) return;
+    this._missionKilled++;
+    if (this._missionSpawned < this._missionTotal) {
+      const alive    = this.enemies.filter(e => !e.isDead).length;
+      const canSpawn = Math.min(this._waveSize,
+                                this._missionTotal - this._missionSpawned,
+                                this._maxActive - alive);
+      if (canSpawn > 0) this._spawnWave(canSpawn);
+    }
   }
 
   // Budget missiles selon difficulté + manche de survie
@@ -1169,7 +1255,9 @@ export class Game {
     }
   }
 
-  // Diffuse les états des bots toutes les 100 ms (hôte FFA uniquement)
+  // Diffuse les états des ennemis toutes les 100 ms (hôte FFA + hôte coop).
+  // En coop, diffuse aussi l'avancement de mission pour que les clients affichent
+  // le même total abattus / restant et déclenchent la victoire de façon autoritaire.
   _startBotBroadcast() {
     this._botBroadcastTimer = setInterval(() => {
       if (!this._multiplayerManager || this._destroyed) return;
@@ -1183,6 +1271,14 @@ export class Game {
           dead : !!e.isDead,
         }));
       if (states.length > 0) this._multiplayerManager.sendBotStates(states);
+      if (this._coopHost) {
+        this._multiplayerManager.sendMissionState({
+          killed  : this._missionKilled,
+          total   : this._missionTotal,
+          spawned : this._missionSpawned,
+          complete: this._missionComplete,
+        });
+      }
     }, 100);
   }
 
@@ -1249,8 +1345,8 @@ export class Game {
       });
       leader.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(leader);
-      if (type.dmg !== 7) leader.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
-      if (type.isHeavy && this._config?.difficulty !== 'easy') {
+      if (type.dmg !== 7) leader.onFire = (pos, quat) => this._fireEnemyBullet(pos, quat, type.dmg);
+      if (type.isHeavy && this._enemyMissilesAllowed()) {
         const _mcd = { standard: 24, hard: 18, expert: 14 }[this._config?.difficulty] ?? 24;
         const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
         this._wireEnemyMissile(leader, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000, maxMissiles: this._missileBudget() });
@@ -1272,8 +1368,8 @@ export class Game {
         });
         wingman.getTerrainHeight = this.getTerrainHeight ?? null;
         this._wireEnemyFire(wingman);
-        if (type.dmg !== 7) wingman.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, type.dmg);
-        if (type.isHeavy && this._config?.difficulty !== 'easy') {
+        if (type.dmg !== 7) wingman.onFire = (pos, quat) => this._fireEnemyBullet(pos, quat, type.dmg);
+        if (type.isHeavy && this._enemyMissilesAllowed()) {
           const _mcd = { standard: 30, hard: 24, expert: 18 }[this._config?.difficulty] ?? 30;
           const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
           this._wireEnemyMissile(wingman, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 1800, maxMissiles: this._missileBudget() });
@@ -1310,11 +1406,33 @@ export class Game {
     return { hp: Math.round(base.hp * (this._enemyHpMult ?? 1)), countMult: base.countMult };
   }
 
+  // Niveau de progression du joueur (1 par défaut hors progression).
+  _playerLevel() { return this._progression?.level ?? 1; }
+
+  // true si les ennemis ont le droit de verrouiller/tirer des missiles.
+  // Gate par niveau : pas de missiles avant le déblocage des leurres (niv. 5).
+  _enemyMissilesAllowed() {
+    return this._config?.difficulty !== 'easy'
+        && this._playerLevel() >= ENEMY_MISSILE_MIN_LEVEL;
+  }
+
+  // Tier d'IA pondéré par le niveau du joueur. Bas niveau → majorité de « rookie »
+  // (peu précis, lents), jamais d'« ace » ; la menace monte progressivement.
+  _pickEnemySkill(isPractice = false, isFFA = false) {
+    if (isPractice || isFFA) return 'regular';
+    const lvl = this._playerLevel();
+    const r = Math.random();
+    if (lvl < ENEMY_MISSILE_MIN_LEVEL) return r < 0.80 ? 'rookie' : 'regular';
+    if (lvl < 10) return r < 0.45 ? 'rookie' : (r < 0.90 ? 'regular' : 'ace');
+    // Niveau ≥ 10 : pondération d'origine (65 % regular / 35 % ace)
+    return r < 0.65 ? 'regular' : 'ace';
+  }
+
   _spawnWave(count) {
     const enemyBase  = this._villageMap?.airports?.[1]?.center ?? new THREE.Vector3(800, 45, 800);
     const playerBase = this._villageMap?.airports?.[0]?.center ?? new THREE.Vector3(0, 45, 0);
     const diff       = this._scaledDiff();
-    const pickSkill  = () => { const r=Math.random(); return r<0.65?'regular':'ace'; };
+    const pickSkill  = () => this._pickEnemySkill(false, this._isFFA);
     const heavyChance = { easy: 0, standard: 0.20, hard: 0.35, expert: 0.50 }[this._config?.difficulty] ?? 0.20;
 
     for (let i = 0; i < count; i++) {
@@ -1338,8 +1456,8 @@ export class Game {
       });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(enemy);
-      if (tDmg !== 7) enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, tDmg);
-      if (isHeavy && this._config?.difficulty !== 'easy') {
+      if (tDmg !== 7) enemy.onFire = (pos, quat) => this._fireEnemyBullet(pos, quat, tDmg);
+      if (isHeavy && this._enemyMissilesAllowed()) {
         const _mcd = { standard: 24, hard: 18, expert: 14 }[this._config?.difficulty] ?? 24;
         const _mlt = { standard: 2.8, hard: 2.4, expert: 2.0 }[this._config?.difficulty] ?? 2.8;
         this._wireEnemyMissile(enemy, { cooldown: _mcd, lockTime: _mlt, trackQuality: 1, range: 2000, maxMissiles: this._missileBudget() });
@@ -1477,9 +1595,9 @@ export class Game {
       });
       enemy.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(enemy);
-      if (tDmg !== 7) enemy.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, tDmg);
-      // Missiles ennemis : lourds uniquement, pas en facile
-      if (e.isHeavy && this._config?.difficulty !== 'easy') {
+      if (tDmg !== 7) enemy.onFire = (pos, quat) => this._fireEnemyBullet(pos, quat, tDmg);
+      // Missiles ennemis : lourds uniquement, pas en facile ni avant niv. 5
+      if (e.isHeavy && this._enemyMissilesAllowed()) {
         const w = cfg.wave ?? 1;
         this._wireEnemyMissile(enemy, {
           cooldown    : Math.max(12, 28 - w * 0.4),
@@ -1508,8 +1626,8 @@ export class Game {
       });
       boss.getTerrainHeight = this.getTerrainHeight ?? null;
       this._wireEnemyFire(boss);
-      boss.onFire = (pos, quat) => this._enemyBulletManager.fire(pos, quat, 15);
-      if (this._config?.difficulty !== 'easy') {
+      boss.onFire = (pos, quat) => this._fireEnemyBullet(pos, quat, 15);
+      if (this._enemyMissilesAllowed()) {
         const w = cfg?.wave ?? 1;
         this._wireEnemyMissile(boss, { cooldown: 10, lockTime: 2.0, trackQuality: 2, range: 2200, maxMissiles: this._missileBudget(w) + 2 });
       }
@@ -2437,7 +2555,7 @@ export class Game {
         playerPos  : this.player.position,
         playerAlive: !this.player.isDead && !this._ecmActive,
         enemies    : this.enemies,
-        enemyFire  : (pos, quat, dmg) => { const b = this._enemyBulletManager.fire(pos, quat, dmg); if (b) b._fromTurret = true; },
+        enemyFire  : (pos, quat, dmg) => this._fireEnemyBullet(pos, quat, dmg, true),
         alliedFire : (pos, quat, dmg) => this._alliedBulletManager.fire(pos, quat, dmg, true),
       });
     }
@@ -2530,8 +2648,8 @@ export class Game {
               b.age = 999;
               this.ui.showHitMarker();
               this._audio?.playImpact('plane');
-              bot.applyLocalHit(25);
-              if (bot.hp <= 0 && !bot._killSent) {
+              bot.applyLocalHit(Math.round(25 * (this._playerDamageMult ?? 1)));
+              if (bot._localHp <= 0 && !bot._killSent) {
                 bot._killSent = true;
                 this._audio?.playExplosion(1.0);
                 this.stats.kills++;
@@ -2630,18 +2748,9 @@ export class Game {
               if (this._practiceMode) {
                 setTimeout(() => { if (this._practiceMode) this._spawnPracticeEnemy(); }, 5000);
               } else {
-                this._missionKilled++;
                 // Renforts : maintenir l'arène pleine tant qu'il reste des avions à
                 // faire apparaître. Chaque mort libère un slot → on le comble aussitôt.
-                // (l'ancien système de seuil perdait les vagues quand l'arène était
-                //  pleine, bloquant _missionSpawned < _missionTotal et donc la victoire)
-                if (this._missionSpawned < this._missionTotal) {
-                  const alive    = this.enemies.filter(e => !e.isDead).length;
-                  const canSpawn = Math.min(this._waveSize,
-                                            this._missionTotal - this._missionSpawned,
-                                            this._maxActive - alive);
-                  if (canSpawn > 0) this._spawnWave(canSpawn);
-                }
+                this._creditMissionKill();
               }
             }
           }
@@ -2734,32 +2843,25 @@ export class Game {
       }
     }
 
-    // Vérification victoire : toutes vagues envoyées, tous avions morts, tous ennemis sol morts
-    if (!this._isSurvival && !this._missionComplete && !this.player.isDead && this._missionTotal > 0) {
+    // Vérification victoire : toutes vagues envoyées, tous avions morts, tous ennemis sol morts.
+    // Client coop : la victoire est décidée par l'hôte (message mission_state), pas calculée localement.
+    if (!this._isSurvival && !this._coopClient && !this._missionComplete && !this.player.isDead && this._missionTotal > 0) {
       const allAirDead    = this._missionSpawned >= this._missionTotal && this.enemies.every(e => e.isDead);
       const allGroundDead = !this._groundDefense || this._groundDefense.allEnemiesDead();
-      if (allAirDead && allGroundDead) {
-        this._missionComplete = true;
-        if (this.player) this.player._blockPointerLock = true;
-        this._audio?.pauseEngine(true);
-        document.exitPointerLock();
-        if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
-        this._updateMissionRecord();
-        this._showEndRewards(true, () => {
-          this.ui.showVictory(
-            this.stats,
-            this._config.networkManager ? null : () => this._quit('replay'),
-            () => this._quit(),
-            this._buildScoreboardRows(),
-          );
-        });
-      }
+      if (allAirDead && allGroundDead) this._showMissionVictory();
     }
 
     // HUD mission
     if (!this._isSurvival && this._missionTotal > 0) {
-      const active    = this.enemies.filter(e => !e.isDead).length;
-      const remaining = active + Math.max(0, this._missionTotal - this._missionSpawned);
+      let active, remaining;
+      if (this._coopClient) {
+        // Client coop : ennemis = RemoteBot ; restant dérivé du total abattu synchronisé
+        active    = this._multiplayerManager?.getRemoteBots().filter(b => !b.isDead).length ?? 0;
+        remaining = Math.max(0, this._missionTotal - this._missionKilled);
+      } else {
+        active    = this.enemies.filter(e => !e.isDead).length;
+        remaining = active + Math.max(0, this._missionTotal - this._missionSpawned);
+      }
       const turrets   = this._groundDefense ? this._groundDefense.getEnemyCountByKind('mg')    : 0;
       const armor     = this._groundDefense ? this._groundDefense.getEnemyCountByKind('tank','truck') : 0;
       this.ui.updateMissionHUD(remaining, active, turrets, armor);
@@ -3018,6 +3120,8 @@ export class Game {
       ...this.enemies,
       ...this.allies,
       ...(this._multiplayerManager ? this._multiplayerManager.getRemotePlayers() : []),
+      // Ennemis pilotés par l'hôte (RemoteBot) : FFA + coop client → visibles au HUD/radar
+      ...(this._multiplayerManager ? this._multiplayerManager.getRemoteBots() : []),
     ];
     // Base alliée / ennemie selon le mode
     const _aps  = this._villageMap?.airports;

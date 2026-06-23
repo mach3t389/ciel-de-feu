@@ -67,7 +67,7 @@ wss.on('connection', (ws) => {
         const code = payload.config?.code || generateCode();
         if (rooms.has(code)) { rooms.delete(code); } // remplace si déjà existant
         const room = new Room(code, payload.config || {}, clientId);
-        room.players.set(clientId, { ws, info: { id: clientId, name: payload.config?.name || 'HOST', team: payload.config?.team || 'jaune', isHost: true, isReady: false }});
+        room.players.set(clientId, { ws, info: { id: clientId, name: payload.config?.name || 'HOST', team: payload.config?.team || 'jaune', level: payload.config?.level, prestigeLevel: payload.config?.prestigeLevel, isHost: true, isReady: false }});
         rooms.set(code, room);
         ws._room = code;
         send(ws, 'create_room', { code, config: room.config });
@@ -83,7 +83,7 @@ wss.on('connection', (ws) => {
         if (room.started) { send(ws, 'error', { message: 'Partie déjà commencée' }); return; }
         if (room.players.size >= (room.config.maxPlayers || 16)) { send(ws, 'error', { message: 'Salle pleine' }); return; }
 
-        const info = { id: clientId, name: playerInfo?.name || 'JOUEUR', team: playerInfo?.team || 'jaune', isHost: false, isReady: false };
+        const info = { id: clientId, name: playerInfo?.name || 'JOUEUR', team: playerInfo?.team || 'jaune', level: playerInfo?.level, prestigeLevel: playerInfo?.prestigeLevel, isHost: false, isReady: false };
         room.players.set(clientId, { ws, info });
         ws._room = code;
 
@@ -172,6 +172,16 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      // ── Niveau joueur (lobby) ─────────────────────────────────────────────
+      case 'player_level': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        const p = room.players.get(clientId);
+        if (p) { p.info.level = payload.level; p.info.prestigeLevel = payload.prestigeLevel; }
+        room.broadcast('player_level', { id: clientId, level: payload.level, prestigeLevel: payload.prestigeLevel }, clientId);
+        break;
+      }
+
       // ── Équipe TDM (lobby) ────────────────────────────────────────────────
       case 'player_team': {
         const room = rooms.get(ws._room);
@@ -206,6 +216,38 @@ wss.on('connection', (ws) => {
         const room = rooms.get(ws._room);
         if (!room) return;
         room.broadcastAll('score_update', { id: clientId, ...payload });
+        break;
+      }
+
+      // ── État des bots/ennemis pilotés par l'hôte (FFA + coop) ─────────────
+      case 'bot_state': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        room.broadcast('bot_state', payload, clientId);
+        break;
+      }
+
+      // ── Config de vague déterministe (survie, envoyée par l'hôte) ──────────
+      case 'survival_wave_config': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        room.broadcast('survival_wave_config', payload, clientId);
+        break;
+      }
+
+      // ── Tir ennemi diffusé par l'hôte coop (host-authoritative) ────────────
+      case 'enemy_bullet': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        room.broadcast('enemy_bullet', payload, clientId);
+        break;
+      }
+
+      // ── Avancement de mission diffusé par l'hôte coop ──────────────────────
+      case 'mission_state': {
+        const room = rooms.get(ws._room);
+        if (!room) return;
+        room.broadcast('mission_state', payload, clientId);
         break;
       }
 
@@ -252,7 +294,7 @@ function generateCode() {
 }
 
 // Version des messages gérés — sert à vérifier que le déploiement est à jour.
-const PROTOCOL = 'v3-lobby-sync'; // config_update / player_plane / player_team / score_update
+const PROTOCOL = 'v4-coop-sync'; // + player_level / bot_state / survival_wave_config / level persistence
 httpServer.listen(PORT, () => {
   console.log(`Serveur HTTP+WebSocket démarré sur le port ${PORT} — protocole ${PROTOCOL}`);
   console.log('Messages lobby gérés : create_room, join_room, config_update, player_plane, player_team, player_ready, score_update');
