@@ -10,6 +10,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "three": "^0.167.0",
     "ws": "^8.21.0"
   },

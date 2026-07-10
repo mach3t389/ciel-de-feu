@@ -2,6 +2,9 @@ import { Menu } from './Menu.js';
 import { Game } from './Game.js';
 import { LoadingScreen } from './LoadingScreen.js';
 import { t } from './i18n.js';
+import { initAnalytics } from './Analytics.js';
+
+initAnalytics();
 
 let replayConfig = null;  // si défini : relance la même partie sans repasser par le menu
 
