@@ -2,31 +2,53 @@
 
 ## Architecture
 
+Le backend (`api/ws.js`, Function Vercel) ne gère que le **lobby** : création/join
+de salon, config, ready, et le **signaling WebRTC** (échange offer/answer/ICE).
+Une fois le salon rejoint, l'invité établit une connexion **WebRTC en P2P direct
+avec l'hôte** (topologie étoile) ; tout le trafic de partie (position, tirs,
+dégâts, bots, mission...) passe par ce DataChannel, l'hôte relayant aux autres
+invités — le backend n'y participe plus du tout. Voir [src/PeerConnection.js](../src/PeerConnection.js).
+
+Ce découpage existe parce que le trafic de partie est haute fréquence
+(`player_update` à ~20 Hz par joueur) : le faire transiter par une Function
+serverless + Redis (nécessaire pour relayer entre instances) exploserait les
+quotas gratuits et ajouterait de la latence. Le lobby, lui, est à faible
+fréquence et reste sur le signaling Vercel sans problème.
+
 ```
-Client A (hôte)          Serveur (server.js / Railway)      Client B
-     │                           │                               │
-     │── create_room ──────────► │                               │
-     │◄─ room_created ──────────-│                               │
-     │                           │◄──────────── join_room ───────│
-     │◄─ player_joined ─────────-│─── player_joined ────────────►│
-     │── player_loaded ─────────►│◄─────────── player_loaded ────│
-     │◄─ all_players_loaded ─────│──── all_players_loaded ───────►│
-     │         [partie en cours]                                  │
-     │── player_update ─────────►│──── player_update ────────────►│
-     │── bullet_fired ──────────►│──── bullet_fired ─────────────►│
-     │── player_hit ────────────►│──── player_hit ────────────────►│
+Client A (hôte)      api/ws.js (Vercel) + Redis      Client B (invité)
+     │                          │                              │
+     │── create_room ──────────►│                               │
+     │◄─ room créé ─────────────│                               │
+     │                          │◄──────────── join_room ───────│
+     │                          │──── notifie l'hôte ──────────►│
+     │                          │  (échange offer/answer/ICE)   │
+     │◄═══════════════ WebRTC DataChannel (P2P direct) ════════►│
+     │  player_update, bullet_fired, player_hit, bot_state...   │
 ```
 
-## Démarrage du serveur
+L'état des salons (liste des joueurs, config, hôte, `started`) vit dans Redis
+(Upstash, via le Marketplace Vercel) car plusieurs instances de la Function
+peuvent tourner en parallèle — impossible de le garder en mémoire du process
+comme le faisait l'ancien `server.js` sur Railway.
+
+**Limite connue** : pas de serveur TURN de secours, seulement un STUN public
+(`stun:stun.l.google.com:19302`). Un joueur derrière un NAT symétrique/pare-feu
+très restrictif peut échouer à établir la connexion P2P.
+
+## Développement local
 
 ```bash
-node server.js        # port 8080 par défaut
-PORT=9000 node server.js
+npm i -g vercel   # une seule fois
+npm run dev:vercel   # sert le front Vite ET api/ws.js (nécessite `vercel link` + Upstash Redis provisionné)
 ```
 
-Le serveur répond aux health-checks HTTP (Railway/Render) avec un `200 OK` avant d'upgrader en WebSocket.
+`vite dev` seul ne sait pas servir `/api/ws` — le multijoueur ne fonctionne
+qu'avec `vercel dev`.
 
-**Variable d'environnement** : `VITE_WS_URL` — si absent, le client se connecte en `ws://localhost:8080` (local) ou `wss://<hostname>` (prod).
+**Variable d'environnement** : `VITE_WS_URL` — si absent, le client se connecte
+en `ws(s)://<hostname>/api/ws`, toujours même origine que le front (fonctionne
+aussi bien en local avec `vercel dev` qu'en prod).
 
 ## Modes de jeu multijoueur
 
@@ -88,11 +110,13 @@ Tous les messages sont JSON : `{ type: string, payload: object }`.
 const nm = new NetworkManager();          // URL depuis VITE_WS_URL ou auto
 await nm.connect();                       // throws si timeout (5 s)
 
-// Salon
+// Salon — établit aussi la connexion WebRTC P2P en interne (host ou guest)
 const room = await nm.createRoom(config); // { code, players }
 await nm.joinRoom(code, playerInfo);
+await nm.waitForPeerReady();              // attend l'ouverture du DataChannel (immédiat côté hôte)
 
-// Envoi/réception
+// Envoi/réception — routé automatiquement vers le DataChannel P2P une fois prêt
+// pour les messages de partie (player_update, bullet_fired...), sinon vers la WS de signaling
 nm.send('player_update', { pos, quat, speed, hp });
 nm.on('player_joined', (payload) => { /* ... */ });
 nm.once('all_players_loaded', () => { /* ... */ });
@@ -158,4 +182,4 @@ mm.on('survival_wave_config', (cfg) => {})
 - Chaque client est autorité sur **son propre avion** (position, santé, tirs).
 - En FFA/TDM, l'**hôte** est autorité sur les bots IA.
 - En Survival, l'**hôte** calcule les vagues et diffuse la config.
-- Il n'y a pas de server-side validation : le serveur est un relais pur.
+- Il n'y a pas de validation côté serveur : l'hôte relaie le trafic de partie en P2P sans le valider (le backend Vercel ne voit même plus passer ces messages, voir Architecture ci-dessus).

@@ -6,10 +6,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node server.js",
-    "start": "node server.js"
+    "dev:vercel": "vercel dev"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "^2.0.1",
     "three": "^0.167.0",
     "ws": "^8.21.0"

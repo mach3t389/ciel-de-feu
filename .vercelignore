@@ -1,0 +1,7 @@
+node_modules
+dist
+/sfx
+*.blend
+*.blend1
+vite.log
+CONTEXTE_SESSION.md

@@ -7,3 +7,6 @@ sfx/
 # Fichiers de travail Blender (seuls les .glb exportés sont versionnés)
 *.blend
 *.blend1
+
+.vercel
+.env*

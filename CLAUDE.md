@@ -18,7 +18,7 @@ Pas de tests automatisés, pas de linter configuré. Vérification manuelle dans
 
 **Vite + Three.js** — ES modules purs, zéro TypeScript, zéro framework UI. Rendu Three.js WebGL + overlays HTML/Canvas dessinés à la main.
 
-Serveur multijoueur séparé : `server.js` (Node.js + `ws`), déployé sur Railway. Variable d'environnement `VITE_WS_URL` pour pointer vers un WS distant.
+Multijoueur : signaling léger via `api/ws.js` (Function Vercel, Node.js + `ws` + Redis Upstash pour l'état des salons), trafic de partie en P2P WebRTC direct entre joueurs (voir section Multijoueur plus bas et `docs/multiplayer.md`). Variable d'environnement `VITE_WS_URL` optionnelle pour pointer vers un signaling distant — sinon même origine que le front (`/api/ws`).
 
 ## Architecture
 
@@ -66,11 +66,17 @@ Machine à états PATROL → FOLLOW → ATTACK → FLEE. Trois tiers : `rookie /
 
 Tanks, trucks, mitrailleuses AA placés autour des villages. `GroundDefense.preloadModels()` précharge les GLB avant `build()`. Les unités alliées réapparaissent (`ALLY_RESPAWN_CD = 45s`).
 
-### Multijoueur (`NetworkManager.js` + `MultiplayerManager.js`)
+### Multijoueur (`NetworkManager.js` + `PeerConnection.js` + `MultiplayerManager.js` + `api/ws.js`)
 
-`NetworkManager` : client WebSocket, protocole JSON `{ type, payload }`. `createRoom` / `joinRoom` / `send` / `on` / `once`.
+`api/ws.js` (Function Vercel) gère uniquement le **lobby** (create/join room, config, ready) et le **signaling WebRTC** (offer/answer/ICE) — état des salons dans Redis (Upstash, plusieurs instances de la Function peuvent tourner en parallèle). Le trafic de partie (haute fréquence, `player_update` ~20 Hz) ne transite jamais par ce backend : une fois le salon rejoint, `PeerConnection.js` établit une connexion **WebRTC P2P en étoile** — les invités se connectent uniquement à l'hôte, qui relaie aux autres (même sémantique que l'ancien `Room.broadcast()` de `server.js`, mais côté client).
 
-`MultiplayerManager` : interpolation snapshot des joueurs distants (buffer de 100 ms de retard pour absorber la gigue réseau Railway). Les joueurs distants chargent `/SK_Veh_Plane_Stunt_01.glb`.
+`NetworkManager` : API publique inchangée (`createRoom` / `joinRoom` / `send` / `on` / `once`), protocole JSON `{ type, payload }`. En interne, route les messages de partie vers le DataChannel P2P une fois ouvert (`waitForPeerReady()`), le reste (lobby, signaling) reste sur la WS de signaling. Reconnect avec backoff exponentiel sur la WS.
+
+`MultiplayerManager` : interpolation snapshot des joueurs distants (buffer de 100 ms de retard pour absorber la gigue réseau). Les joueurs distants chargent `/SK_Veh_Plane_Stunt_01.glb`. Alliés affichés en **bleu** (`ALLY_COLOR`), ennemis en rouge.
+
+**Coop host-authoritative** : en coop networké, l'hôte possède les ennemis (IA + progression de mission) et diffuse leur état via `bot_state` (réutilise le `RemoteBot` du FFA), leur feu via `enemy_bullet`, et l'avancement via `mission_state`. Les clients ne spawnent aucun ennemi : ils affichent des `RemoteBot`, leur tirent dessus (dégâts optimistes locaux via `_localHp`, autoritaire à la baisse) et créditent leurs propres kills. La victoire est décidée par l'hôte. Drapeaux : `Game._coopHost` / `Game._coopClient`. La défense au sol reste simulée localement par chaque client (divergence assumée).
+
+**Difficulté adaptative** (`Game._pickEnemySkill` / `_enemyMissilesAllowed`) : le tier d'IA est pondéré par le niveau du joueur (rookie aux bas niveaux, jamais d'ace avant niv. 10) et les missiles ennemis ne se débloquent qu'à partir du niveau `ENEMY_MISSILE_MIN_LEVEL` (5, déblocage des leurres). Nouveaux joueurs (< niv. 5) démarrent en difficulté `easy` par défaut.
 
 ### HUD (`UI.js`)
 

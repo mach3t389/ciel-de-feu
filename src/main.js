@@ -25,6 +25,7 @@ while (true) {
   await game.preload(p => loading.setProgress(p));
 
   if (config.networkManager) {
+    await config.networkManager.waitForPeerReady();
     config.networkManager.send('player_loaded', {});
     const hasRemotePlayers = config.remotePlayers?.length > 0;
     if (hasRemotePlayers) {

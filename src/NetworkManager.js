@@ -1,8 +1,19 @@
-// Client WebSocket pour le multijoueur
+// Client WebSocket (signaling lobby) + WebRTC P2P (trafic de partie) pour le multijoueur
 // Protocole : messages JSON { type, payload }
+
+import { PeerNetwork } from './PeerConnection.js';
 
 // Messages haute fréquence exclus des logs de diagnostic (sinon spam)
 const NOISY = new Set(['player_update', 'bullet_fired', 'score_update']);
+
+// Trafic de partie : relayé en P2P via l'hôte une fois le DataChannel ouvert
+// (au lieu de repasser par le serveur de signaling). Le reste (lobby, contrôle
+// de salon, signaling WebRTC) reste sur la WS.
+const P2P_TYPES = new Set([
+  'player_update', 'bullet_fired', 'player_hit', 'enemy_killed',
+  'player_respawn', 'score_update', 'bot_state', 'survival_wave_config',
+  'enemy_bullet', 'mission_state', 'force_end_game',
+]);
 
 export class NetworkManager {
   constructor(url = null) {
@@ -12,13 +23,17 @@ export class NetworkManager {
     this._pending  = new Map(); // type → { resolve, reject }
     this.id        = null;      // id attribué par le serveur
     this.connected = false;
+    this.peerNetwork = null;
+    this._explicitDisconnect = false;
+    this._reconnectAttempts  = 0;
   }
 
   _defaultUrl() {
     if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
-    const host = window.location.hostname;
-    const isLocal = host === 'localhost' || host === '127.0.0.1';
-    return isLocal ? 'ws://localhost:8080' : `wss://${host}`;
+    // Même origine que le front dans tous les cas — servi par `vercel dev` en
+    // local (front Vite + api/ws.js sur le même port) et par Vercel en prod.
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${protocol}://${window.location.host}/api/ws`;
   }
 
   connect() {
@@ -29,6 +44,7 @@ export class NetworkManager {
       this._ws.addEventListener('open', () => {
         clearTimeout(timeout);
         this.connected = true;
+        this._reconnectAttempts = 0;
         resolve();
       });
       this._ws.addEventListener('error', (e) => {
@@ -39,23 +55,52 @@ export class NetworkManager {
       this._ws.addEventListener('close',   ()  => {
         this.connected = false;
         this._emit('disconnected', {});
+        if (!this._explicitDisconnect) this._scheduleReconnect();
       });
     });
   }
 
+  _scheduleReconnect() {
+    const delay = Math.min(1000 * 2 ** this._reconnectAttempts, 15000);
+    this._reconnectAttempts++;
+    setTimeout(() => {
+      if (this._explicitDisconnect) return;
+      this.connect()
+        .then(() => this._emit('reconnected', {}))
+        .catch(() => this._scheduleReconnect());
+    }, delay);
+  }
+
   disconnect() {
+    this._explicitDisconnect = true;
+    if (this.peerNetwork) { this.peerNetwork.closeAll(); this.peerNetwork = null; }
     if (this._ws) { this._ws.close(); this._ws = null; }
   }
 
-  createRoom(config) {
-    return this._request('create_room', { config });
+  async createRoom(config) {
+    const result = await this._request('create_room', { config });
+    this.peerNetwork = new PeerNetwork(this, 'host');
+    return result;
   }
 
-  joinRoom(code, playerInfo) {
-    return this._request('join_room', { code, playerInfo });
+  async joinRoom(code, playerInfo) {
+    const result = await this._request('join_room', { code, playerInfo });
+    const host = result.players?.find(p => p.isHost);
+    this.peerNetwork = new PeerNetwork(this, 'guest', host?.id);
+    return result;
+  }
+
+  // Attend que le DataChannel P2P soit ouvert (immédiat côté hôte, attend
+  // l'ouverture côté invité) — utilisé pour gater le début de partie.
+  waitForPeerReady() {
+    return this.peerNetwork ? this.peerNetwork.waitUntilReady() : Promise.resolve();
   }
 
   send(type, payload = {}) {
+    if (P2P_TYPES.has(type) && this.peerNetwork?.ready) {
+      this.peerNetwork.send(type, payload);
+      return;
+    }
     if (!this._ws || this._ws.readyState !== WebSocket.OPEN) {
       if (!NOISY.has(type)) console.warn('[NET send IGNORÉ — non connecté]', type, 'readyState=', this._ws?.readyState);
       return;
@@ -120,6 +165,11 @@ export class NetworkManager {
     // Attribution d'ID
     if (type === 'welcome') { this.id = payload.id; return; }
 
+    this._dispatch(type, payload);
+  }
+
+  // Point d'entrée commun WS (signaling) + DataChannel P2P (PeerConnection.js)
+  _dispatch(type, payload) {
     const handlers = this._handlers.get(type);
     if (!handlers || handlers.length === 0) {
       console.warn('[NET recv SANS handler]', type);
