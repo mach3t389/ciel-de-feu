@@ -2466,12 +2466,19 @@ export class Game {
     this._frameCount           = ((this._frameCount ?? 0) + 1) % 12000;
 
     // ── Timer de match (Versus / Équipes) ────────────────────────────────────
+    // Hôte/solo autoritaire sur le déclenchement : chaque client décomptait sinon
+    // son propre timer et pouvait finir la partie à des instants légèrement
+    // différents. Un client attend le force_end_game diffusé par l'hôte (déjà géré
+    // par le handler 'force_end_game' plus haut).
     if (this._timeRemaining !== null && !this._missionComplete) {
       this._timeRemaining -= delta;
       this.ui.updateMatchTimer(this._timeRemaining);
       if (this._timeRemaining <= 0) {
         this._timeRemaining = 0;
-        this._triggerMatchEnd();
+        if (!this._config.networkManager || this._isHost) {
+          if (this._config.networkManager) this._config.networkManager.send('force_end_game', {});
+          this._triggerMatchEnd();
+        }
       }
     }
 
