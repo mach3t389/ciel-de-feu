@@ -80,7 +80,10 @@ export class PeerNetwork {
     dc.onclose = () => {
       this.channels.delete(peerId);
       this.connections.delete(peerId);
-      if (this.role === 'guest') this.nm._dispatch('host_left', {});
+      // Ne PAS traiter la fermeture du DataChannel comme "l'hôte a quitté" — un
+      // aléa réseau P2P transitoire peut fermer le canal sans que l'hôte soit
+      // réellement parti. Le vrai signal host_left vient du signaling (api/ws.js
+      // le diffuse quand la WS de l'hôte se ferme), c'est la seule source fiable.
     };
     dc.onmessage = (e) => {
       let msg;

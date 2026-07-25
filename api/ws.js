@@ -151,9 +151,7 @@ wss.on('connection', (ws) => {
         const total       = Object.keys(room.players).length;
         const loadedCount = Object.values(room.players).filter((p) => p.loaded).length;
         await broadcastRoom(room, 'player_load_progress', { loaded: loadedCount, total });
-        await deliver(clientId, 'player_load_progress', { loaded: loadedCount, total });
         if (loadedCount >= total) await broadcastRoom(room, 'all_players_loaded', {});
-        if (loadedCount >= total) await deliver(clientId, 'all_players_loaded', {});
         break;
       }
 
