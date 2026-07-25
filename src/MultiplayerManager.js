@@ -684,7 +684,6 @@ export class MultiplayerManager {
   // Active la réception des bot_state (clients FFA uniquement)
   enableBotReceive() {
     this._botsEnabled = true;
-    console.log('[DBG] enableBotReceive called, _botsEnabled=', this._botsEnabled);
   }
 
   getRemotePlayers() {
