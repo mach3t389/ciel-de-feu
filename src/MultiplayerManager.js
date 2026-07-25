@@ -11,6 +11,12 @@ const DEFAULT_PLANE_PATH = '/SK_Veh_Plane_Stunt_01.glb';
 // passé et on interpole entre les deux derniers paquets reçus. Ça absorbe la gigue
 // réseau (Railway gratuit) et supprime le rubber-banding de l'extrapolation pure.
 const INTERP_DELAY = 0.10;
+// Les bots (bot_state, ~10-15 Hz) arrivent bien moins souvent que les joueurs
+// (player_update, 30 Hz) — avec le même délai que RemotePlayer, le rendu tombe
+// en permanence pile à la limite du dernier paquet reçu et bascule sans arrêt
+// en extrapolation, d'où les micro-téléportations à chaque correction. Un délai
+// plus large laisse toujours un vrai couple de snapshots à interpoler entre eux.
+const BOT_INTERP_DELAY = 0.20;
 
 // Représente un joueur distant (lecture seule — données reçues du réseau)
 class RemotePlayer {
@@ -410,7 +416,7 @@ class RemoteBot {
     const buf = this._buffer;
     if (buf.length === 0) return;
     const now     = performance.now() / 1000;
-    const renderT = now - INTERP_DELAY;
+    const renderT = now - BOT_INTERP_DELAY;
     const last    = buf[buf.length - 1];
     if (buf.length === 1 || renderT <= buf[0].t) {
       this.pivot.position.lerp(buf[0].pos, 1 - Math.exp(-18 * delta));

@@ -1376,7 +1376,9 @@ export class Game {
     }
   }
 
-  // Diffuse les états des ennemis toutes les 100 ms (hôte FFA + hôte coop).
+  // Diffuse les états des ennemis toutes les 50 ms (hôte FFA + hôte coop). En P2P
+  // ça ne coûte rien — un intervalle plus court laisse plus de marge à l'interpolation
+  // (RemoteBot.BOT_INTERP_DELAY) et évite les micro-téléportations visibles à 100 ms.
   // En coop, diffuse aussi l'avancement de mission pour que les clients affichent
   // le même total abattus / restant et déclenchent la victoire de façon autoritaire.
   _startBotBroadcast() {
@@ -1408,7 +1410,7 @@ export class Game {
       if (this._groundDefenseHost && this._groundDefense) {
         this._multiplayerManager.sendGroundDefenseState(this._groundDefense.getStateSnapshot());
       }
-    }, 100);
+    }, 50);
   }
 
   // Première vague : spawn en altitude autour de la base ennemie (ou dispersés en FFA)
