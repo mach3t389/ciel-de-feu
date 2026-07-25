@@ -564,17 +564,36 @@ export class Game {
       this.player._tailCamEnabled = upgradeIds.includes('tail_cam');
       if (this._ui) this._ui._radarRangeMult = upgradeIds.includes('radar') ? 1.25 : 1;
 
-      // Dégâts missiles → ennemis IA
+      // Dégâts missiles → ennemis IA (locaux) ou RemoteBot/RemotePlayer (multijoueur)
       if (this._missileSystem) {
         this._missileSystem.onHit = (target, dmg) => {
           if (!target || target.isDead) return;
-          const wasAlive = !target.isDead;
-          target.hit(Math.round(dmg * this._playerDamageMult));
-          if (wasAlive && target.isDead) {
-            this._audio?.playExplosion(1.0);
-            if (!target.isGround) this._audio?.removeEnemyEngine(target);
-            this.stats.kills++;
-            if (!this._isTDM && !target.isGround) this._multiplayerManager?.sendEnemyKill(target.netId);
+          const roundedDmg = Math.round(dmg * this._playerDamageMult);
+          if (typeof target.hit === 'function') {
+            // Ennemi IA local (Enemy) — autoritaire ici
+            const wasAlive = !target.isDead;
+            target.hit(roundedDmg);
+            if (wasAlive && target.isDead) {
+              this._audio?.playExplosion(1.0);
+              if (!target.isGround) this._audio?.removeEnemyEngine(target);
+              this.stats.kills++;
+              if (!this._isTDM && !target.isGround) this._multiplayerManager?.sendEnemyKill(target.netId);
+            }
+          } else if (typeof target.applyLocalHit === 'function') {
+            // RemoteBot (ennemi de l'hôte, vu par un client) ou RemotePlayer (PvP) —
+            // dégâts optimistes locaux, comme pour les balles (voir bullet vs remoteBots).
+            target.applyLocalHit(roundedDmg);
+            if (target.netId !== undefined) {
+              if (target._localHp <= 0 && !target._killSent) {
+                target._killSent = true;
+                this._audio?.playExplosion(1.0);
+                this.stats.kills++;
+                this._bumpLifetime('stats_kills');
+                this._multiplayerManager?.sendEnemyKill(target.netId);
+              }
+            } else if (target.id !== undefined) {
+              this._multiplayerManager?.sendHit(target.id, roundedDmg);
+            }
           }
         };
       }
