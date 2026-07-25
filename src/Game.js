@@ -672,6 +672,13 @@ export class Game {
     this._coopHost   = coopNetworked && isHost;
     this._coopClient = coopNetworked && !isHost;
 
+    // ── Défense au sol synchronisée : tout mode où l'hôte possède les ennemis
+    // (coop ET survie — la survie diffusait ses ennemis mais gardait la défense au
+    // sol placée aléatoirement par écran, sans raison de faire autrement).
+    const groundNetworked = (mode === 'coop' || isSurvival) && isMulti && !!this._config.networkManager;
+    this._groundDefenseHost   = groundNetworked && isHost;
+    this._groundDefenseClient = groundNetworked && !isHost;
+
     // ── Mise à l'échelle selon le nombre de joueurs (coop/survie multijoueur) ──
     // Solo : playerCount=1 → aucun changement. Chaque joueur additionnel ajoute des
     // ennemis (plus longtemps + plus en l'air) et les rend un peu plus coriaces.
@@ -759,9 +766,9 @@ export class Game {
         team: i === 0 ? 'ally' : 'enemy',
       }));
       this._groundDefense = new GroundDefense(this.scene, this.getTerrainHeight, isPractice);
-      // Client coop : construction différée — attend ground_defense_init de l'hôte
-      // (le placement utilise Math.random(), donc host/client divergeraient sinon).
-      if (!this._coopClient) {
+      // Client (coop ou survie) : construction différée — attend ground_defense_init
+      // de l'hôte (le placement utilise Math.random(), donc host/client divergeraient sinon).
+      if (!this._groundDefenseClient) {
         this._groundDefense.build(villages, runways, this._groundModelCache, isPractice, this._villageMap.buildingPositions ?? []);
       }
     }
@@ -799,9 +806,11 @@ export class Game {
           if (s.spawned !== undefined) this._missionSpawned = s.spawned;
           if (s.complete) this._showMissionVictory();
         });
+      }
 
-        // Défense au sol : placement + état entièrement pilotés par l'hôte (voir
-        // GroundDefense.buildFromRemote/applyRemoteState).
+      // Défense au sol (coop ET survie) : placement + état entièrement pilotés par
+      // l'hôte — voir GroundDefense.buildFromRemote/applyRemoteState.
+      if (this._groundDefenseClient) {
         if (this._groundDefense) {
           let groundInitDone = false;
           this._multiplayerManager.on('groundDefenseInit', ({ units }) => {
@@ -959,7 +968,20 @@ export class Game {
     // ── Coop host-authoritative : diffusion (hôte) / réception (client) ───────
     if (this._coopHost) {
       this._startBotBroadcast();        // diffuse positions ennemies + mission_state
-      // Défense au sol : placement diffusé une fois, l'état suit dans _startBotBroadcast.
+    } else if (this._coopClient) {
+      this._multiplayerManager.enableBotReceive();
+    }
+
+    // Survie multijoueur : même modèle continu que la coop — l'hôte spawne et
+    // diffuse via bot_state, les clients n'affichent que des RemoteBot.
+    if (this._isSurvival && isMulti && this._multiplayerManager) {
+      if (isHost) this._startBotBroadcast();
+      else        this._multiplayerManager.enableBotReceive();
+    }
+
+    // Défense au sol (coop ET survie) : placement diffusé une fois, l'état suit
+    // dans _startBotBroadcast.
+    if (this._groundDefenseHost) {
       if (this._groundDefense) {
         this._multiplayerManager.sendGroundDefenseInit(this._groundDefense.getInitData());
       }
@@ -971,15 +993,6 @@ export class Game {
           if (u.hp <= 0) { u.isDead = true; u.root.visible = false; }
         }
       });
-    } else if (this._coopClient) {
-      this._multiplayerManager.enableBotReceive();
-    }
-
-    // Survie multijoueur : même modèle continu que la coop — l'hôte spawne et
-    // diffuse via bot_state, les clients n'affichent que des RemoteBot.
-    if (this._isSurvival && isMulti && this._multiplayerManager) {
-      if (isHost) this._startBotBroadcast();
-      else        this._multiplayerManager.enableBotReceive();
     }
 
     // Stats DE LA PARTIE (repartent à 0) — affichées sur le HUD
@@ -1391,9 +1404,9 @@ export class Game {
           spawned : this._missionSpawned,
           complete: this._missionComplete,
         });
-        if (this._groundDefense) {
-          this._multiplayerManager.sendGroundDefenseState(this._groundDefense.getStateSnapshot());
-        }
+      }
+      if (this._groundDefenseHost && this._groundDefense) {
+        this._multiplayerManager.sendGroundDefenseState(this._groundDefense.getStateSnapshot());
       }
     }, 100);
   }
@@ -1596,8 +1609,10 @@ export class Game {
 
   _startSurvivalWave() {
     this._survivalWave++;
-    // Réapparition des ennemis au sol toutes les 5 vagues
-    if (this._groundDefense && this._survivalWave > 1 && this._survivalWave % 5 === 1) {
+    // Réapparition des ennemis au sol toutes les 5 vagues (hôte/solo uniquement —
+    // la défense au sol est désormais hôte-autoritaire en survie multi aussi).
+    if (this._groundDefense && this._survivalWave > 1 && this._survivalWave % 5 === 1
+        && (!this._multiplayerManager || this._config.isHost === true)) {
       this._groundDefense.respawnEnemies();
       this.ui.showTip(t('groundReinforcements'), 5, { dismissible: false });
     }
@@ -2547,7 +2562,7 @@ export class Game {
               if (u.isDead) return;
               u.hp -= dmg; if (u.hp <= 0) { u.isDead = true; u.root.visible = false; }
               // Client coop : dégât optimiste local ci-dessus, l'hôte reste autoritaire.
-              if (this._coopClient) this._multiplayerManager?.sendGroundHit(u.netId, dmg);
+              if (this._groundDefenseClient) this._multiplayerManager?.sendGroundHit(u.netId, dmg);
             },
             isGround: true,
             rawUnit : u,
@@ -2899,7 +2914,7 @@ export class Game {
           this._audio?.playImpact('structure');
           // Client coop : dégât optimiste local déjà appliqué par damageAt ci-dessus —
           // l'hôte reste autoritaire, on lui rapporte l'impact (voir GroundDefense).
-          if (this._coopClient) this._multiplayerManager?.sendGroundHit(u.netId, 25);
+          if (this._groundDefenseClient) this._multiplayerManager?.sendGroundHit(u.netId, 25);
           if (u.isDead) {
             this._audio?.playExplosion(0.7);
             this.stats.kills++;
