@@ -211,6 +211,13 @@ export class MissileSystem {
 
     // guidanceStrength : 0 = dumb-fire, 0..1 = lock partiel, 1 = lock complet
     const guidanceStrength = this._lockDone ? 1.0 : this._lockProgress;
+    // Détails du tir — utilisés par Game.js pour diffuser missile_fired en multijoueur
+    // (mirroring purement visuel côté joueurs distants, voir spawnRemoteMissile).
+    this._lastFireInfo = {
+      type, side: slot.side, guidanceStrength,
+      trackingLevel: this._lockParams?.trackingLevel ?? 0,
+      targetNetId: this._lockTarget?.netId ?? null,
+    };
     this._spawnMissile(playerPivot, this._lockTarget ?? null, type, slot.side, guidanceStrength);
 
     // Réinitialise le lock pour le prochain tir
@@ -219,7 +226,7 @@ export class MissileSystem {
     return true;
   }
 
-  _spawnMissile(playerPivot, target, type, side = 0, guidanceStrength = 1.0) {
+  _spawnMissile(playerPivot, target, type, side = 0, guidanceStrength = 1.0, remote = false) {
     if (DEBUG_MISSILES) console.log(`[MISSILE] FIRED type=${type} side=${side > 0 ? 'R' : 'L'} target=${target ? 'yes' : 'none'} guidance=${guidanceStrength.toFixed(2)}`);
     const template = type === 'ag' ? (this._modelAG ?? this._modelAA) : this._modelAA;
     const mesh = template ? template.clone() : this._mkFallbackMesh();
@@ -254,10 +261,30 @@ export class MissileSystem {
       turnSpeed       : baseTurnSpeed * guidanceStrength,
       guidanceStrength,
       reengaged       : false,
+      remote,
     };
     this._missiles.push(missileData);
     if (DEBUG_MISSILES) console.log(`[MISSILE] Spawned — trackTime=${trackTime}s life=10s speed=${MISSILE_SPEED}`);
   }
+
+  // Missile tiré par un joueur distant — rejoué ici en pur mirroring visuel : même
+  // guidage/trajectoire approximatifs, mais AUCUN dégât appliqué (les dégâts/kills
+  // restent autoritaires côté tireur, relayés via player_hit/enemy_killed comme pour
+  // les balles — voir remoteBullet dans Game.js).
+  spawnRemoteMissile(position, quaternion, type, target, guidanceStrength = 1, trackingLevel = 0, side = 0) {
+    const fakePivot = { position, quaternion };
+    this._spawnMissile(fakePivot, target ?? null, type, side, guidanceStrength, true);
+    const ms = this._missiles[this._missiles.length - 1];
+    if (!ms) return;
+    // Recalcule avec le niveau de tracking réel du tireur (this._lockParams est celui
+    // du joueur LOCAL, pas du tireur distant).
+    ms.trackingLevel = trackingLevel;
+    ms.trackTimeBase = this._lockParams?.trackTime ?? 4.0;
+    ms.turnSpeed = (TURN_SPEED_LEVELS[trackingLevel] ?? TURN_SPEED_LEVELS[0]) * guidanceStrength;
+    ms.trackRemaining = target ? (ms.trackTimeBase + (TRACK_TIME_BONUS[trackingLevel] ?? 0)) * guidanceStrength : 0;
+  }
+
+  get lastFireInfo() { return this._lastFireInfo ?? null; }
 
   _mkFallbackMesh() {
     const group = new THREE.Group();
@@ -348,19 +375,23 @@ export class MissileSystem {
         if (ms.mesh.position.distanceTo(e.pivot.position) < HIT_RADIUS) { hitIdx = j; break; }
       }
       if (hitIdx >= 0) {
-        const dmgDirect = this._lockParams?.damage ?? DAMAGE_DIRECT;
-        if (DEBUG_MISSILES) console.log(`[MISSILE] COLLISION dist<${HIT_RADIUS} → ${dmgDirect} dmg`);
-        this.onHit?.(enemies[hitIdx], dmgDirect);
-        if (DEBUG_MISSILES) console.log(enemies[hitIdx].isDead ? '[MISSILE] TARGET DESTROYED' : '[MISSILE] target still alive');
-        // Dégâts de souffle sur cibles proches
-        for (let j = 0; j < enemies.length; j++) {
-          if (j === hitIdx) continue;
-          const e = enemies[j];
-          if (!e || e.isDead || !e.pivot) continue;
-          const d = ms.mesh.position.distanceTo(e.pivot.position);
-          if (d < SPLASH_RADIUS) {
-            const splashDmg = Math.round(dmgDirect * SPLASH_DMG_PCTG * (SPLASH_RADIUS - d) / (SPLASH_RADIUS - HIT_RADIUS));
-            if (splashDmg > 0) this.onHit?.(e, splashDmg);
+        // Missile distant (mirroring visuel) : jamais de dégâts locaux — le tireur
+        // gère déjà l'impact réel de son côté et relaie via player_hit/enemy_killed.
+        if (!ms.remote) {
+          const dmgDirect = this._lockParams?.damage ?? DAMAGE_DIRECT;
+          if (DEBUG_MISSILES) console.log(`[MISSILE] COLLISION dist<${HIT_RADIUS} → ${dmgDirect} dmg`);
+          this.onHit?.(enemies[hitIdx], dmgDirect);
+          if (DEBUG_MISSILES) console.log(enemies[hitIdx].isDead ? '[MISSILE] TARGET DESTROYED' : '[MISSILE] target still alive');
+          // Dégâts de souffle sur cibles proches
+          for (let j = 0; j < enemies.length; j++) {
+            if (j === hitIdx) continue;
+            const e = enemies[j];
+            if (!e || e.isDead || !e.pivot) continue;
+            const d = ms.mesh.position.distanceTo(e.pivot.position);
+            if (d < SPLASH_RADIUS) {
+              const splashDmg = Math.round(dmgDirect * SPLASH_DMG_PCTG * (SPLASH_RADIUS - d) / (SPLASH_RADIUS - HIT_RADIUS));
+              if (splashDmg > 0) this.onHit?.(e, splashDmg);
+            }
           }
         }
         this._explodeMissile(ms);

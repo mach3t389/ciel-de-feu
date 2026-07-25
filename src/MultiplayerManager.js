@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { TEAM_COLORS } from './Menu.js';
 
-// Couleurs fixes : allié = bleu, ennemi = rouge
+// Couleurs fixes : allié = bleu, ennemi = rouge (glow superposé au skin réel du joueur)
 const ALLY_COLOR = 0x3aa6ff;
 const ENEMY_COLOR = 0xcc2222;
+const DEFAULT_PLANE_PATH = '/SK_Veh_Plane_Stunt_01.glb';
 
 // Interpolation par snapshots : on affiche les joueurs distants ~100 ms dans le
 // passé et on interpole entre les deux derniers paquets reçus. Ça absorbe la gigue
@@ -46,7 +48,8 @@ class RemotePlayer {
   }
 
   _load(scene) {
-    new GLTFLoader().load('/SK_Veh_Plane_Stunt_01.glb', (gltf) => {
+    const path = TEAM_COLORS[this.team]?.path || DEFAULT_PLANE_PATH;
+    new GLTFLoader().load(path, (gltf) => {
       this.mesh = gltf.scene;
       const box = new THREE.Box3().setFromObject(this.mesh);
       const size = new THREE.Vector3();
@@ -265,8 +268,9 @@ class RemotePlayer {
 // ── RemoteBot ─────────────────────────────────────────────────────────────────
 // Bot IA host-authoritative : rendu côté client, positions reçues du réseau.
 class RemoteBot {
-  constructor(scene, netId) {
-    this.netId    = netId;
+  constructor(scene, netId, baseColor = null) {
+    this.netId     = netId;
+    this.baseColor = baseColor; // teinte réelle du modèle côté hôte (Enemy._baseColor)
     this.isEnemy  = true;
     this.isDead   = false;
     this.hp       = 100;
@@ -301,6 +305,7 @@ class RemoteBot {
         if (node.isMesh && node.material) {
           const mats = Array.isArray(node.material) ? node.material : [node.material];
           mats.forEach(m => {
+            if (this.baseColor != null) m.color.setHex(this.baseColor); // même teinte que côté hôte
             if (m.emissive !== undefined) {
               m.emissive = new THREE.Color(ENEMY_COLOR);
               m.emissiveIntensity = 0.18;
@@ -478,6 +483,12 @@ export class MultiplayerManager {
       this._emit('remoteBullet', { position, quaternion });
     });
 
+    // Missile tiré par un joueur distant — purement cosmétique (voir remoteBullet) :
+    // les dégâts/kills restent gérés par le tireur et relayés via player_hit/enemy_killed.
+    on('missile_fired', (data) => {
+      this._emit('remoteMissile', data);
+    });
+
     on('player_hit', ({ targetId, damage, shooterId }) => {
       this._emit('remoteHit', { targetId, damage, shooterId });
     });
@@ -496,7 +507,7 @@ export class MultiplayerManager {
       for (const state of bots) {
         let bot = this._bots.get(state.netId);
         if (!bot) {
-          bot = new RemoteBot(this._scene, state.netId);
+          bot = new RemoteBot(this._scene, state.netId, state.color);
           this._bots.set(state.netId, bot);
         }
         bot.applyState(state);
@@ -575,6 +586,16 @@ export class MultiplayerManager {
     this._network.send('bullet_fired', {
       position  : { x: position.x,   y: position.y,   z: position.z },
       quaternion: { x: quaternion.x,  y: quaternion.y,  z: quaternion.z, w: quaternion.w },
+    });
+  }
+
+  // Lancement de missile — voir sendBullet, même principe (mirroring visuel côté distant)
+  sendMissileFired(position, quaternion, type, targetNetId, guidanceStrength, trackingLevel, side) {
+    if (!this._network) return;
+    this._network.send('missile_fired', {
+      position  : { x: position.x,   y: position.y,   z: position.z },
+      quaternion: { x: quaternion.x,  y: quaternion.y,  z: quaternion.z, w: quaternion.w },
+      type, targetNetId, guidanceStrength, trackingLevel, side,
     });
   }
 

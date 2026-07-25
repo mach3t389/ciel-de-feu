@@ -445,6 +445,15 @@ export class Game {
               this._missileSystem.missilesRemainingAA, this._initAACount,
               this._missileSystem.missilesRemainingAG, this._initAGCount
             );
+            if (this._multiplayerManager) {
+              const info = this._missileSystem.lastFireInfo;
+              if (info) {
+                this._multiplayerManager.sendMissileFired(
+                  this.player.pivot.position, this.player.pivot.quaternion,
+                  info.type, info.targetNetId, info.guidanceStrength, info.trackingLevel, info.side,
+                );
+              }
+            }
           }
         };
       }
@@ -812,6 +821,20 @@ export class Game {
         const p = new THREE.Vector3(position.x, position.y, position.z);
         const q = new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
         this._remoteBulletManager.fire(p, q);
+      });
+
+      // Missile tiré par un joueur distant — mirroring visuel (voir remoteBullet ;
+      // les dégâts restent gérés par le tireur via player_hit/enemy_killed).
+      this._multiplayerManager.on('remoteMissile', ({ position, quaternion, type, targetNetId, guidanceStrength, trackingLevel, side }) => {
+        const p = new THREE.Vector3(position.x, position.y, position.z);
+        const q = new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+        let target = null;
+        if (targetNetId !== undefined && targetNetId !== null) {
+          target = this.enemies.find(e => e.netId === targetNetId && !e.isDead)
+                ?? this._multiplayerManager.getRemoteBots().find(b => b.netId === targetNetId && !b.isDead)
+                ?? null;
+        }
+        this._missileSystem.spawnRemoteMissile(p, q, type, target, guidanceStrength, trackingLevel, side);
       });
 
       // Un autre joueur nous a touché → on applique les dégâts à notre avion local
@@ -1274,6 +1297,7 @@ export class Game {
           quat : { x: e.pivot.quaternion.x, y: e.pivot.quaternion.y, z: e.pivot.quaternion.z, w: e.pivot.quaternion.w },
           hp   : e.hp ?? 100,
           dead : !!e.isDead,
+          color: e._baseColor ?? null, // teinte réelle du modèle (même apparence côté client)
         }));
       if (states.length > 0) this._multiplayerManager.sendBotStates(states);
       if (this._coopHost) {

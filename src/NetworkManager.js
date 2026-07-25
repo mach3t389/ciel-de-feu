@@ -12,7 +12,7 @@ const NOISY = new Set(['player_update', 'bullet_fired', 'score_update']);
 const P2P_TYPES = new Set([
   'player_update', 'bullet_fired', 'player_hit', 'enemy_killed',
   'player_respawn', 'score_update', 'bot_state', 'survival_wave_config',
-  'enemy_bullet', 'mission_state', 'force_end_game',
+  'enemy_bullet', 'mission_state', 'force_end_game', 'missile_fired',
 ]);
 
 // Avec l'ancien relais server.js, le serveur tamponnait l'id de l'expéditeur sur
