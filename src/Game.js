@@ -589,6 +589,7 @@ export class Game {
                 this._audio?.playExplosion(1.0);
                 this.stats.kills++;
                 this._bumpLifetime('stats_kills');
+                if (this._isSurvival) this._survivalKills++;
                 this._multiplayerManager?.sendEnemyKill(target.netId);
               }
             } else if (target.id !== undefined) {
@@ -774,10 +775,13 @@ export class Game {
       // Ajouter les joueurs déjà présents dans le lobby au moment du démarrage
       (this._config.remotePlayers || []).forEach(p => this._multiplayerManager.addRemotePlayer(p.id, p));
 
-      // Config de vague survie reçue de l'hôte → spawner les mêmes ennemis (clients)
+      // Survie multijoueur : hôte-autoritaire comme les avions ennemis en coop —
+      // l'hôte spawne + diffuse via bot_state (RemoteBot chez les clients), qui ne
+      // gardent de survival_wave_config que la sync du numéro de vague / avertissement boss.
       if (this._isSurvival && !isHost) {
         this._multiplayerManager.on('survival_wave_config', (cfg) => {
-          this._spawnSurvivalFromConfig(cfg);
+          if (cfg.wave !== undefined) this._survivalWave = cfg.wave;
+          if (cfg.isBossWave) this.ui.showTip(t('bossWarning'), 5, { dismissible: false });
         });
       }
 
@@ -925,8 +929,12 @@ export class Game {
       const aps = this._villageMap?.airports;
       this._tdmAllyBase  = aps?.[myApIdx]?.center             ?? playerBase;
       this._tdmEnemyBase = aps?.[myApIdx === 0 ? 1 : 0]?.center ?? enemyBase;
-      this._spawnTeamAI('ally',  this._tdmAiCount);
-      this._spawnTeamAI('enemy', this._tdmAiCount);
+      // Multijoueur : seul l'hôte simule les bots IA d'équipe (diffusés via bot_state
+      // plus bas) — sinon chaque client aurait ses propres bots indépendants.
+      if (!isMulti || isHost) {
+        this._spawnTeamAI('ally',  this._tdmAiCount);
+        this._spawnTeamAI('enemy', this._tdmAiCount);
+      }
     }
 
     // ── Bots FFA host-authoritative ──────────────────────────────────────────
@@ -940,6 +948,12 @@ export class Game {
       } else if (this._multiplayerManager) {
         this._multiplayerManager.enableBotReceive();
       }
+    }
+
+    // ── Bots IA d'équipe (TDM) host-authoritative — même principe que FFA ────
+    if (isTDM && this._tdmAiCount > 0 && this._config.networkManager) {
+      if (isHost) this._startBotBroadcast();
+      else this._multiplayerManager?.enableBotReceive();
     }
 
     // ── Coop host-authoritative : diffusion (hôte) / réception (client) ───────
@@ -959,6 +973,13 @@ export class Game {
       });
     } else if (this._coopClient) {
       this._multiplayerManager.enableBotReceive();
+    }
+
+    // Survie multijoueur : même modèle continu que la coop — l'hôte spawne et
+    // diffuse via bot_state, les clients n'affichent que des RemoteBot.
+    if (this._isSurvival && isMulti && this._multiplayerManager) {
+      if (isHost) this._startBotBroadcast();
+      else        this._multiplayerManager.enableBotReceive();
     }
 
     // Stats DE LA PARTIE (repartent à 0) — affichées sur le HUD
@@ -1227,6 +1248,9 @@ export class Game {
         preloadedScene: this._enemyModelScene,
       });
       e.getTerrainHeight = this.getTerrainHeight ?? null;
+      // Label d'équipe absolu (team1/team2) — nécessaire pour diffuser ces bots via
+      // bot_state : chaque client détermine isEnemy en comparant à SA PROPRE équipe.
+      e.absTeam = isAlly ? this._config.playerTeam : (this._config.playerTeam === 'team2' ? 'team1' : 'team2');
       if (isAlly) {
         e.netId = this._enemyNetIdCounter++;
         e.onFire = (pos, quat) => this._alliedBulletManager.fire(pos, quat, null, true);
@@ -1345,7 +1369,10 @@ export class Game {
   _startBotBroadcast() {
     this._botBroadcastTimer = setInterval(() => {
       if (!this._multiplayerManager || this._destroyed) return;
-      const states = this.enemies
+      // TDM : this.allies (bots de MA propre équipe) sont aussi hôte-autoritaires —
+      // team = label absolu, chaque client détermine isEnemy relativement à SA équipe.
+      const bothLists = this._isTDM ? [...this.enemies, ...this.allies] : this.enemies;
+      const states = bothLists
         .filter(e => e.netId !== undefined)
         .map(e => ({
           netId: e.netId,
@@ -1354,6 +1381,7 @@ export class Game {
           hp   : e.hp ?? 100,
           dead : !!e.isDead,
           color: e._baseColor ?? null, // teinte réelle du modèle (même apparence côté client)
+          team : e.absTeam ?? undefined,
         }));
       if (states.length > 0) this._multiplayerManager.sendBotStates(states);
       if (this._coopHost) {
@@ -2743,6 +2771,8 @@ export class Game {
           if (b.age >= 999) continue;
           for (const bot of bots) {
             if (bot.isDead) continue;
+            // Bot IA de MA propre équipe (TDM) : pas une cible, sauf tir allié activé.
+            if (bot.isEnemy === false && !this._config.friendlyFire) continue;
             if (b.mesh.position.distanceTo(bot.position) < 9) {
               b.age = 999;
               this.ui.showHitMarker();
@@ -2753,6 +2783,7 @@ export class Game {
                 this._audio?.playExplosion(1.0);
                 this.stats.kills++;
                 this._bumpLifetime('stats_kills');
+                if (this._isSurvival) this._survivalKills++;
                 this._multiplayerManager.sendEnemyKill(bot.netId);
               }
               break;
@@ -2899,8 +2930,10 @@ export class Game {
         }
       }
       // Régénération par vagues : recompléter chaque équipe toutes les 6 s
+      // (hôte/solo uniquement — un client aurait sinon this.allies/enemies vides
+      // en permanence et respawnerait ses propres bots locaux à chaque tick).
       this._tdmAiRespawnTimer -= delta;
-      if (this._tdmAiRespawnTimer <= 0) {
+      if (this._tdmAiRespawnTimer <= 0 && (!this._config.networkManager || this._isHost)) {
         this._tdmAiRespawnTimer = 6;
         const allyAlive  = this.allies.filter(a => !a.isDead).length;
         const enemyAlive = this.enemies.filter(e => !e.isDead).length;

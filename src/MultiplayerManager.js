@@ -268,10 +268,11 @@ class RemotePlayer {
 // ── RemoteBot ─────────────────────────────────────────────────────────────────
 // Bot IA host-authoritative : rendu côté client, positions reçues du réseau.
 class RemoteBot {
-  constructor(scene, netId, baseColor = null) {
+  // isEnemy : false pour un bot IA d'équipe (TDM) de MA propre équipe — voir bot_state.team
+  constructor(scene, netId, baseColor = null, isEnemy = true) {
     this.netId     = netId;
     this.baseColor = baseColor; // teinte réelle du modèle côté hôte (Enemy._baseColor)
-    this.isEnemy  = true;
+    this.isEnemy  = isEnemy;
     this.isDead   = false;
     this.hp       = 100;
     // Estimation de PV pour décider du kill côté client. L'hôte est autoritaire à la
@@ -307,7 +308,7 @@ class RemoteBot {
           mats.forEach(m => {
             if (this.baseColor != null) m.color.setHex(this.baseColor); // même teinte que côté hôte
             if (m.emissive !== undefined) {
-              m.emissive = new THREE.Color(ENEMY_COLOR);
+              m.emissive = new THREE.Color(this.isEnemy ? ENEMY_COLOR : ALLY_COLOR);
               m.emissiveIntensity = 0.18;
               this._mats = this._mats ?? [];
               this._mats.push(m);
@@ -323,12 +324,13 @@ class RemoteBot {
     const canvas = document.createElement('canvas');
     canvas.width = 192; canvas.height = 48;
     const ctx = canvas.getContext('2d');
+    const col = this.isEnemy ? '#cc2222' : '#3aa6ff';
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, 192, 48);
-    ctx.strokeStyle = '#cc2222';
+    ctx.strokeStyle = col;
     ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, 190, 46);
-    ctx.fillStyle = '#cc2222';
+    ctx.fillStyle = col;
     ctx.font = 'bold 20px Courier New';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -524,7 +526,10 @@ export class MultiplayerManager {
       for (const state of bots) {
         let bot = this._bots.get(state.netId);
         if (!bot) {
-          bot = new RemoteBot(this._scene, state.netId, state.color);
+          // state.team : label absolu (team1/team2) présent uniquement pour les bots
+          // d'équipe (TDM) — un bot IA de MA propre équipe n'est pas un ennemi.
+          const isEnemy = state.team !== undefined ? (state.team !== this._config.playerTeam) : true;
+          bot = new RemoteBot(this._scene, state.netId, state.color, isEnemy);
           this._bots.set(state.netId, bot);
         }
         bot.applyState(state);
