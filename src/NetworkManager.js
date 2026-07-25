@@ -106,7 +106,10 @@ export class NetworkManager {
       return;
     }
     if (!NOISY.has(type)) console.log('[NET send]', type, payload);
-    this._ws.send(JSON.stringify({ type, payload }));
+    // Certains payloads (ex. start_game) reprennent tout _config par spread, qui
+    // contient networkManager lui-même — sans ce filtre, le PeerNetwork qu'il
+    // référence en interne (this.nm) rend la structure circulaire pour JSON.stringify.
+    this._ws.send(JSON.stringify({ type, payload }, (key, value) => (key === 'networkManager' ? undefined : value)));
   }
 
   // Enregistre un handler pour les messages entrants
