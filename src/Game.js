@@ -779,6 +779,8 @@ export class Game {
         this.scene, this._config.networkManager,
         { mode, playerTeam: this._config.playerTeam, friendlyFire: this._config.friendlyFire }
       );
+      window.__DBG = { game: this, mm: this._multiplayerManager, mode, isHost, isMulti };
+      console.log('[DBG] game ctor', { mode, isHost, isMulti, coopHost: this._coopHost, coopClient: this._coopClient });
       // Ajouter les joueurs déjà présents dans le lobby au moment du démarrage
       (this._config.remotePlayers || []).forEach(p => this._multiplayerManager.addRemotePlayer(p.id, p));
 
