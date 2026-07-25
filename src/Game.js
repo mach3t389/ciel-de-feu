@@ -758,7 +758,11 @@ export class Game {
         team: i === 0 ? 'ally' : 'enemy',
       }));
       this._groundDefense = new GroundDefense(this.scene, this.getTerrainHeight, isPractice);
-      this._groundDefense.build(villages, runways, this._groundModelCache, isPractice, this._villageMap.buildingPositions ?? []);
+      // Client coop : construction différée — attend ground_defense_init de l'hôte
+      // (le placement utilise Math.random(), donc host/client divergeraient sinon).
+      if (!this._coopClient) {
+        this._groundDefense.build(villages, runways, this._groundModelCache, isPractice, this._villageMap.buildingPositions ?? []);
+      }
     }
 
     // Mode multijoueur : initialiser le gestionnaire de joueurs distants
@@ -790,6 +794,27 @@ export class Game {
           if (s.total   !== undefined) this._missionTotal   = s.total;
           if (s.spawned !== undefined) this._missionSpawned = s.spawned;
           if (s.complete) this._showMissionVictory();
+        });
+
+        // Défense au sol : placement + état entièrement pilotés par l'hôte (voir
+        // GroundDefense.buildFromRemote/applyRemoteState).
+        if (this._groundDefense) {
+          let groundInitDone = false;
+          this._multiplayerManager.on('groundDefenseInit', ({ units }) => {
+            if (groundInitDone) return;
+            groundInitDone = true;
+            this._groundDefense.buildFromRemote(units, this._groundModelCache, isPractice);
+          });
+          this._multiplayerManager.on('groundDefenseState', ({ states }) => {
+            this._groundDefense.applyRemoteState(states);
+          });
+        }
+        // Tourelle alliée de l'hôte → traceur cosmétique (dégâts déjà appliqués
+        // localement chez l'hôte, reflétés ensuite via bot_state/groundDefenseState).
+        this._multiplayerManager.on('remoteAllyBullet', ({ position, quaternion }) => {
+          const p = new THREE.Vector3(position.x, position.y, position.z);
+          const q = new THREE.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+          this._alliedBulletManager.fire(p, q);
         });
       }
 
@@ -920,6 +945,18 @@ export class Game {
     // ── Coop host-authoritative : diffusion (hôte) / réception (client) ───────
     if (this._coopHost) {
       this._startBotBroadcast();        // diffuse positions ennemies + mission_state
+      // Défense au sol : placement diffusé une fois, l'état suit dans _startBotBroadcast.
+      if (this._groundDefense) {
+        this._multiplayerManager.sendGroundDefenseInit(this._groundDefense.getInitData());
+      }
+      // Un client a touché une de nos unités de défense au sol avec ses propres tirs.
+      this._multiplayerManager.on('groundHit', ({ netId, damage }) => {
+        const u = this._groundDefense?.units.find(u => u.netId === netId);
+        if (u && !u.isDead) {
+          u.hp -= damage;
+          if (u.hp <= 0) { u.isDead = true; u.root.visible = false; }
+        }
+      });
     } else if (this._coopClient) {
       this._multiplayerManager.enableBotReceive();
     }
@@ -1099,9 +1136,9 @@ export class Game {
   _fireEnemyBullet(pos, quat, dmg, fromTurret = false) {
     const b = this._enemyBulletManager.fire(pos, quat, dmg);
     if (b && fromTurret) b._fromTurret = true;
-    // La défense au sol est simulée localement par chaque client → ne pas diffuser
-    // (sinon double feu). Seuls les avions ennemis, propriété de l'hôte, sont relayés.
-    if (this._coopHost && this._multiplayerManager && !fromTurret) {
+    // La défense au sol est désormais hôte-autoritaire comme les avions ennemis
+    // (voir GroundDefense.buildFromRemote) : tout tir de l'hôte est diffusé.
+    if (this._coopHost && this._multiplayerManager) {
       this._multiplayerManager.sendEnemyBullet(pos, quat, dmg);
     }
     return b;
@@ -1326,6 +1363,9 @@ export class Game {
           spawned : this._missionSpawned,
           complete: this._missionComplete,
         });
+        if (this._groundDefense) {
+          this._multiplayerManager.sendGroundDefenseState(this._groundDefense.getStateSnapshot());
+        }
       }
     }, 100);
   }
@@ -2475,7 +2515,12 @@ export class Game {
           w = {
             get isDead() { return u.isDead; },
             pivot   : { position: u.pos },
-            hit     : (dmg) => { if (u.isDead) return; u.hp -= dmg; if (u.hp <= 0) { u.isDead = true; u.root.visible = false; } },
+            hit     : (dmg) => {
+              if (u.isDead) return;
+              u.hp -= dmg; if (u.hp <= 0) { u.isDead = true; u.root.visible = false; }
+              // Client coop : dégât optimiste local ci-dessus, l'hôte reste autoritaire.
+              if (this._coopClient) this._multiplayerManager?.sendGroundHit(u.netId, dmg);
+            },
             isGround: true,
             rawUnit : u,
           };
@@ -2606,7 +2651,11 @@ export class Game {
         playerAlive: !this.player.isDead && !this._ecmActive,
         enemies    : this.enemies,
         enemyFire  : (pos, quat, dmg) => this._fireEnemyBullet(pos, quat, dmg, true),
-        alliedFire : (pos, quat, dmg) => this._alliedBulletManager.fire(pos, quat, dmg, true),
+        alliedFire : (pos, quat, dmg) => {
+          const b = this._alliedBulletManager.fire(pos, quat, dmg, true);
+          if (this._coopHost && this._multiplayerManager) this._multiplayerManager.sendAllyBullet(pos, quat);
+          return b;
+        },
       });
     }
 
@@ -2817,6 +2866,9 @@ export class Game {
           b.age = 999;
           this.ui.showHitMarker();
           this._audio?.playImpact('structure');
+          // Client coop : dégât optimiste local déjà appliqué par damageAt ci-dessus —
+          // l'hôte reste autoritaire, on lui rapporte l'impact (voir GroundDefense).
+          if (this._coopClient) this._multiplayerManager?.sendGroundHit(u.netId, 25);
           if (u.isDead) {
             this._audio?.playExplosion(0.7);
             this.stats.kills++;

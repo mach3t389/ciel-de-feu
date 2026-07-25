@@ -41,6 +41,10 @@ export class GroundDefense {
     this._passive = passive;
     this.units = [];
     this._models = {};
+    this._netIdCounter = 0;
+    // true côté client coop : aucune simulation locale (placement/ciblage/tir), les
+    // unités ne font que refléter l'état diffusé par l'hôte (voir buildFromRemote).
+    this._remoteMirror = false;
   }
 
   // villages : [{ x, z, team:'ally'|'enemy' }]
@@ -126,6 +130,7 @@ export class GroundDefense {
     if (!this._decorative) this._addTeamMarker(root, team);
 
     this.units.push({
+      netId: this._netIdCounter++,
       kind, team, root,
       hp: HP[kind], maxHp: HP[kind], isDead: false,
       pos: root.position,
@@ -133,6 +138,52 @@ export class GroundDefense {
       burstLeft: 0, burstCd: 0,
       radius: SIZE[kind] * 0.6,
     });
+  }
+
+  // ── Multijoueur coop : hôte diffuse le placement une fois, les clients le rejouent
+  // à l'identique — le placement utilise Math.random() (évitement des bâtiments), donc
+  // host/client ne peuvent pas juste reconstruire indépendamment sans diverger.
+  getInitData() {
+    return this.units.map(u => ({
+      netId: u.netId, kind: u.kind, team: u.team,
+      x: u.pos.x, z: u.pos.z, y: u.pos.y, faceAng: u.root.rotation.y,
+    }));
+  }
+
+  // Construit les unités à des positions exactes reçues de l'hôte — aucun placement
+  // aléatoire local, aucune simulation de ciblage/tir (voir update()).
+  async buildFromRemote(unitsData, preloadedModels = null, decorative = false) {
+    this._decorative  = decorative;
+    this._remoteMirror = true;
+    this._models = preloadedModels ?? this._models;
+    if (!preloadedModels) {
+      const [tank, truck, mg] = await Promise.all([
+        loadGLB(PATHS.tank), loadGLB(PATHS.truck), loadGLB(PATHS.mg),
+      ]);
+      this._models = { tank: tank?.scene, truck: truck?.scene, mg: mg?.scene };
+    }
+    for (const d of unitsData) {
+      this._spawnUnit(d.kind, d.x, d.z, d.team, d.faceAng, d.y);
+      const u = this.units[this.units.length - 1];
+      u.netId = d.netId; // remplace id local par id hote (autorite reseau)
+    }
+    this._netIdCounter = Math.max(0, ...unitsData.map(d => d.netId + 1));
+  }
+
+  // Applique l'état diffusé par l'hôte (~10Hz) : vie, mort/vivante, orientation tourelle.
+  applyRemoteState(states) {
+    for (const s of states) {
+      const u = this.units.find(u => u.netId === s.netId);
+      if (!u) continue;
+      u.hp = s.hp;
+      if (s.isDead !== u.isDead) { u.isDead = s.isDead; u.root.visible = !s.isDead; }
+      if (s.rotY !== undefined) u.root.rotation.y = s.rotY;
+    }
+  }
+
+  // État à diffuser par l'hôte (~10Hz) — voir Game.js _startBotBroadcast.
+  getStateSnapshot() {
+    return this.units.map(u => ({ netId: u.netId, hp: u.hp, isDead: u.isDead, rotY: u.root.rotation.y }));
   }
 
   _addTeamMarker(root, team) {
@@ -147,6 +198,9 @@ export class GroundDefense {
   // ctx : { playerPos, playerAlive, enemies, enemyFire(pos,quat), alliedFire(pos,quat) }
   update(delta, ctx) {
     if (this._passive) return; // mode pratique : aucun tir
+    // Client coop : aucune simulation locale — l'état vient entièrement de l'hôte
+    // via applyRemoteState (ciblage/tir/respawn restent autoritaires côté hôte).
+    if (this._remoteMirror) return;
 
     // Réapparition des tourelles alliées après cooldown
     for (const u of this.units) {

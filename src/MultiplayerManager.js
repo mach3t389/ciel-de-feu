@@ -489,6 +489,23 @@ export class MultiplayerManager {
       this._emit('remoteMissile', data);
     });
 
+    // Défense au sol — hôte-autoritaire, voir bot_state/RemoteBot pour le même principe.
+    on('ground_defense_init', (data) => {
+      this._emit('groundDefenseInit', data);
+    });
+    on('ground_defense_state', (data) => {
+      this._emit('groundDefenseState', data);
+    });
+    // Client → hôte : notifie un impact sur une unité de défense au sol.
+    on('ground_hit', (data) => {
+      this._emit('groundHit', data);
+    });
+    // Tourelle alliée (hôte) → traceur cosmétique côté clients (l'hôte gère les dégâts
+    // réels aux ennemis localement, diffusés ensuite via bot_state).
+    on('ally_bullet', ({ position, quaternion }) => {
+      this._emit('remoteAllyBullet', { position, quaternion });
+    });
+
     on('player_hit', ({ targetId, damage, shooterId }) => {
       this._emit('remoteHit', { targetId, damage, shooterId });
     });
@@ -596,6 +613,28 @@ export class MultiplayerManager {
       position  : { x: position.x,   y: position.y,   z: position.z },
       quaternion: { x: quaternion.x,  y: quaternion.y,  z: quaternion.z, w: quaternion.w },
       type, targetNetId, guidanceStrength, trackingLevel, side,
+    });
+  }
+
+  // Défense au sol (hôte) — placement initial (une fois) + état périodique (~10Hz)
+  sendGroundDefenseInit(units) {
+    if (!this._network) return;
+    this._network.send('ground_defense_init', { units });
+  }
+  sendGroundDefenseState(states) {
+    if (!this._network) return;
+    this._network.send('ground_defense_state', { states });
+  }
+  // Client → hôte : mes propres tirs ont touché cette unité de défense au sol
+  sendGroundHit(netId, damage) {
+    if (!this._network) return;
+    this._network.send('ground_hit', { netId, damage });
+  }
+  sendAllyBullet(position, quaternion) {
+    if (!this._network) return;
+    this._network.send('ally_bullet', {
+      position  : { x: position.x,   y: position.y,   z: position.z },
+      quaternion: { x: quaternion.x,  y: quaternion.y,  z: quaternion.z, w: quaternion.w },
     });
   }
 
