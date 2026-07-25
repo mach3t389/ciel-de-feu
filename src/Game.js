@@ -2575,8 +2575,12 @@ export class Game {
       if (this._groundTargetCache.size > 0) {
         for (const [u] of this._groundTargetCache) { if (u.isDead) this._groundTargetCache.delete(u); }
       }
-      const remoteBots = this._multiplayerManager?.getRemoteBots?.() ?? [];
-      const allEnemies = [...(this.enemies ?? []), ...(this.allies ?? []), ...groundTargets, ...remoteBots];
+      const remoteBots    = this._multiplayerManager?.getRemoteBots?.() ?? [];
+      // Joueurs distants (PvP FFA/TDM) — RemotePlayer.isEnemy est déjà calculé par
+      // MultiplayerManager selon le mode, donc le lock ne cible que les adversaires
+      // (filtré par MissileSystem via isEnemy, comme pour les balles).
+      const remotePlayers = this._multiplayerManager?.getRemotePlayers?.() ?? [];
+      const allEnemies = [...(this.enemies ?? []), ...(this.allies ?? []), ...groundTargets, ...remoteBots, ...remotePlayers];
       const activeDecoys = this._missileSystem.getActiveDecoys();
       this._missileSystem.update(delta, this.player.pivot, allEnemies, activeDecoys);
       this._missileSystem.updateDecoys(delta);
