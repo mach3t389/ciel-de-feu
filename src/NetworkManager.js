@@ -15,6 +15,16 @@ const P2P_TYPES = new Set([
   'enemy_bullet', 'mission_state', 'force_end_game',
 ]);
 
+// Avec l'ancien relais server.js, le serveur tamponnait l'id de l'expéditeur sur
+// ces messages (room.broadcast('player_update', { id: clientId, ... })) — les
+// appelants (MultiplayerManager) n'ont jamais eu besoin de l'inclure eux-mêmes.
+// En P2P le relais (hôte) ne fait que retransmettre le payload tel quel, donc il
+// faut désormais l'ajouter ici, côté expéditeur.
+const SELF_ID_FIELD = {
+  player_update: 'id', bullet_fired: 'id', player_respawn: 'id', score_update: 'id',
+  player_hit: 'shooterId',
+};
+
 export class NetworkManager {
   constructor(url = null) {
     this._url      = url || this._defaultUrl();
@@ -97,6 +107,8 @@ export class NetworkManager {
   }
 
   send(type, payload = {}) {
+    const idField = SELF_ID_FIELD[type];
+    if (idField && payload[idField] === undefined) payload = { ...payload, [idField]: this.id };
     if (P2P_TYPES.has(type) && this.peerNetwork?.ready) {
       this.peerNetwork.send(type, payload);
       return;
