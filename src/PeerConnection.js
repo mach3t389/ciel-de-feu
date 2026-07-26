@@ -13,6 +13,8 @@ export class PeerNetwork {
     this.channels    = new Map(); // peerId → RTCDataChannel
     this.ready       = role === 'host'; // l'hôte relaie au fur et à mesure des connexions
     this._readyResolvers = [];
+    this._closed = false; // true seulement après un closeAll() explicite (déconnexion volontaire)
+    this._reconnectAttempts = 0;
 
     if (role === 'host') {
       nm.on('webrtc_offer', (p) => this._onOffer(p));
@@ -39,7 +41,7 @@ export class PeerNetwork {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     const dc = pc.createDataChannel('game');
     this.connections.set(this.hostId, pc);
-    this._attachChannel(this.hostId, dc);
+    this._attachChannel(this.hostId, dc, pc);
     pc.onicecandidate = (e) => {
       if (e.candidate) this.nm.send('webrtc_ice', { to: this.hostId, from: this.nm.id, data: e.candidate });
     };
@@ -48,10 +50,23 @@ export class PeerNetwork {
     this.nm.send('webrtc_offer', { to: this.hostId, from: this.nm.id, data: offer });
   }
 
+  // Reconnexion avec backoff exponentiel après une coupure P2P inattendue (aléa
+  // réseau, changement de réseau, etc.) — sans ça la partie restait figée en
+  // silence pour le reste du match dès qu'un canal se fermait vraiment.
+  _scheduleReconnect() {
+    if (this._closed || this.role !== 'guest') return;
+    const delay = Math.min(1000 * 2 ** this._reconnectAttempts, 15000);
+    this._reconnectAttempts++;
+    setTimeout(() => {
+      if (this._closed) return;
+      this._connectToHost();
+    }, delay);
+  }
+
   async _onOffer({ from, data }) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     this.connections.set(from, pc);
-    pc.ondatachannel = (e) => this._attachChannel(from, e.channel);
+    pc.ondatachannel = (e) => this._attachChannel(from, e.channel, pc);
     pc.onicecandidate = (e) => {
       if (e.candidate) this.nm.send('webrtc_ice', { to: from, from: this.nm.id, data: e.candidate });
     };
@@ -72,18 +87,22 @@ export class PeerNetwork {
     try { await pc.addIceCandidate(data); } catch (e) { console.warn('[P2P] candidat ICE rejeté', e); }
   }
 
-  _attachChannel(peerId, dc) {
+  _attachChannel(peerId, dc, pc) {
     dc.onopen = () => {
       this.channels.set(peerId, dc);
-      if (this.role === 'guest') this._markReady();
+      if (this.role === 'guest') { this._reconnectAttempts = 0; this._markReady(); }
     };
     dc.onclose = () => {
       this.channels.delete(peerId);
       this.connections.delete(peerId);
+      pc?.close();
       // Ne PAS traiter la fermeture du DataChannel comme "l'hôte a quitté" — un
       // aléa réseau P2P transitoire peut fermer le canal sans que l'hôte soit
       // réellement parti. Le vrai signal host_left vient du signaling (api/ws.js
       // le diffuse quand la WS de l'hôte se ferme), c'est la seule source fiable.
+      // Côté invité, on tente en revanche de rétablir le canal — sinon la partie
+      // restait figée en silence pour de bon dès qu'une coupure survenait.
+      if (this.role === 'guest') { this.ready = false; this._scheduleReconnect(); }
     };
     dc.onmessage = (e) => {
       let msg;
@@ -109,6 +128,7 @@ export class PeerNetwork {
   }
 
   closeAll() {
+    this._closed = true; // empêche toute reconnexion — déconnexion volontaire
     this.connections.forEach((pc) => pc.close());
     this.connections.clear();
     this.channels.clear();
