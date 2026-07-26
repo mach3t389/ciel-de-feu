@@ -2154,7 +2154,10 @@ export class Game {
     this._muzzleLowGfx = isLow;
   }
 
-  // Déclenche la fin de match (timer écoulé OU hôte force la fin).
+  // Déclenche la fin de match (timer écoulé OU hôte force la fin) — Versus/Équipes
+  // uniquement (voir onEndGame). Détermine le résultat RÉEL (victoire / défaite /
+  // égalité) au lieu de toujours afficher "MISSION RÉUSSIE" à tout le monde y
+  // compris au perdant ou à celui qui vient d'interrompre la partie.
   _triggerMatchEnd() {
     if (this._missionComplete) return;
     this._missionComplete = true;
@@ -2164,8 +2167,24 @@ export class Game {
     if (this._pointerLockHint) this._pointerLockHint.style.display = 'none';
     if (this._escMenuVisible) this.ui.showEscMenu(false);
     this._updateFFARecord(this.stats.kills);
-    // Afficher les récompenses de progression avant l'écran de victoire
-    this._showEndRewards(true, () => {
+
+    let won = null; // true = victoire, false = défaite, null = égalité/indéterminé
+    if (this._isTDM) {
+      if (this._myTeamScore > this._oppTeamScore) won = true;
+      else if (this._myTeamScore < this._oppTeamScore) won = false;
+    } else if (this._isFFA) {
+      const rows     = this._buildScoreboardRows();
+      const myKills   = this.stats?.kills ?? 0;
+      const maxKills  = Math.max(...rows.map(r => r.kills));
+      if (maxKills > 0) {
+        const leaders = rows.filter(r => r.kills === maxKills).length;
+        won = (myKills === maxKills && leaders === 1) ? true : (myKills === maxKills ? null : false);
+      }
+    }
+    const titleKey = won === true ? 'matchVictoryTitle' : won === false ? 'matchDefeatTitle' : 'matchDrawTitle';
+
+    // Afficher les récompenses de progression avant l'écran de fin de match
+    this._showEndRewards(won === true, () => {
       this.ui.showVictory(
         this.stats,
         this._config.networkManager ? null : () => this._quit('replay'),
@@ -2175,6 +2194,7 @@ export class Game {
           this._config.networkManager.send('return_lobby', {});
           this._quit('lobby');
         } : null,
+        { title: t(titleKey), subtitle: t('matchEndedSub'), resultsLabel: t('matchResults'), won },
       );
     });
   }

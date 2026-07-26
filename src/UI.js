@@ -2797,7 +2797,12 @@ export class UI {
     if (v) { v.textContent = armor;   v.style.color = armor   === 0 ? '#80e840' : '#d4c88a'; }
   }
 
-  showVictory(stats, onReplay, onMenu, rows = null, onReturnLobby = null) {
+  // opts (optionnel) : { title, subtitle, resultsLabel, won } — surcharge le texte
+  // "MISSION RÉUSSIE" par défaut (mission solo/coop). Utilisé par la fin de match
+  // Versus/Équipes (_triggerMatchEnd), où le résultat réel (victoire/défaite/
+  // égalité) doit être reflété — cet écran n'a pas de sens en "mission" hors
+  // contexte coop, et affichait auparavant "MISSION RÉUSSIE" même pour le perdant.
+  showVictory(stats, onReplay, onMenu, rows = null, onReturnLobby = null, opts = null) {
     if (this._victoryOverlay) return;
     // Cacher le menu pause s'il est visible
     if (this._pauseOverlay) this._pauseOverlay.style.display = 'none';
@@ -2813,11 +2818,17 @@ export class UI {
       zIndex:'800',
     });
 
+    // won: true = victoire (vert, défaut) · false = défaite (rouge) · null/undefined = neutre (crème)
+    const won = opts?.won;
+    const accent    = won === false ? '#e0705a' : (won === true || won === undefined ? '#9ef060' : '#d4c88a');
+    const accentDim = won === false ? '#e08a78' : (won === true || won === undefined ? '#9bbf86' : '#c8bc94');
+    const borderCol = won === false ? 'rgba(232,90,60,0.45)' : (won === true || won === undefined ? 'rgba(122,232,48,0.45)' : 'rgba(200,190,148,0.45)');
+
     // Même carte opaque que l'écran de mort — uniformité visuelle
     const card = document.createElement('div');
     card.style.cssText = `
       background: rgba(11,10,9,0.95);
-      border: 1px solid rgba(122,232,48,0.45);
+      border: 1px solid ${borderCol};
       border-radius: 6px;
       padding: 38px 64px 34px;
       display: flex; flex-direction: column; align-items: center;
@@ -2825,17 +2836,17 @@ export class UI {
     `;
 
     const titleEl = document.createElement('div');
-    titleEl.textContent = t('victoryTitle');
-    titleEl.style.cssText = 'font-size:52px;font-weight:bold;letter-spacing:10px;color:#9ef060;text-shadow:0 0 22px rgba(80,200,40,0.55);margin-bottom:10px;';
+    titleEl.textContent = opts?.title ?? t('victoryTitle');
+    titleEl.style.cssText = `font-size:52px;font-weight:bold;letter-spacing:10px;color:${accent};text-shadow:0 0 22px rgba(80,200,40,0.55);margin-bottom:10px;`;
 
     const sub = document.createElement('div');
-    sub.textContent = t('victoryZone');
-    sub.style.cssText = 'font-size:12px;color:#9bbf86;letter-spacing:4px;margin-bottom:22px;';
+    sub.textContent = opts?.subtitle ?? t('victoryZone');
+    sub.style.cssText = `font-size:12px;color:${accentDim};letter-spacing:4px;margin-bottom:22px;`;
 
     const statsEl = document.createElement('div');
     statsEl.style.cssText = 'margin-bottom:26px;text-align:center;';
     statsEl.innerHTML = `
-      <div style="font-size:9px;letter-spacing:3px;color:#5a7040;margin-bottom:6px;">${t('missionResults')}</div>
+      <div style="font-size:9px;letter-spacing:3px;color:#5a7040;margin-bottom:6px;">${opts?.resultsLabel ?? t('missionResults')}</div>
       <div style="font-size:20px;letter-spacing:2px;">
         <span style="color:#7ae830;">✈ ${stats?.kills ?? 0} ${t('eliminations')}</span>
         <span style="color:#3a4030;margin:0 14px;">/</span>
