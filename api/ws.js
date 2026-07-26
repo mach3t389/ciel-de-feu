@@ -106,18 +106,38 @@ wss.on('connection', (ws) => {
       }
 
       // ── Créer une salle ────────────────────────────────────────────────────
+      // Un code explicite dans payload.config ne survient QUE lors d'un retour au
+      // lobby (rejoin sur le même salon) — un nouvel hôte n'en fournit jamais et
+      // passe par generateCode(). Dans ce cas, on RÉCUPÈRE le salon existant au
+      // lieu de le recréer de zéro : sinon, si l'invité rejoint (join_room) avant
+      // que l'hôte n'ait fini de se reconnecter, ce create_room écraserait son
+      // entrée fraîchement ajoutée. On renvoie aussi la liste des joueurs déjà
+      // présents dans la réponse (comme join_room le fait pour l'invité) — l'hôte
+      // n'a ainsi plus besoin de compter sur le broadcast 'player_joined' pour
+      // découvrir les joueurs déjà reconnectés au moment de sa propre reconnexion.
       case 'create_room': {
-        const code = payload.config?.code || await generateCode();
-        const room = {
-          code, hostId: clientId, started: false, createdAt: Date.now(),
-          config: payload.config || {},
-          players: {
-            [clientId]: { id: clientId, name: payload.config?.name || 'HOST', team: payload.config?.team || 'jaune', level: payload.config?.level, prestigeLevel: payload.config?.prestigeLevel, isHost: true, isReady: false },
-          },
-        };
+        const explicitCode = payload.config?.code;
+        const existing = explicitCode ? await getRoom(explicitCode) : null;
+        const code = explicitCode || await generateCode();
+
+        const hostInfo = { id: clientId, name: payload.config?.name || 'HOST', team: payload.config?.team || 'jaune', level: payload.config?.level, prestigeLevel: payload.config?.prestigeLevel, isHost: true, isReady: false };
+
+        let room;
+        if (existing && !existing.started) {
+          room = existing;
+          if (room.hostId !== clientId) delete room.players[room.hostId]; // ancienne connexion hôte (id périmé)
+          room.hostId  = clientId;
+          room.started = false;
+          room.config  = payload.config || room.config;
+          room.players[clientId] = hostInfo;
+        } else {
+          room = { code, hostId: clientId, started: false, createdAt: Date.now(), config: payload.config || {}, players: { [clientId]: hostInfo } };
+        }
+
         await saveRoom(code, room);
         ws._room = code;
-        send(ws, 'create_room', { code, config: room.config });
+        const existingPlayers = Object.values(room.players).filter((p) => p.id !== clientId);
+        send(ws, 'create_room', { code, config: room.config, players: existingPlayers });
         break;
       }
 

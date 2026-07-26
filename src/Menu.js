@@ -1422,11 +1422,24 @@ export class Menu {
     const enemyCountChoices = mkChoiceGroup(
       [{ value: 40, label: '40' }, { value: 60, label: '60' }, { value: 80, label: '80' }, { value: 120, label: '120' }],
       this._config.totalEnemies ?? 60,
-      v => { this._config.totalEnemies = v; if (nm) nm.send('config_update', { totalEnemies: v }); }
+      v => { this._config.totalEnemies = v; if (nm) nm.send('config_update', { totalEnemies: v }); updateEnemyCountEstimate(); }
     );
     if (!isHost) { enemyCountChoices.style.pointerEvents = 'none'; enemyCountChoices.style.opacity = '0.45'; }
     enemyCountSection.appendChild(enemyCountChoices);
+    // Aperçu du total réel (le nombre d'ennemis augmente avec le nombre de
+    // joueurs en coop — même formule que Game.js : ×1, ×1.6, ×2.2, ×2.8…) —
+    // affiché pour ne pas induire en erreur sur ce que "40" représente vraiment.
+    const enemyCountEstimate = el('div', { style: {
+      fontSize: '8px', letterSpacing: '1px', color: M.dimCream, marginTop: '4px',
+    }});
+    enemyCountSection.appendChild(enemyCountEstimate);
     optionsWrap.appendChild(enemyCountSection);
+    const updateEnemyCountEstimate = () => {
+      const base  = this._config.totalEnemies ?? 60;
+      const count = Math.max(1, players.length);
+      const total = Math.round(base * (1 + 0.6 * (count - 1)));
+      enemyCountEstimate.textContent = t('enemyCountEstimate').replace('{n}', total).replace('{p}', count);
+    };
 
     // Limite de temps — Versus (ffa) et Équipes (tdm) uniquement
     const isCompetitive = (m) => m === 'ffa' || m === 'tdm';
@@ -1590,6 +1603,7 @@ export class Menu {
         row.appendChild(el('span', { text: p.isReady ? '■' : '□', style: { color: p.isReady ? M.green : M.dimCream, fontSize: '12px', flexShrink: '0' }}));
         playerList.appendChild(row);
       });
+      updateEnemyCountEstimate();
     };
     renderPlayers();
     playerSection.appendChild(playerList);
@@ -1725,9 +1739,10 @@ export class Menu {
         ffaBotDiffSection.style.display = (patch.mode === 'ffa' && (this._config.ffaBotCount ?? 0) > 0) ? '' : 'none';
         ffSection.style.display         = ffVisible(patch.mode) ? '' : 'none';
         refreshLobbyStats();
+        updateEnemyCountEstimate();
       }
       if (patch.difficulty   !== undefined) diffChoices.setValue(patch.difficulty);
-      if (patch.totalEnemies !== undefined) enemyCountChoices.setValue(patch.totalEnemies);
+      if (patch.totalEnemies !== undefined) { enemyCountChoices.setValue(patch.totalEnemies); updateEnemyCountEstimate(); }
       if (patch.ffaTimeLimit !== undefined) timeGroup.setValue(patch.ffaTimeLimit);
       if (patch.friendlyFire !== undefined) ffGroup.setValue(patch.friendlyFire);
       if (patch.map          !== undefined) { mapGroup.setValue(patch.map); this._drawMapPreview(lobbyMapCanvas, patch.map); refreshLobbyStats(); }
@@ -1744,9 +1759,17 @@ export class Menu {
         await nm.connect();
 
         if (isHost) {
-          await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, level: self.level, prestigeLevel: self.prestigeLevel, tdmAiCount: this._config.tdmAiCount ?? 0 });
+          const hostRes = await nm.createRoom({ code, map: this._config.map, maxPlayers: 8, mode: this._config.mode, name: this._config.pilotName, team: this._config.team, level: self.level, prestigeLevel: self.prestigeLevel, tdmAiCount: this._config.tdmAiCount ?? 0 });
           statusEl.textContent = t('lobbyWaiting');
           statusEl.style.color = M.green;
+          // Retour au lobby (même salon) : des invités peuvent déjà s'être
+          // reconnectés avant nous — le serveur nous les renvoie directement plutôt
+          // que de compter sur le broadcast 'player_joined' (fragile en cas de
+          // course entre notre propre reconnexion et celle des invités).
+          if (hostRes?.players) {
+            hostRes.players.forEach(p => { if (p.id !== nm.id) players.push({ ...p, isReady: false }); });
+            renderPlayers();
+          }
         } else {
           // Retry si la salle n'existe pas encore (hôte en train de créer la partie)
           let res = null;
