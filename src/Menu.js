@@ -1703,6 +1703,7 @@ export class Menu {
         networkManager: network, playerSlot, remotePlayers,
         playerCount: config.playerCount ?? players.length,
       };
+      this._detachLobbyHandlers?.();
       this._resolve(this._config);
       this.hide();
     };
@@ -1776,7 +1777,12 @@ export class Menu {
         // Handlers enregistrés APRÈS join/create+res.players, comme avant.
         // Les messages arrivés pendant l'attente (ex. config_update de la race)
         // sont maintenant bufférisés par NetworkManager et rejoués ici.
-        nm.on('player_joined',  ({ player })           => {
+        // Nommés (plutôt qu'anonymes) pour pouvoir les détacher via nm.off() une
+        // fois la partie lancée — sinon ils restent actifs sur `nm` (réutilisé tel
+        // quel par Game.js) pendant toute la partie, et un futur 'return_lobby'
+        // reçu en jeu redéclencherait CE _showLobby() (menu déjà caché/obsolète)
+        // EN PLUS du flux normal de reconnexion — d'où l'invité dupliqué au retour.
+        const onPlayerJoined = ({ player }) => {
           players.push({ ...player, isReady: false }); renderPlayers();
           // L'hôte resynchronise le nouvel arrivant (config + couleur courante)
           if (isHost && nm) {
@@ -1790,20 +1796,46 @@ export class Menu {
           }
           // Diffuse aussi notre niveau (en cas d'absence côté serveur)
           if (nm) nm.send('player_level', { level: self.level, prestigeLevel: self.prestigeLevel });
-        });
-        nm.on('player_left',    ({ id })               => { const i = players.findIndex(p => p.id === id); if (i > -1) players.splice(i, 1); renderPlayers(); });
-        nm.on('player_ready',   ({ id, ready })        => { const p = players.find(p => p.id === id); if (p) { p.isReady = ready; renderPlayers(); } });
-        nm.on('player_plane',   ({ id, plane, planeName, level }) => { const p = players.find(p => p.id === id); if (p) { p.team = plane; if (planeName !== undefined) p.planeName = planeName; if (Number.isFinite(level)) p.level = level; renderPlayers(); } });
-        nm.on('player_level',   ({ id, level, prestigeLevel }) => { const p = players.find(p => p.id === id); if (p && Number.isFinite(level)) { p.level = level; if (Number.isFinite(prestigeLevel)) p.prestigeLevel = prestigeLevel; renderPlayers(); } });
-        nm.on('player_team',    ({ id, playerTeam })   => { const p = players.find(p => p.id === id); if (p) { p.playerTeam = playerTeam; renderPlayers(); } });
-        nm.on('config_update',  applyConfigPatch);
-        nm.on('game_start',     ({ config })           => launchMultiplayer(nm, config));
-        nm.on('return_lobby',   ()                     => this._showLobby());
+        };
+        const onPlayerLeft  = ({ id })                       => { const i = players.findIndex(p => p.id === id); if (i > -1) players.splice(i, 1); renderPlayers(); };
+        const onPlayerReady = ({ id, ready })                => { const p = players.find(p => p.id === id); if (p) { p.isReady = ready; renderPlayers(); } };
+        const onPlayerPlane = ({ id, plane, planeName, level }) => { const p = players.find(p => p.id === id); if (p) { p.team = plane; if (planeName !== undefined) p.planeName = planeName; if (Number.isFinite(level)) p.level = level; renderPlayers(); } };
+        const onPlayerLevel = ({ id, level, prestigeLevel }) => { const p = players.find(p => p.id === id); if (p && Number.isFinite(level)) { p.level = level; if (Number.isFinite(prestigeLevel)) p.prestigeLevel = prestigeLevel; renderPlayers(); } };
+        const onPlayerTeam  = ({ id, playerTeam })           => { const p = players.find(p => p.id === id); if (p) { p.playerTeam = playerTeam; renderPlayers(); } };
+        const onGameStart   = ({ config })                   => launchMultiplayer(nm, config);
+        const onReturnLobbyMsg = ()                          => this._showLobby();
         // L'hôte a quitté pendant qu'on est dans le lobby → retour à l'accueil.
         // (En partie, c'est Game.js qui gère ; le menu est alors masqué.)
-        nm.on('host_left',      ()                     => {
+        const onHostLeft = () => {
           if (this._root && this._root.isConnected) { nm.disconnect(); this._showMain(); }
-        });
+        };
+
+        nm.on('player_joined',  onPlayerJoined);
+        nm.on('player_left',    onPlayerLeft);
+        nm.on('player_ready',   onPlayerReady);
+        nm.on('player_plane',   onPlayerPlane);
+        nm.on('player_level',   onPlayerLevel);
+        nm.on('player_team',    onPlayerTeam);
+        nm.on('config_update',  applyConfigPatch);
+        nm.on('game_start',     onGameStart);
+        nm.on('return_lobby',   onReturnLobbyMsg);
+        nm.on('host_left',      onHostLeft);
+
+        // Détache tous les handlers propres au lobby dès que la partie démarre —
+        // Game.js reprend `nm` tel quel et enregistre ses propres handlers pour
+        // ce dont il a besoin (return_lobby, force_end_game, etc.).
+        this._detachLobbyHandlers = () => {
+          nm.off('player_joined', onPlayerJoined);
+          nm.off('player_left',   onPlayerLeft);
+          nm.off('player_ready',  onPlayerReady);
+          nm.off('player_plane',  onPlayerPlane);
+          nm.off('player_level',  onPlayerLevel);
+          nm.off('player_team',   onPlayerTeam);
+          nm.off('config_update', applyConfigPatch);
+          nm.off('game_start',    onGameStart);
+          nm.off('return_lobby',  onReturnLobbyMsg);
+          nm.off('host_left',     onHostLeft);
+        };
 
         this._config.networkManager = nm;
       } catch {
