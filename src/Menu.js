@@ -5140,6 +5140,7 @@ export class Menu {
     colR.appendChild(mkLabel(t('sectionVersus')));
     colR.appendChild(mkStatRow(t('statVictories'), s.versus.wins, M.green));
     colR.appendChild(mkStatRow(t('statLosses'), s.versus.losses, M.red));
+    colR.appendChild(mkStatRow(t('statDraws'), s.versus.draws ?? 0));
     colR.appendChild(mkStatRow(t('kills'), s.versus.kills));
     colR.appendChild(mkStatRow(t('deaths'), s.versus.deaths));
     colR.appendChild(mkStatRow(t('statRatio'), prog.kd(s.versus.kills, s.versus.deaths)));
@@ -5148,6 +5149,7 @@ export class Menu {
     colR.appendChild(mkLabel(t('sectionTeams')));
     colR.appendChild(mkStatRow(t('statVictories'), s.teams.wins, M.green));
     colR.appendChild(mkStatRow(t('statLosses'), s.teams.losses, M.red));
+    colR.appendChild(mkStatRow(t('statDraws'), s.teams.draws ?? 0));
     colR.appendChild(mkStatRow(t('kills'), s.teams.kills));
     colR.appendChild(mkStatRow(t('deaths'), s.teams.deaths));
     colR.appendChild(mkStatRow(t('statAssists'), s.teams.assists));

@@ -2184,7 +2184,9 @@ export class Game {
     const titleKey = won === true ? 'matchVictoryTitle' : won === false ? 'matchDefeatTitle' : 'matchDrawTitle';
 
     // Afficher les récompenses de progression avant l'écran de fin de match
-    this._showEndRewards(won === true, () => {
+    // `won` reste tri-état (true/false/null) jusqu'à recordGame() — une égalité
+    // (null) ne doit PAS être comptée comme une défaite dans les stats persistées.
+    this._showEndRewards(won, () => {
       this.ui.showVictory(
         this.stats,
         this._config.networkManager ? null : () => this._quit('replay'),
@@ -2673,6 +2675,10 @@ export class Game {
             this._spectatorMode = false;
             if (this.player.model) this.player.model.visible = true;
             this.ui.showSpectatorBanner(false);
+            // La vague a pu avancer pendant qu'on spectait les alliés après notre
+            // propre mort (ligne 2711 ne capture que la vague AU MOMENT de notre
+            // mort) — recaler le record sur la vague finale réellement atteinte.
+            this._updateBestWave(this._survivalWave);
             this._showEndRewards(false, () => {
               this.ui.showSurvivalGameOver(
                 this._survivalWave, this._survivalKills,

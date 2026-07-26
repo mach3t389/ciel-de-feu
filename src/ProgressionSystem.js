@@ -53,8 +53,8 @@ const DEFAULT_STATE = () => ({
     flightTimeSec: 0, distanceKm: 0,
     mission : { maxDiff: 0, maxKills: 0, victories: 0, timeSec: 0 },
     survival: { bestWave: 0, maxDiff: 0, timeSec: 0 },
-    versus  : { wins: 0, losses: 0, kills: 0, deaths: 0 },
-    teams   : { wins: 0, losses: 0, kills: 0, deaths: 0, assists: 0 },
+    versus  : { wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0 },
+    teams   : { wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0, assists: 0 },
   },
 });
 
@@ -301,11 +301,13 @@ export class ProgressionSystem {
       const diffIdx = { easy:0, normal:1, hard:2, expert:3 }[diff] ?? 0;
       if (diffIdx > (s.mission.maxDiff ?? 0)) s.mission.maxDiff = diffIdx;
     } else if (mode === 'ffa') {
-      if (won) s.versus.wins++; else s.versus.losses++;
+      // won : true = victoire, false = défaite, null = égalité — ne PAS compter
+      // une égalité comme une défaite (ex. plusieurs joueurs à égalité de kills).
+      if (won === true) s.versus.wins++; else if (won === false) s.versus.losses++; else s.versus.draws++;
       s.versus.kills  += kills;
       s.versus.deaths += deaths;
     } else if (mode === 'tdm') {
-      if (won) s.teams.wins++; else s.teams.losses++;
+      if (won === true) s.teams.wins++; else if (won === false) s.teams.losses++; else s.teams.draws++;
       s.teams.kills   += kills;
       s.teams.deaths  += deaths;
       s.teams.assists += assists;
