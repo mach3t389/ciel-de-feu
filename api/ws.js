@@ -209,11 +209,16 @@ wss.on('connection', (ws) => {
 
       // ── L'hôte renvoie tout le monde au lobby (même salon) ──────────────────
       // Remet started à false pour que le prochain create_room/join_room du même
-      // code (envoyé côté client juste après) fonctionne sans délai.
+      // code (envoyé côté client juste après) fonctionne sans délai. Marque aussi
+      // returningToLobby : la déconnexion WS de l'hôte qui suit presque aussitôt
+      // (game.destroy() → networkManager.disconnect()) ne doit PAS déclencher le
+      // host_left/suppression de salle habituel — l'hôte va se reconnecter sous
+      // quelques secondes avec le même code (voir ws.on('close')).
       case 'return_lobby': {
         const room = await getRoom(ws._room);
         if (!room || room.hostId !== clientId) return;
         room.started = false;
+        room.returningToLobby = Date.now();
         await saveRoom(ws._room, room);
         await broadcastRoom(room, 'return_lobby', {}, clientId);
         break;
@@ -232,7 +237,16 @@ wss.on('connection', (ws) => {
     if (!room) return;
 
     const wasHost = room.hostId === clientId;
+    const recentlyReturningToLobby = room.returningToLobby && (Date.now() - room.returningToLobby < 15000);
     delete room.players[clientId];
+
+    if (wasHost && recentlyReturningToLobby) {
+      // Retour au lobby en cours : l'hôte va se reconnecter sous peu avec le même
+      // code (create_room le remplacera alors intégralement) — ne pas casser la
+      // salle ni prévenir les autres joueurs d'un faux départ de l'hôte.
+      await saveRoom(code, room);
+      return;
+    }
 
     if (wasHost && Object.keys(room.players).length > 0) {
       await broadcastRoom(room, 'host_left', {});
