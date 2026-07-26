@@ -7,9 +7,9 @@ Documentation détaillée dans [`docs/`](docs/index.md) : architecture, cartes, 
 ## Commandes
 
 ```bash
-npm run dev      # dev Vite → http://localhost:3000
-npm run build    # bundle production dans dist/
-npm run server   # serveur WebSocket multijoueur (port 8080)
+npm run dev         # dev Vite → http://localhost:3000
+npm run build       # bundle production dans dist/
+npm run dev:vercel  # front + signaling api/ws.js en local (vercel dev)
 ```
 
 Pas de tests automatisés, pas de linter configuré. Vérification manuelle dans le navigateur.
