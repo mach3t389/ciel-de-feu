@@ -872,6 +872,13 @@ export class Game {
         this._triggerMatchEnd();
       });
 
+      // L'hôte renvoie tout le monde au lobby (même salon) — les invités suivent.
+      this._config.networkManager.on('return_lobby', () => {
+        if (this._returnLobbyHandled) return;
+        this._returnLobbyHandled = true;
+        this._quit('lobby');
+      });
+
       // Tirs des joueurs distants → traceurs visuels (les dégâts sont gérés par le
       // tireur via player_hit, donc ces balles sont purement cosmétiques)
       this._multiplayerManager.on('remoteBullet', ({ position, quaternion }) => {
@@ -1021,12 +1028,21 @@ export class Game {
 
     // Menu ESC multijoueur — toggle unifié (clavier, manette, perte de pointer lock)
     this._escMenuVisible = false;
-    // Hôte + temps illimité → bouton "Fin de partie" disponible
+    // Hôte + temps illimité → bouton "Fin de partie" disponible — Versus/Équipes
+    // uniquement : _triggerMatchEnd() affiche un écran de VICTOIRE, ce qui n'a pas
+    // de sens en coop/mission (la victoire n'existe que si les ennemis sont vaincus).
     const isUnlimited    = this._timeRemaining === null;
-    const onEndGame      = (isPvP && isHost && isUnlimited) ? () => {
+    const onEndGame      = (isPvP && (this._isFFA || this._isTDM) && isHost && isUnlimited) ? () => {
       this._toggleEscMenu(false);
       this._config.networkManager.send('force_end_game', {});
       this._triggerMatchEnd();
+    } : null;
+    // Hôte multijoueur (tout mode) → renvoie tout le monde au lobby (même salon,
+    // même code) au lieu de casser la session pour tout le monde en quittant.
+    const onReturnLobby  = (isPvP && isHost) ? () => {
+      this._toggleEscMenu(false);
+      this._config.networkManager.send('return_lobby', {});
+      this._quit('lobby');
     } : null;
     this._toggleEscMenu = (forceState) => {
       const visible = forceState !== undefined ? forceState : !this._escMenuVisible;
@@ -1035,7 +1051,7 @@ export class Game {
       this.ui.showEscMenu(visible, onQuit, () => {
         this._toggleEscMenu(false);
         this._respawn();
-      }, () => this._toggleEscMenu(false), onEndGame);
+      }, () => this._toggleEscMenu(false), onEndGame, onReturnLobby);
       if (visible) document.exitPointerLock();
       else {
         this._pauseCooldownUntil = performance.now() + 400; // évite la réouverture immédiate
@@ -1194,6 +1210,10 @@ export class Game {
         this._config.networkManager ? null : () => this._quit('replay'),
         () => this._quit(),
         this._buildScoreboardRows(),
+        (this._config.networkManager && this._isHost) ? () => {
+          this._config.networkManager.send('return_lobby', {});
+          this._quit('lobby');
+        } : null,
       );
     });
   }
@@ -2151,6 +2171,10 @@ export class Game {
         this._config.networkManager ? null : () => this._quit('replay'),
         () => this._quit(),
         this._buildScoreboardRows(),
+        (this._config.networkManager && this._isHost) ? () => {
+          this._config.networkManager.send('return_lobby', {});
+          this._quit('lobby');
+        } : null,
       );
     });
   }

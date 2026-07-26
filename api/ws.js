@@ -206,6 +206,18 @@ wss.on('connection', (ws) => {
         await broadcastRoom(room, 'game_start', { config: payload.config || room.config }, clientId);
         break;
       }
+
+      // ── L'hôte renvoie tout le monde au lobby (même salon) ──────────────────
+      // Remet started à false pour que le prochain create_room/join_room du même
+      // code (envoyé côté client juste après) fonctionne sans délai.
+      case 'return_lobby': {
+        const room = await getRoom(ws._room);
+        if (!room || room.hostId !== clientId) return;
+        room.started = false;
+        await saveRoom(ws._room, room);
+        await broadcastRoom(room, 'return_lobby', {}, clientId);
+        break;
+      }
     }
   });
 

@@ -892,11 +892,12 @@ export class UI {
 
   // Overlay ESC pour le multijoueur — même présentation que le menu pause solo
   // (le jeu continue derrière : pas de gel, mais réapparition possible)
-  showEscMenu(visible, onQuit = null, onRespawn = null, onResume = null, onEndGame = null) {
-    if (onQuit    !== null) this._escQuitCb    = onQuit;
-    if (onRespawn !== null) this._escRespawnCb = onRespawn;
-    if (onResume  !== null) this._escResumeCb  = onResume;
-    if (onEndGame !== null) this._escEndGameCb = onEndGame;
+  showEscMenu(visible, onQuit = null, onRespawn = null, onResume = null, onEndGame = null, onReturnLobby = null) {
+    if (onQuit       !== null) this._escQuitCb        = onQuit;
+    if (onRespawn    !== null) this._escRespawnCb      = onRespawn;
+    if (onResume     !== null) this._escResumeCb       = onResume;
+    if (onEndGame    !== null) this._escEndGameCb      = onEndGame;
+    if (onReturnLobby !== null) this._escReturnLobbyCb = onReturnLobby;
 
     if (!this._escOverlay) {
       const wrap = document.createElement('div');
@@ -972,12 +973,18 @@ export class UI {
       btnEndGame.addEventListener('click', (e) => { e.stopPropagation(); if (this._escEndGameCb) this._escEndGameCb(); });
       this._escBtnEndGame = btnEndGame;
 
+      const btnReturnLobby = mkBtn(t('returnLobbyBtn'), '#4488cc');
+      btnReturnLobby.style.display = 'none';
+      btnReturnLobby.addEventListener('click', (e) => { e.stopPropagation(); if (this._escReturnLobbyCb) this._escReturnLobbyCb(); });
+      this._escBtnReturnLobby = btnReturnLobby;
+
       const btnSettings = mkBtn(t('settingsBtn'), C.dimCream);
       btnSettings.addEventListener('click', (e) => { e.stopPropagation(); this._showPauseSettings(); });
 
       panel.appendChild(btnResume);
       panel.appendChild(btnRespawn);
       panel.appendChild(btnEndGame);
+      panel.appendChild(btnReturnLobby);
       panel.appendChild(btnSettings);
       panel.appendChild(mkDiv());
 
@@ -1006,6 +1013,10 @@ export class UI {
     // Affiche le bouton "Fin de partie" seulement si un callback a été fourni
     if (this._escBtnEndGame) {
       this._escBtnEndGame.style.display = this._escEndGameCb ? 'block' : 'none';
+    }
+    // Idem pour "Retour au lobby" (hôte multijoueur uniquement)
+    if (this._escBtnReturnLobby) {
+      this._escBtnReturnLobby.style.display = this._escReturnLobbyCb ? 'block' : 'none';
     }
     this._escOverlay.style.display = visible ? 'flex' : 'none';
     if (visible) requestAnimationFrame(() => this._escOverlay?.querySelector('button')?.focus());
@@ -2786,7 +2797,7 @@ export class UI {
     if (v) { v.textContent = armor;   v.style.color = armor   === 0 ? '#80e840' : '#d4c88a'; }
   }
 
-  showVictory(stats, onReplay, onMenu, rows = null) {
+  showVictory(stats, onReplay, onMenu, rows = null, onReturnLobby = null) {
     if (this._victoryOverlay) return;
     // Cacher le menu pause s'il est visible
     if (this._pauseOverlay) this._pauseOverlay.style.display = 'none';
@@ -2840,6 +2851,12 @@ export class UI {
       const btnReplay = this._mkEndButton(t('retry'), '#7a9050', '#a8c878');
       btnReplay.addEventListener('click', () => { overlay.remove(); this._victoryOverlay = null; onReplay(); });
       card.appendChild(btnReplay);
+    }
+
+    if (onReturnLobby) {
+      const btnLobby = this._mkEndButton(t('returnLobbyBtn'), '#3d6a90', '#78b0d8');
+      btnLobby.addEventListener('click', () => { overlay.remove(); this._victoryOverlay = null; onReturnLobby(); });
+      card.appendChild(btnLobby);
     }
 
     const btnMenu = this._mkEndButton(t('mainMenu'), '#6a5040', '#a88a78');

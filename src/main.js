@@ -6,7 +6,8 @@ import { initAnalytics } from './Analytics.js';
 
 initAnalytics();
 
-let replayConfig = null;  // si défini : relance la même partie sans repasser par le menu
+let replayConfig     = null;  // si défini : relance la même partie sans repasser par le menu
+let rejoinLobbyConfig = null; // si défini : reconnecte direct au même salon (retour au lobby)
 
 while (true) {
   let config;
@@ -15,7 +16,8 @@ while (true) {
     replayConfig = null;
   } else {
     const menu = new Menu();
-    config = await menu.show();
+    config = await menu.show(rejoinLobbyConfig);
+    rejoinLobbyConfig = null;
   }
 
   // Nom affiché = label court du bouton menu (mapShort_X) ; sinon nom complet
@@ -59,4 +61,16 @@ while (true) {
 
   // « Rejouer » : on réutilise la config telle quelle (mêmes paramètres)
   if (result && result.action === 'replay') replayConfig = config;
+  // « Retour au lobby » : reconnecte tout le monde au même salon (même code)
+  if (result && result.action === 'lobby') {
+    rejoinLobbyConfig = {
+      isHost: config.isHost, roomCode: config.roomCode,
+      mode: config.mode, map: config.map,
+      pilotName: config.pilotName, team: config.team, playerTeam: config.playerTeam,
+      difficulty: config.difficulty, totalEnemies: config.totalEnemies,
+      tdmAiCount: config.tdmAiCount, ffaBotCount: config.ffaBotCount, ffaBotDiff: config.ffaBotDiff,
+      friendlyFire: config.friendlyFire, ffaTimeLimit: config.ffaTimeLimit,
+      maxPlayers: config.maxPlayers,
+    };
+  }
 }

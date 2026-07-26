@@ -406,8 +406,12 @@ export class Menu {
     };
   }
 
-  // Point d'entrée → retourne une Promise résolue avec la config finale
-  show() {
+  // Point d'entrée → retourne une Promise résolue avec la config finale.
+  // rejoin : { isHost, roomCode, mode, map, pilotName, team, playerTeam, difficulty,
+  // totalEnemies, tdmAiCount, ffaBotCount, ffaBotDiff } — passé par main.js après un
+  // "retour au lobby" en cours de partie : saute l'écran d'accueil et reconnecte
+  // directement au même salon (même code) au lieu de repartir du menu principal.
+  show(rejoin = null) {
     return new Promise(resolve => {
       this._resolve = resolve;
       // Libérer le pointer lock résiduel (chrome affiche "appuyez sur Echap" sinon)
@@ -427,7 +431,12 @@ export class Menu {
           document.addEventListener('keydown',     resume, { once: true });
         }
       }
-      this._showMain();
+      if (rejoin) {
+        Object.assign(this._config, rejoin);
+        this._showLobby();
+      } else {
+        this._showMain();
+      }
       this._startGamepadNav();
     });
   }
