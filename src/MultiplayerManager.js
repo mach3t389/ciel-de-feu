@@ -213,11 +213,10 @@ class RemotePlayer {
   // Position prédite à l'instant présent (la mire de visée doit anticiper, pas
   // afficher la position retardée de 100 ms utilisée pour le rendu fluide)
   get aimPosition() {
-    const buf = this._buffer;
-    if (buf.length === 0) return this.pivot.position;
-    const last  = buf[buf.length - 1];
-    const ahead = Math.min(performance.now() / 1000 - last.t, 0.3);
-    return last.pos.clone().addScaledVector(this._velocity, ahead);
+    // Basé sur la position RENDUE (lissée par update(), pivot.position), pas sur le
+    // dernier paquet brut — sinon le viseur "saute" à chaque nouveau paquet reçu
+    // alors que l'avion affiché, lui, reste en retard volontairement (interp delay).
+    return this.pivot.position.clone().addScaledVector(this._velocity, 0.4);
   }
 
   update(delta) {
@@ -297,7 +296,6 @@ class RemoteBot {
     this._deathTimer  = 0;
 
     this._load(scene);
-    this._buildMarker();
   }
 
   _load(scene) {
@@ -324,29 +322,6 @@ class RemoteBot {
       });
       this.pivot.add(this.mesh);
     });
-  }
-
-  _buildMarker() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 192; canvas.height = 48;
-    const ctx = canvas.getContext('2d');
-    const col = this.isEnemy ? '#cc2222' : '#3aa6ff';
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, 192, 48);
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, 190, 46);
-    ctx.fillStyle = col;
-    ctx.font = 'bold 20px Courier New';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('BOT', 96, 24);
-    const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
-    this._marker = new THREE.Sprite(mat);
-    this._marker.scale.set(14, 3.5, 1);
-    this._marker.position.set(0, 8, 0);
-    this.pivot.add(this._marker);
   }
 
   applyState(state) {
@@ -404,11 +379,10 @@ class RemoteBot {
   get position()    { return this.pivot.position; }
   get quaternion()  { return this.pivot.quaternion; }
   get aimPosition() {
-    const buf = this._buffer;
-    if (buf.length === 0) return this.pivot.position;
-    const last  = buf[buf.length - 1];
-    const ahead = Math.min(performance.now() / 1000 - last.t, 0.3);
-    return last.pos.clone().addScaledVector(this._velocity, ahead);
+    // Basé sur la position RENDUE (lissée par update(), pivot.position), pas sur le
+    // dernier paquet brut — sinon le viseur "saute" à chaque nouveau paquet reçu
+    // alors que l'avion affiché, lui, reste en retard volontairement (interp delay).
+    return this.pivot.position.clone().addScaledVector(this._velocity, 0.4);
   }
 
   update(delta) {
