@@ -3347,18 +3347,6 @@ export class UI {
     document.body.appendChild(overlay);
   }
 
-  // Écran de fin de partie survie — même mise en page que CRASH mais sans fond rouge
-  showSurvivalEnd(onQuit) {
-    if (this._pauseOverlay) this._pauseOverlay.style.display = 'none';
-    this._showDead(null, {
-      noRedBg  : true,
-      title    : t('gameOver'),
-      subtitle : t('gameDone'),
-      onMenu   : onQuit,
-      rows     : this._scoreboardProvider?.(),
-    });
-  }
-
   setSurvivalMode(v) {
     this._survivalMode = v;
     // Label de vague persistant en haut, exclusif au mode survie
