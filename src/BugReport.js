@@ -1,8 +1,6 @@
 import { t } from './i18n.js';
 
-const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1515048299319529533/42qfkPq7hv0JAuqEQ9tDIHVyufUb8qGkqN0wm3iglN-6PLO1mw2S9w3t0W7AzhA0SkKy';
-
-const CREAM    = '#d4c88a';
+const CREAM   = '#d4c88a';
 const DIM      = '#7a7050';
 const PANEL    = '#1a180f';
 const BORDER   = '#3a3020';
@@ -124,29 +122,24 @@ export function showBugReport(contextFn = null) {
     btnSend.disabled = true;
 
     const ctx = contextFn?.() ?? {};
-    const fields = [{ name: '📋 Description', value: desc.substring(0, 1024), inline: false }];
-    if (taSteps.value.trim()) fields.push({ name: '🔁 Reproduction', value: taSteps.value.trim().substring(0, 1024), inline: false });
-    if (ctx.mode) fields.push({ name: '🎮 Mode', value: String(ctx.mode), inline: true });
-    if (ctx.map  !== undefined) fields.push({ name: '🗺️ Carte', value: t(`mapName_${ctx.map}`) || String(ctx.map), inline: true });
-    if (ctx.wave !== undefined) fields.push({ name: '🌊 Vague', value: String(ctx.wave), inline: true });
     const _dpr  = window.devicePixelRatio || 1;
     const _phys = `${Math.round(window.screen.width * _dpr)}×${Math.round(window.screen.height * _dpr)}`;
     const _vp   = `${window.innerWidth}×${window.innerHeight}`;
-    fields.push({ name: t('bugFieldScreen'), value: `${_phys} (DPR ${_dpr}) · viewport ${_vp}`, inline: false });
-    fields.push({ name: '🌐 Navigateur', value: navigator.userAgent.substring(0, 100), inline: false });
 
     try {
-      const res = await fetch(DISCORD_WEBHOOK, {
+      const res = await fetch('/api/bug-report', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          embeds: [{
-            title: '🐛 Bug Report — Ciel de Feu', color: 0xcc3300,
-            fields, timestamp: new Date().toISOString(),
-            footer: { text: 'Ciel de Feu Bug Reporter' },
-          }],
+          description: desc,
+          steps: taSteps.value.trim(),
+          mode: ctx.mode ? String(ctx.mode) : '',
+          map: ctx.map !== undefined ? (t(`mapName_${ctx.map}`) || String(ctx.map)) : '',
+          wave: ctx.wave !== undefined ? String(ctx.wave) : '',
+          screen: `${_phys} (DPR ${_dpr}) · viewport ${_vp}`,
+          userAgent: navigator.userAgent,
         }),
       });
-      if (res.ok || res.status === 204) {
+      if (res.ok) {
         btnSend.textContent = t('bugSent');
         btnSend.style.color = '#88cc44';
         setTimeout(close, 2000);

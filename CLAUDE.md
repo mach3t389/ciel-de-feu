@@ -104,7 +104,7 @@ Méthodes HUD clés :
 | `PracticeMode.js` | Mode entraînement — anneaux + cibles autour de la base joueur |
 | `MobileControls.js` | Joystick virtuel touch, détection `IS_MOBILE` |
 | `LoadingScreen.js` | Écran de chargement avec barre de progression |
-| `BugReport.js` | Overlay de rapport de bug (contexte mode/carte/vague injecté par Game.js) |
+| `BugReport.js` | Overlay de rapport de bug (contexte mode/carte/vague injecté par Game.js) — envoi via `api/bug-report.js`, webhook Discord dans `DISCORD_BUG_WEBHOOK_URL` côté Vercel, jamais dans `src/` |
 | `SettingsOverlay.js` | Overlay paramètres en jeu |
 | `CursorFX.js` | Effets visuels curseur dans le menu |
 | `i18n.js` | Dictionnaire FR/EN, fonctions `t()`, `tTips()`, `tModeInfo()`… |
