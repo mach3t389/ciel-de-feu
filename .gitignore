@@ -10,3 +10,4 @@ sfx/
 
 .vercel
 .env*
+.claude/settings.local.json
